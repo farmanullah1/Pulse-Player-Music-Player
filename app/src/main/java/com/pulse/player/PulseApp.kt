@@ -9,6 +9,13 @@ import com.pulse.player.data.scan.LibraryScanner
 import com.pulse.player.data.settings.SettingsStore
 import com.pulse.player.playback.PlayerController
 
+import com.pulse.player.data.backup.ArchiveBackupService
+import com.pulse.player.data.backup.ArchiveRestoreService
+import com.pulse.player.data.scan.SampleMusicHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
 class PulseApp : Application() {
     lateinit var db: PulseDb
         private set
@@ -20,6 +27,10 @@ class PulseApp : Application() {
         private set
     lateinit var favoritesRepo: FavoritesRepository
         private set
+    lateinit var archiveBackup: ArchiveBackupService
+        private set
+    lateinit var archiveRestore: ArchiveRestoreService
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -28,6 +39,13 @@ class PulseApp : Application() {
         scanner = LibraryScanner(this, db)
         player = PlayerController(this, db)
         favoritesRepo = FavoritesRepository(this, db)
+        archiveBackup = ArchiveBackupService(this, db, settings)
+        archiveRestore = ArchiveRestoreService(this, db, settings)
+
+        // Seed sample music track so offline playback can be used immediately
+        CoroutineScope(Dispatchers.IO).launch {
+            SampleMusicHelper.installSampleTrack(this@PulseApp, db)
+        }
     }
 }
 

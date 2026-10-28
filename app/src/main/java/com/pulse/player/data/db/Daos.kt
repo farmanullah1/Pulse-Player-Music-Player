@@ -120,6 +120,24 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :id AND trackId = :trackId")
     suspend fun removeTrack(id: Long, trackId: String)
 
+    @Query("SELECT * FROM playlists ORDER BY createdAtMs")
+    suspend fun allPlaylistsOnce(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlist_tracks WHERE playlistId = :id ORDER BY position")
+    suspend fun tracksForPlaylist(id: Long): List<PlaylistTrackEntity>
+
+    @Query("DELETE FROM playlists")
+    suspend fun clearAllPlaylists()
+
+    @Query("DELETE FROM playlist_tracks")
+    suspend fun clearAllPlaylistTracks()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlaylists(items: List<PlaylistEntity>): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlaylistTracks(items: List<PlaylistTrackEntity>)
+
     @Transaction
     suspend fun delete(id: Long) {
         clearTracks(id)
@@ -131,6 +149,15 @@ interface PlaylistDao {
 interface StatsDao {
     @Insert
     suspend fun insert(e: PlayEventEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(events: List<PlayEventEntity>)
+
+    @Query("SELECT * FROM play_events ORDER BY playedAtMs DESC LIMIT :limit")
+    suspend fun getRecentEvents(limit: Int): List<PlayEventEntity>
+
+    @Query("DELETE FROM play_events")
+    suspend fun clearAllEvents()
 
     @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events WHERE playedAtMs BETWEEN :from AND :to")
     suspend fun totalMs(from: Long, to: Long): Long

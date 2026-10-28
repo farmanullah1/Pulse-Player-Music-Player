@@ -63,13 +63,42 @@
 - [x] `MainActivity` with edge-to-edge, window size calculation, notification permission request, and periodic queue snapshot
 - [x] `README.md` and `docs/assets/favicon.svg`
 
-## 2. Tested
-- Code generation verified across all data, playback, UI, and widget layers
-- Gradle compilation with `compile_applet` passed successfully (assembleDebug created APK)
+- [x] Dual Backup & Restore System:
+  - Preserved Legacy Option A: `FavoritesCodec` (`pulseplayer.favorites`, JSON) export and preview/restore.
+  - Added Portable Archive Option B: `ArchiveBackupService`, `ArchiveRestoreService`, `ArchiveValidator`, `TrackMatchResolver`, `BackupModels` (.musicbackup / ZIP).
+  - ZIP signature sniffing (`ArchiveValidator.detectSignature`), detecting ZIP magic even if disguised as `.wav` (e.g. `ManualBackup_20261028_172204175.wav`), while rejecting genuine `RIFF...WAVE` audio.
+  - Safe ZIP Slip path sanitization, max entry limits (1000 entries, 25MB per entry, 100MB total), SHA-256 integrity verification (`checksums.json`), versioned `manifest.json`.
+  - Multi-tier track reconciliation during restore: exact ID -> normalized title/artist/duration (±2.5s) -> filename/size -> title/album (±4s).
+  - Transaction-safe Room restore (`PulseDb.withTransaction`) supporting both `MERGE` and `REPLACE_SELECTED_CATEGORIES` conflict modes.
+  - Dual UI in `BackupScreen.kt`: Option A & Option B cards, category checkboxes, progress state, preview dialog with checksum badge and conflict selection, and detailed restore report.
+- [x] Sample Music Track Generator:
+  - `SampleMusicHelper`: synthesizes a real, playable 15-second 44.1kHz 16-bit stereo PCM WAV file ("Pulse Horizon" by Pulse Studio) with standard 44-byte RIFF WAVE header.
+  - Auto-seeds on app start or via "Load Sample Track" button on empty library view, enabling immediate offline playback, equalizer tuning, visualizers, and themes.
+- [x] Unit Testing:
+  - `ArchiveValidatorTest`: tests ZIP sniffing, genuine WAV rejection, disguised ZIP detection, ZIP slip path sanitization, SHA-256 computation.
+  - `TrackMatchResolverTest`: tests multi-tier resolution across exact ID, metadata + duration tolerance, filename + size, and unmatched cases.
+  - `FavoritesCodecTest`: tests legacy JSON encoding, decoding, and schema validation.
+  - All unit tests passing via `:app:testDebugUnitTest`.
+- [x] Project Configuration & Documentation:
+  - Added `.gitignore` tailored for modern Android / Gradle projects.
+  - Added `CHANGELOG.md` documenting v1.0.0 release.
+  - Updated `README.md` with Dual Backup & Restore documentation and test instructions.
+- [x] Audio Effect Hardware Compatibility Fix:
+  - Fixed `AudioEffect` status -38 (`ENOSYS`) / initCheck error -3 on emulators and devices lacking hardware Virtualizer or PresetReverb modules.
+  - Added pre-instantiation capability check via `AudioEffect.queryEffects()` to detect available effect UUIDs before calling constructors.
+  - Handled `PresetReverb` as an auxiliary effect (session 0 output mix) instead of an invalid insert effect on playback session IDs.
+  - Added failure blacklisting and lazy initialization so unsupported effects are cleanly hidden without spamming native AudioFlinger error logs.
+  - Added `<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />` in `AndroidManifest.xml`.
 
-## 3. In Progress
-- Completed all tasks from 00_START_HERE.md and moved prompt specs to /prompts/
+## 2. Tested
+- Code generation verified across all data, playback, UI, backup, and widget layers.
+- Gradle compilation with `compile_applet` passed successfully (APK generated).
+- Unit tests (`:app:testDebugUnitTest`) verified: 100% passed (13 test cases).
+
+## 3. Status
+- **All phases complete** (Phases 00 through 08, prompt specifications, dual backup/restore, and audio effects fix).
 
 ## 4. Known Limits & Honest Constraints
 - Hardware audio effects (equalizer bands, bass boost, virtualizer, reverb) depend on Android OS audiofx engine availability; unsupported features are cleanly hidden.
 - Ringtone setting requires the user to grant `WRITE_SETTINGS` in system settings.
+- Restoring archive metadata reconciles tracks against the receiving device's library; it does not fabricate missing audio files if they are not stored on the device.

@@ -5,10 +5,19 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pulse.player.app
+import com.pulse.player.data.backup.ArchiveBackupService
+import com.pulse.player.data.backup.ArchiveRestoreService
+import com.pulse.player.data.backup.BackupCategory
+import com.pulse.player.data.backup.BackupOperationState
+import com.pulse.player.data.backup.LastBackupRecord
+import com.pulse.player.data.backup.RestoreConflictMode
+import com.pulse.player.data.backup.RestorePreview
+import com.pulse.player.data.backup.RestoreReport
 import com.pulse.player.data.db.PlaylistEntity
 import com.pulse.player.data.db.TrackEntity
 import com.pulse.player.data.favorites.FavItem
 import com.pulse.player.data.favorites.FavoritesRepository
+import com.pulse.player.data.scan.SampleMusicHelper
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.playback.Track
 import com.pulse.player.playback.toTrack
@@ -35,6 +44,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val settings = app.settings
     private val scanner = app.scanner
     val favoritesRepo = app.favoritesRepo
+    val archiveBackup: ArchiveBackupService = app.archiveBackup
+    val archiveRestore: ArchiveRestoreService = app.archiveRestore
 
     // Navigation
     private val backStack = ArrayDeque<Screen>().apply { push(Screen.Home) }
@@ -297,6 +308,99 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val count = favoritesRepo.apply(preview, resolved, replace)
         exportStatus.value = "Imported $count favourites successfully"
         importPreview.value = null
+    }
+
+    // Archive Backup & Restore
+    val archiveOperation = MutableStateFlow(BackupOperationState())
+    val archivePreview = MutableStateFlow<RestorePreview?>(null)
+    val archiveReport = MutableStateFlow<RestoreReport?>(null)
+    val lastBackupRecord = MutableStateFlow<LastBackupRecord?>(null)
+    val selectedBackupCategories = MutableStateFlow<Set<BackupCategory>>(BackupCategory.values().toSet())
+    val selectedRestoreConflictMode = MutableStateFlow(RestoreConflictMode.MERGE)
+
+    fun toggleBackupCategory(cat: BackupCategory) {
+        selectedBackupCategories.update { current ->
+            if (cat in current) {
+                if (current.size > 1) current - cat else current
+            } else {
+                current + cat
+            }
+        }
+    }
+
+    fun setConflictMode(mode: RestoreConflictMode) {
+        selectedRestoreConflictMode.value = mode
+    }
+
+    fun createArchiveBackup(uri: Uri) = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Starting archive backup...")
+        val res = archiveBackup.createArchive(
+            targetUri = uri,
+            selectedCategories = selectedBackupCategories.value,
+            onProgress = { stage, frac ->
+                archiveOperation.value = BackupOperationState(inProgress = true, stage = stage, progressFraction = frac)
+            }
+        )
+        if (res.isSuccess) {
+            val rec = res.getOrNull()
+            lastBackupRecord.value = rec
+            archiveOperation.value = BackupOperationState(
+                inProgress = false,
+                completedMessage = "Backup saved successfully (${rec?.fileName}, ${rec?.recordCounts?.values?.sum() ?: 0} records)"
+            )
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Unknown error"
+            archiveOperation.value = BackupOperationState(
+                inProgress = false,
+                errorMessage = "Backup failed: $err"
+            )
+        }
+    }
+
+    fun inspectArchive(uri: Uri, fileName: String) = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Inspecting archive structure and checksums...")
+        val res = archiveRestore.inspect(uri, fileName)
+        archiveOperation.value = BackupOperationState(inProgress = false)
+        if (res.isSuccess) {
+            archivePreview.value = res.getOrNull()
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Inspection failed"
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = err)
+        }
+    }
+
+    fun executeArchiveRestore(uri: Uri, fileName: String, categories: Set<BackupCategory>, mode: RestoreConflictMode) = viewModelScope.launch {
+        archivePreview.value = null
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Restoring from archive...")
+        val res = archiveRestore.restore(
+            uri = uri,
+            fileName = fileName,
+            selectedCategories = categories,
+            conflictMode = mode,
+            onProgress = { stage, frac ->
+                archiveOperation.value = BackupOperationState(inProgress = true, stage = stage, progressFraction = frac)
+            }
+        )
+        archiveOperation.value = BackupOperationState(inProgress = false)
+        if (res.isSuccess) {
+            archiveReport.value = res.getOrNull()
+            refreshStats()
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Restore failed"
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = err)
+        }
+    }
+
+    fun dismissArchivePreview() {
+        archivePreview.value = null
+    }
+
+    fun dismissArchiveReport() {
+        archiveReport.value = null
+    }
+
+    fun seedSampleTrack() = viewModelScope.launch {
+        SampleMusicHelper.installSampleTrack(getApplication(), db)
     }
 
     // Search

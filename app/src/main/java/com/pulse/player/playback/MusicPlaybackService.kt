@@ -34,7 +34,9 @@ class MusicPlaybackService : MediaSessionService() {
 
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                AudioFx.attach(audioSessionId)
+                if (audioSessionId > 0) {
+                    AudioFx.attach(audioSessionId)
+                }
             }
 
             override fun onEvents(p: Player, events: Player.Events) {
@@ -49,7 +51,10 @@ class MusicPlaybackService : MediaSessionService() {
             }
         })
 
-        AudioFx.attach(player.audioSessionId)
+        val initialSessionId = player.audioSessionId
+        if (initialSessionId > 0) {
+            AudioFx.attach(initialSessionId)
+        }
         session = MediaSession.Builder(this, player).build()
     }
 

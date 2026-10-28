@@ -302,6 +302,16 @@ fun EmptyLibraryCard(vm: MainViewModel) {
             )
             Spacer(Modifier.height(8.dp))
             Button(
+                onClick = { vm.seedSampleTrack() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+            ) {
+                Icon(Icons.Rounded.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Load Sample Track (Pulse Horizon)", fontWeight = FontWeight.Bold)
+            }
+            Button(
                 onClick = {
                     val perm = if (Build.VERSION.SDK_INT >= 33) {
                         android.Manifest.permission.READ_MEDIA_AUDIO
