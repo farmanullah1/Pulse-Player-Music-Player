@@ -57,7 +57,7 @@ suspend fun exportCompat(
             val nowYm = YearMonth.now(zone)
 
             ZipOutputStream(BufferedOutputStream(FileOutputStream(tmp))).use { z ->
-                fun entry(name: String, write: (OutputStream) -> Unit) {
+                suspend fun entry(name: String, write: suspend (OutputStream) -> Unit) {
                     onStage(name)
                     z.putNextEntry(ZipEntry(name))
                     write(z)
@@ -72,7 +72,7 @@ suspend fun exportCompat(
                     Compat.PLAYBACK
                 )
 
-                fun json(name: String, w: JsonWriter.() -> Unit) = entry(name) { o ->
+                suspend fun json(name: String, w: suspend JsonWriter.() -> Unit) = entry(name) { o ->
                     JsonWriter(OutputStreamWriter(o, Charsets.UTF_8)).apply {
                         if (name !in compact) setIndent("  ")
                         w()

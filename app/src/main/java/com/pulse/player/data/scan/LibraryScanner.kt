@@ -163,7 +163,7 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
         val batch = ArrayList<TrackEntity>()
         val gen = db.tracks().maxGen() + 1L
 
-        fun scanDir(dir: DocumentFile, path: String) {
+        suspend fun scanDir(dir: DocumentFile, path: String) {
             dir.listFiles().forEach { file ->
                 if (file.isDirectory) {
                     scanDir(file, "$path/${file.name.orEmpty()}")

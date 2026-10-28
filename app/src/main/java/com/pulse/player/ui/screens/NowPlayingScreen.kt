@@ -216,7 +216,7 @@ fun NowPlayingScreen(vm: MainViewModel) {
                     on = fav,
                     onToggle = { vm.toggleFavoriteCurrent() }
                 )
-                IconButton(onClick = { vm.openSleep() }) {
+                IconButton(onClick = { vm.openSleepSheet() }) {
                     Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
                 }
                 IconButton(onClick = { vm.openAddToPlaylist() }) {
@@ -358,7 +358,7 @@ fun SongLyricsSegment(showLyrics: Boolean, onSelect: (Boolean) -> Unit) {
 @Composable
 fun LyricsView(
     vm: MainViewModel,
-    mediaId: String,
+    mediaId: String?,
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
@@ -366,7 +366,11 @@ fun LyricsView(
     val listState = rememberLazyListState()
     val currentPosMs by vm.player.position.collectAsStateWithLifecycle()
 
-    fun loadStoredLyrics(id: String) {
+    fun loadStoredLyrics(id: String?) {
+        if (id.isNullOrBlank()) {
+            lrcLines = emptyList()
+            return
+        }
         val safeId = id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
         val lrcFile = File(File(ctx.filesDir, "lyrics"), "$safeId.lrc")
         if (lrcFile.exists() && lrcFile.length() > 0) {
@@ -400,7 +404,8 @@ fun LyricsView(
                 ctx.contentResolver.openInputStream(uri)?.use { stream ->
                     val text = stream.bufferedReader().use { it.readText().take(512 * 1024) }
                     val dir = File(ctx.filesDir, "lyrics").apply { mkdirs() }
-                    val safeId = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                    val targetId = mediaId ?: return@runCatching
+                    val safeId = targetId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
                     File(dir, "$safeId.lrc").writeText(text)
                     val parsed = Lrc.parse(text)
                     lrcLines = if (parsed.isNotEmpty()) {

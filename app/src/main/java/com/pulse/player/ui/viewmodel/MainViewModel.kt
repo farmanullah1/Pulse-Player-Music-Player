@@ -100,6 +100,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openQueue() { queueOpen.value = true }
     fun closeQueue() { queueOpen.value = false }
     fun openSleepSheet() { sleepOpen.value = true }
+    fun openSleep() { openSleepSheet() }
     fun closeSleepSheet() { sleepOpen.value = false }
     fun openAddToPlaylist(t: Track? = null) { addToPlaylistOpen.value = t ?: currentPlayingTrack() }
     fun closeAddToPlaylist() { addToPlaylistOpen.value = null }
@@ -369,6 +370,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settings.addSafTree(uri.toString())
         scan()
     }
+    fun scanTree(uri: Uri) = addSafFolder(uri)
 
     // Backup & Transfer
     val exportStatus = MutableStateFlow<String?>(null)

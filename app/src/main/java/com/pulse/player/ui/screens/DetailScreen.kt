@@ -140,11 +140,11 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
             itemsIndexed(list, key = { _, it -> it.id }) { index, track ->
                 TrackRow(
                     t = track,
-                    index = index + 1,
-                    isPlaying = ps.mediaId == track.id,
-                    onClick = { vm.player.playQueue(list, index) },
-                    onMore = { vm.openTrackMenu(track) },
-                    onToggleFavorite = { vm.toggleFavorite(track.id) }
+                    current = track.id == ps.mediaId,
+                    playing = ps.isPlaying,
+                    onClick = { vm.playQueue(list, index) },
+                    onLongClick = { },
+                    onMore = { vm.openTrackMenu(track) }
                 )
             }
         }

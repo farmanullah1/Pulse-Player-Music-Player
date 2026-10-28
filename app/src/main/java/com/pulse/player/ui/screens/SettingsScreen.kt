@@ -65,7 +65,7 @@ fun SettingsScreen(vm: MainViewModel) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            vm.scanTree(uri)
+            vm.addSafFolder(uri)
         }
     }
 

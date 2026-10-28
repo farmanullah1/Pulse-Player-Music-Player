@@ -161,9 +161,10 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
-    fun playQueue(tracks: List<Track>, startIdx: Int = 0) {
+    fun playQueue(tracks: List<Track>, startIdx: Int = 0, shuffle: Boolean = false) {
         if (tracks.isEmpty()) return
         mc?.let {
+            it.shuffleModeEnabled = shuffle
             it.setMediaItems(tracks.map { tr -> tr.toItem() }, startIdx.coerceIn(0, tracks.lastIndex), 0L)
             it.prepare()
             fadeIn(it)
