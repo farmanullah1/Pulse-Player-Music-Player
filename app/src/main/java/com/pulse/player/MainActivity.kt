@@ -1,6 +1,7 @@
 package com.pulse.player
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -29,6 +30,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        handleIntent(intent)
 
         if (Build.VERSION.SDK_INT >= 33) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -64,6 +67,23 @@ class MainActivity : ComponentActivity() {
             ) {
                 AppShell(vm = vm, windowSize = windowSize)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
+            intent.data?.let { vm.playExternal(it) }
+            setIntent(null)
+        } else if (intent.action == "pulse.PLAY_TRACK") {
+            intent.getStringExtra("id")?.let { vm.playTrackById(it) }
+            setIntent(null)
         }
     }
 

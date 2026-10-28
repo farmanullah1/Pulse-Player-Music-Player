@@ -133,6 +133,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                             Screen.PlayerTheme -> PlayerThemeScreen(vm)
                             Screen.Backup -> BackupScreen(vm)
                             Screen.Search -> SearchScreen(vm)
+                            Screen.Duplicates -> DuplicatesScreen(vm)
                             is Screen.Detail -> DetailScreen(vm, s)
                         }
                     }

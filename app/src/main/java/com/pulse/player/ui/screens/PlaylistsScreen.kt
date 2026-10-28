@@ -16,16 +16,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.HourglassEmpty
 import androidx.compose.material.icons.rounded.LibraryAdd
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +52,9 @@ fun PlaylistsScreen(vm: MainViewModel) {
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val favCount by vm.favoriteCount.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
+    val neverPlayed by vm.neverPlayed.collectAsStateWithLifecycle()
+    val forgottenFavs by vm.forgottenFavorites.collectAsStateWithLifecycle()
+    val longTracks by vm.longTracks.collectAsStateWithLifecycle()
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -101,6 +106,51 @@ fun PlaylistsScreen(vm: MainViewModel) {
                             modifier = Modifier.weight(1f)
                         ) {
                             vm.go(Screen.Detail("system", "top_tracks"))
+                        }
+                    }
+                }
+            }
+
+            val hasSmart = neverPlayed.isNotEmpty() || forgottenFavs.isNotEmpty() || longTracks.isNotEmpty()
+            if (hasSmart) {
+                item {
+                    Text("Smart Playlists", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (neverPlayed.isNotEmpty()) {
+                            SystemPlaylistCard(
+                                title = "Never played",
+                                subtitle = "${neverPlayed.size} songs",
+                                icon = Icons.Rounded.HourglassEmpty,
+                                gradient = listOf(Color(0xFF1B1B4B), Pulse.Cyan),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                vm.go(Screen.Detail("system", "never_played"))
+                            }
+                        }
+                        if (forgottenFavs.isNotEmpty()) {
+                            SystemPlaylistCard(
+                                title = "Forgotten favourites (30 days)",
+                                subtitle = "${forgottenFavs.size} songs",
+                                icon = Icons.Rounded.FavoriteBorder,
+                                gradient = listOf(Color(0xFF5B1A58), Pulse.Pink),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                vm.go(Screen.Detail("system", "forgotten_favorites"))
+                            }
+                        }
+                        if (longTracks.isNotEmpty()) {
+                            SystemPlaylistCard(
+                                title = "Long tracks (7 min+)",
+                                subtitle = "${longTracks.size} songs",
+                                icon = Icons.Rounded.Timer,
+                                gradient = listOf(Color(0xFF2B1055), Pulse.Purple),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                vm.go(Screen.Detail("system", "long_tracks"))
+                            }
                         }
                     }
                 }

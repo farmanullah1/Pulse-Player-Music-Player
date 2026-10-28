@@ -3,12 +3,10 @@ package com.pulse.player.ui.screens
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,6 +15,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +31,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -73,8 +73,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -82,11 +82,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import com.pulse.player.data.lyrics.Lrc
+import com.pulse.player.data.lyrics.LrcLine
 import com.pulse.player.data.scan.ArtworkLoader
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.playback.PlayerController
 import com.pulse.player.playback.RingtoneHelper
 import com.pulse.player.ui.components.Artwork
+import com.pulse.player.ui.components.AuroraBackground
+import com.pulse.player.ui.components.GlowArtwork
 import com.pulse.player.ui.components.HeartButton
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.theme.Pulse
@@ -98,6 +102,7 @@ import com.pulse.player.ui.themes.StarField
 import com.pulse.player.ui.themes.VinylDisc
 import com.pulse.player.ui.themes.WavesCanvas
 import com.pulse.player.ui.viewmodel.MainViewModel
+import java.io.File
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
@@ -116,16 +121,9 @@ fun NowPlayingScreen(vm: MainViewModel) {
         }
     }
 
-    val topColor by animateColorAsState(
-        Color(dominant).darken(0.55f),
-        tween(500),
-        label = "bg"
-    )
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(topColor, Color(0xFF0A0612), Color.Black)))
+    AuroraBackground(
+        accent = Color(dominant),
+        modifier = Modifier.fillMaxSize()
     ) {
         Column(
             Modifier
@@ -155,48 +153,71 @@ fun NowPlayingScreen(vm: MainViewModel) {
             Spacer(Modifier.height(16.dp))
 
             if (showLyrics) {
-                LyricsView(modifier = Modifier.weight(1f))
+                LyricsView(
+                    vm = vm,
+                    mediaId = s.mediaId,
+                    modifier = Modifier.weight(1f)
+                )
             } else {
-                Box(Modifier.weight(1f), Alignment.Center) {
-                    PlayerThemeHost(vm, s)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .pointerInput(s.mediaId) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    vm.toggleFavoriteCurrent()
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    PlayerThemeHost(vm, s, Color(dominant))
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = s.title.ifBlank { "Nothing playing" },
-                style = MaterialTheme.typography.headlineMedium,
+                text = s.title.ifBlank { "No track selected" },
+                style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = s.artist.ifBlank { "Select a song" },
+                text = s.artist.ifBlank { "Unknown artist" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Pulse.TextMid,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(Modifier.height(20.dp))
+
+            SeekBar(
+                position = vm.player.position,
+                duration = s.durationMs,
+                onSeek = vm.player::seekTo
             )
 
             Spacer(Modifier.height(16.dp))
-            SeekBar(vm.player.position, s.durationMs, onSeek = vm.player::seekTo)
-            Spacer(Modifier.height(8.dp))
-            TransportRow(s, vm.player)
-            Spacer(Modifier.height(8.dp))
+
+            TransportRow(s = s, p = vm.player)
+
+            Spacer(Modifier.height(20.dp))
 
             Row(
-                Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                HeartButton(fav, { vm.toggleFavoriteCurrent() })
-                IconButton(onClick = { vm.openSleepSheet() }) {
-                    Icon(
-                        Icons.Rounded.Bedtime,
-                        "Sleep timer",
-                        tint = if (s.sleepRemainingMs > 0 || s.sleepEndOfTrack) Pulse.Cyan else Color.White
-                    )
+                HeartButton(
+                    on = fav,
+                    onToggle = { vm.toggleFavoriteCurrent() }
+                )
+                IconButton(onClick = { vm.openSleep() }) {
+                    Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
                 }
                 IconButton(onClick = { vm.openAddToPlaylist() }) {
                     Icon(Icons.Rounded.PlaylistAdd, "Add to playlist", tint = Color.White)
@@ -232,7 +253,7 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
             Text("Now Playing", style = MaterialTheme.typography.titleLarge, color = Color.White)
             Spacer(Modifier.height(24.dp))
             Box(Modifier.weight(1f), Alignment.Center) {
-                PlayerThemeHost(vm, s)
+                PlayerThemeHost(vm, s, Pulse.Cyan)
             }
             Spacer(Modifier.height(16.dp))
             Text(
@@ -266,7 +287,7 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun PlayerThemeHost(vm: MainViewModel, s: PlaybackUiState) {
+fun PlayerThemeHost(vm: MainViewModel, s: PlaybackUiState, glowColor: Color = Pulse.Cyan) {
     val id by vm.playerThemeId.collectAsStateWithLifecycle()
     val theme = PlayerThemes.firstOrNull { it.id == id } ?: PlayerThemes[0]
 
@@ -286,12 +307,10 @@ fun PlayerThemeHost(vm: MainViewModel, s: PlaybackUiState) {
                 MountainSunset(Modifier.fillMaxSize())
                 Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
             }
-            else -> Artwork(
-                s.artworkUri,
-                260.dp,
-                Modifier.shadow(24.dp, RoundedCornerShape(16.dp), spotColor = t.colors.first()),
-                radius = 16.dp,
-                px = 512
+            else -> GlowArtwork(
+                uri = s.artworkUri,
+                size = 280.dp,
+                glow = glowColor
             )
         }
     }
@@ -337,22 +356,82 @@ fun SongLyricsSegment(showLyrics: Boolean, onSelect: (Boolean) -> Unit) {
 }
 
 @Composable
-fun LyricsView(modifier: Modifier = Modifier) {
-    var lrcLines by remember { mutableStateOf<List<String>>(emptyList()) }
+fun LyricsView(
+    vm: MainViewModel,
+    mediaId: String,
+    modifier: Modifier = Modifier
+) {
     val ctx = LocalContext.current
+    var lrcLines by remember { mutableStateOf<List<LrcLine>>(emptyList()) }
+    val listState = rememberLazyListState()
+    val currentPosMs by vm.player.position.collectAsStateWithLifecycle()
+
+    fun loadStoredLyrics(id: String) {
+        val safeId = id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val lrcFile = File(File(ctx.filesDir, "lyrics"), "$safeId.lrc")
+        if (lrcFile.exists() && lrcFile.length() > 0) {
+            runCatching {
+                val text = lrcFile.readText()
+                val parsed = Lrc.parse(text)
+                lrcLines = if (parsed.isNotEmpty()) {
+                    parsed
+                } else {
+                    text.lineSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .map { LrcLine(-1L, it) }
+                        .toList()
+                }
+            }
+        } else {
+            lrcLines = emptyList()
+        }
+    }
+
+    LaunchedEffect(mediaId) {
+        loadStoredLyrics(mediaId)
+    }
+
     val lrcPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
             runCatching {
                 ctx.contentResolver.openInputStream(uri)?.use { stream ->
-                    lrcLines = stream.bufferedReader().readLines().map { it.replace(Regex("\\[.*?\\]"), "").trim() }.filter { it.isNotBlank() }
+                    val text = stream.bufferedReader().use { it.readText().take(512 * 1024) }
+                    val dir = File(ctx.filesDir, "lyrics").apply { mkdirs() }
+                    val safeId = mediaId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                    File(dir, "$safeId.lrc").writeText(text)
+                    val parsed = Lrc.parse(text)
+                    lrcLines = if (parsed.isNotEmpty()) {
+                        parsed
+                    } else {
+                        text.lineSequence()
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .map { LrcLine(-1L, it) }
+                            .toList()
+                    }
                 }
             }
         }
     }
 
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    val activeIdx = remember(lrcLines, currentPosMs) {
+        if (lrcLines.isNotEmpty() && lrcLines.first().timeMs >= 0) {
+            Lrc.activeIndex(lrcLines, currentPosMs)
+        } else {
+            -1
+        }
+    }
+
+    LaunchedEffect(activeIdx) {
+        if (activeIdx >= 0 && !listState.isScrollInProgress) {
+            listState.animateScrollToItem(activeIdx)
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (lrcLines.isEmpty()) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -360,26 +439,37 @@ fun LyricsView(modifier: Modifier = Modifier) {
             ) {
                 Text("No lyrics found for this track", color = Pulse.TextMid)
                 Button(
-                    onClick = { lrcPicker.launch("*/*") },
+                    onClick = { lrcPicker.launch(arrayOf("*/*", "text/*")) },
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Elevated, contentColor = Pulse.Cyan)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Pulse.Elevated,
+                        contentColor = Pulse.Cyan
+                    )
                 ) {
                     Text("Choose .lrc file")
                 }
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(lrcLines) { line ->
+                itemsIndexed(lrcLines) { idx, line ->
+                    val isActive = idx == activeIdx
                     Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
+                        text = line.text,
+                        style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+                        color = if (isActive) Pulse.Cyan else Pulse.TextLow,
+                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = line.timeMs >= 0) {
+                                vm.player.seekTo(line.timeMs)
+                            }
+                            .padding(vertical = 8.dp, horizontal = 24.dp)
                     )
                 }
             }
@@ -542,6 +632,3 @@ fun TransportRow(s: PlaybackUiState, p: PlayerController) {
         }
     }
 }
-
-fun Color.darken(factor: Float): Color =
-    Color(red * (1 - factor), green * (1 - factor), blue * (1 - factor), alpha)

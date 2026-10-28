@@ -34,7 +34,9 @@ class PulseApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        db = Room.databaseBuilder(this, PulseDb::class.java, "pulse.db").build()
+        db = Room.databaseBuilder(this, PulseDb::class.java, "pulse.db")
+            .addMigrations(PulseDb.MIGRATION_1_2)
+            .build()
         settings = SettingsStore(this)
         scanner = LibraryScanner(this, db)
         player = PlayerController(this, db)

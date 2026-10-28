@@ -9,10 +9,24 @@ import com.pulse.player.data.backup.ArchiveBackupService
 import com.pulse.player.data.backup.ArchiveRestoreService
 import com.pulse.player.data.backup.BackupCategory
 import com.pulse.player.data.backup.BackupOperationState
+import com.pulse.player.data.backup.Compat
+import com.pulse.player.data.backup.CompatRestorePreview
+import com.pulse.player.data.backup.CompatRestoreReport
+import com.pulse.player.data.backup.ExportCats
 import com.pulse.player.data.backup.LastBackupRecord
 import com.pulse.player.data.backup.RestoreConflictMode
+import com.pulse.player.data.backup.RestoreOptions
 import com.pulse.player.data.backup.RestorePreview
 import com.pulse.player.data.backup.RestoreReport
+import com.pulse.player.data.backup.SafeZip
+import com.pulse.player.data.backup.Sniffed
+import com.pulse.player.data.backup.StagedBackup
+import com.pulse.player.data.backup.applyRestore
+import com.pulse.player.data.backup.copyToTemp
+import com.pulse.player.data.backup.exportCompat
+import com.pulse.player.data.backup.previewRestore
+import com.pulse.player.data.backup.sniff
+import com.pulse.player.data.backup.stage
 import com.pulse.player.data.db.PlaylistEntity
 import com.pulse.player.data.db.TrackEntity
 import com.pulse.player.data.favorites.FavItem
@@ -29,10 +43,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.ArrayDeque
 
 enum class SortField { TITLE, ARTIST, DATE_ADDED, DURATION }
@@ -40,7 +56,7 @@ enum class SortField { TITLE, ARTIST, DATE_ADDED, DURATION }
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application.app
     val player = app.player
-    private val db = app.db
+    val db = app.db
     val settings = app.settings
     private val scanner = app.scanner
     val favoritesRepo = app.favoritesRepo
@@ -173,6 +189,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val playlists: StateFlow<List<PlaylistEntity>> = db.playlists().observePlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Smart Playlists
+    val neverPlayed: StateFlow<List<Track>> = db.tracks().neverPlayed()
+        .map { list -> list.map { it.toTrack() } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val forgottenFavorites: StateFlow<List<Track>> = db.tracks()
+        .forgottenFavorites(since = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000L)
+        .map { list -> list.map { it.toTrack() } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val longTracks: StateFlow<List<Track>> = db.tracks().longTracks()
+        .map { list -> list.map { it.toTrack() } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun createPlaylist(name: String) = viewModelScope.launch(Dispatchers.IO) {
         if (name.isNotBlank()) {
             db.playlists().create(PlaylistEntity(name = name.trim(), createdAtMs = System.currentTimeMillis()))
@@ -220,12 +253,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // For You / Recap stats
     val todayMinutes = MutableStateFlow(0)
+    val streakDays = MutableStateFlow(0)
     val topPicks = MutableStateFlow<List<Track>>(emptyList())
     val resume = MutableStateFlow<Track?>(null)
+
+    // Last backup info
+    val lastBackupJson = MutableStateFlow<String?>(null)
 
     init {
         refreshStats()
         restoreLastQueue()
+        refreshLastBackup()
+    }
+
+    fun refreshLastBackup() = viewModelScope.launch {
+        lastBackupJson.value = settings.lastBackup()
     }
 
     fun refreshStats() = viewModelScope.launch(Dispatchers.IO) {
@@ -233,6 +275,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val startOfDay = now - (now % 86_400_000L)
         val todayMs = db.stats().totalMs(startOfDay, now)
         todayMinutes.value = (todayMs / 60_000L).toInt()
+
+        val days = db.stats().playDays()
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        val cal = java.util.Calendar.getInstance()
+        val today = sdf.format(cal.time)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        val yesterday = sdf.format(cal.time)
+
+        val first = days.firstOrNull()
+        var s = 0
+        if (first == today || first == yesterday) {
+            val daySet = days.toSet()
+            val checkCal = java.util.Calendar.getInstance()
+            if (first == yesterday) {
+                checkCal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+            }
+            while (true) {
+                val dStr = sdf.format(checkCal.time)
+                if (dStr in daySet) {
+                    s++
+                    checkCal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+                } else {
+                    break
+                }
+            }
+        }
+        streakDays.value = s
 
         val topIds = db.stats().observeTopIds(10).first()
         if (topIds.isNotEmpty()) {
@@ -257,6 +326,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playNext(t: Track) { player.playNext(t) }
     fun addToQueue(t: Track) { player.addToQueue(t) }
+
+    fun playExternal(uri: Uri) {
+        player.playExternal(uri)
+        openNowPlaying()
+    }
+
+    fun playTrackById(id: String) = viewModelScope.launch(Dispatchers.IO) {
+        db.tracks().byId(id)?.let { entity ->
+            withContext(Dispatchers.Main) {
+                player.playTrack(entity.toTrackWithFav(false).toTrack())
+                openNowPlaying()
+            }
+        }
+    }
 
     fun playSelectedNext() {
         val sel = selected.value
@@ -310,7 +393,148 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         importPreview.value = null
     }
 
-    // Archive Backup & Restore
+    // Compatible Archive Backup & Restore (Prompt 9, 10 & 11)
+    val compatPreview = MutableStateFlow<CompatRestorePreview?>(null)
+    val compatReport = MutableStateFlow<CompatRestoreReport?>(null)
+    val compatSelectedCategories = MutableStateFlow<Set<String>>(Compat.FLAGS.toSet())
+    val compatReplaceMode = MutableStateFlow(false)
+    val compatExportCats = MutableStateFlow(ExportCats())
+    val compatExportAsZip = MutableStateFlow(false)
+
+    fun toggleCompatCategory(flag: String) {
+        compatSelectedCategories.update { current ->
+            if (flag in current) {
+                if (current.size > 1) current - flag else current
+            } else {
+                current + flag
+            }
+        }
+    }
+
+    fun setCompatReplaceMode(replace: Boolean) {
+        compatReplaceMode.value = replace
+    }
+
+    fun toggleExportCategory(key: String) {
+        compatExportCats.update { cur ->
+            when (key) {
+                "tags" -> cur.copy(tags = !cur.tags)
+                "covers" -> cur.copy(covers = !cur.covers)
+                "lyrics" -> cur.copy(lyrics = !cur.lyrics)
+                "playlists" -> cur.copy(playlists = !cur.playlists)
+                "sort" -> cur.copy(sort = !cur.sort)
+                "scan" -> cur.copy(scan = !cur.scan)
+                "recap" -> cur.copy(recap = !cur.recap)
+                else -> cur
+            }
+        }
+    }
+
+    fun setCompatExportAsZip(asZip: Boolean) {
+        compatExportAsZip.value = asZip
+    }
+
+    fun executeCompatExport(destUri: Uri) = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Starting compatible backup export...")
+        val res = exportCompat(
+            ctx = app,
+            db = db,
+            settings = settings,
+            cats = compatExportCats.value,
+            dest = destUri,
+            onStage = { stageName ->
+                archiveOperation.value = BackupOperationState(inProgress = true, stage = "Writing $stageName...")
+            }
+        )
+        if (res.isSuccess) {
+            val file = res.getOrNull()
+            archiveOperation.value = BackupOperationState(
+                inProgress = false,
+                completedMessage = "Backup saved successfully (${file?.name ?: "backup"})"
+            )
+            refreshLastBackup()
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Unknown error"
+            archiveOperation.value = BackupOperationState(
+                inProgress = false,
+                errorMessage = "Export failed: $err"
+            )
+        }
+    }
+
+    fun smartInspect(uri: Uri, fileName: String) = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Sniffing backup format...")
+        val sniffed = sniff(app, uri)
+        when (sniffed) {
+            Sniffed.REAL_WAV -> {
+                archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "This is a real audio file, not a backup.")
+            }
+            Sniffed.JSON -> {
+                archiveOperation.value = BackupOperationState(inProgress = false)
+                previewFavoritesImport(uri, fileName)
+            }
+            Sniffed.ZIP -> {
+                archiveOperation.value = BackupOperationState(inProgress = true, stage = "Reading backup archive...")
+                try {
+                    val temp = copyToTemp(app, uri)
+                    try {
+                        val sz = SafeZip(temp)
+                        if (!sz.isRecognizedBackup()) {
+                            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "This ZIP is not a recognised backup.")
+                            return@launch
+                        }
+                        val staged = stage(app, sz)
+                        sz.close()
+                        val preview = previewRestore(db, staged)
+                        archiveOperation.value = BackupOperationState(inProgress = false)
+                        compatPreview.value = preview
+                    } finally {
+                        temp.delete()
+                    }
+                } catch (e: Exception) {
+                    archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = e.message ?: "Failed to read backup archive.")
+                }
+            }
+            Sniffed.OTHER -> {
+                archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "This file is not a recognised backup.")
+            }
+        }
+    }
+
+    fun executeCompatRestore(staged: StagedBackup, categories: Set<String>, replace: Boolean) = viewModelScope.launch {
+        compatPreview.value = null
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Restoring data...")
+        try {
+            val report = applyRestore(app, db, settings, staged, RestoreOptions(categories, replace))
+            archiveOperation.value = BackupOperationState(inProgress = false)
+            compatReport.value = report
+            refreshStats()
+        } catch (e: Exception) {
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "Restore failed: ${e.message}")
+        }
+    }
+
+    fun dismissCompatPreview() {
+        compatPreview.value = null
+    }
+
+    fun dismissCompatReport() {
+        compatReport.value = null
+    }
+
+    fun saveUnmatchedReport(destUri: Uri, lines: List<String>) = viewModelScope.launch {
+        try {
+            app.contentResolver.openOutputStream(destUri)?.use { out ->
+                out.write(lines.joinToString("\n").toByteArray(Charsets.UTF_8))
+                out.flush()
+            }
+            archiveOperation.value = BackupOperationState(inProgress = false, completedMessage = "Unmatched list saved successfully.")
+        } catch (e: Exception) {
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "Failed to save unmatched list: ${e.message}")
+        }
+    }
+
+    // Option B Portable Archive (Preserved for compatibility)
     val archiveOperation = MutableStateFlow(BackupOperationState())
     val archivePreview = MutableStateFlow<RestorePreview?>(null)
     val archiveReport = MutableStateFlow<RestoreReport?>(null)

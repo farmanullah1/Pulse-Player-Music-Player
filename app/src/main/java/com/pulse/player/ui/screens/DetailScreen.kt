@@ -41,9 +41,12 @@ import kotlin.random.Random
 @Composable
 fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
     val allTracks by vm.tracks.collectAsStateWithLifecycle()
+    val neverPlayed by vm.neverPlayed.collectAsStateWithLifecycle()
+    val forgottenFavs by vm.forgottenFavorites.collectAsStateWithLifecycle()
+    val longTracks by vm.longTracks.collectAsStateWithLifecycle()
     val ps by vm.player.state.collectAsStateWithLifecycle()
 
-    val (title, subtitle, list) = remember(detail, allTracks) {
+    val (title, subtitle, list) = remember(detail, allTracks, neverPlayed, forgottenFavs, longTracks) {
         when (detail.kind) {
             "album" -> {
                 val matches = allTracks.filter { it.album.equals(detail.key, ignoreCase = true) }
@@ -66,6 +69,15 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                     "recent_added" -> {
                         val matches = allTracks.sortedByDescending { it.dateAddedMs }.take(50)
                         Triple("Recently Added", "${matches.size} songs", matches)
+                    }
+                    "never_played" -> {
+                        Triple("Never Played", "${neverPlayed.size} songs", neverPlayed)
+                    }
+                    "forgotten_favorites" -> {
+                        Triple("Forgotten Favourites (30 days)", "${forgottenFavs.size} songs", forgottenFavs)
+                    }
+                    "long_tracks" -> {
+                        Triple("Long Tracks (7 min+)", "${longTracks.size} songs", longTracks)
                     }
                     else -> Triple("Playlist", "${allTracks.size} songs", allTracks)
                 }
@@ -99,47 +111,40 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Artwork(list.firstOrNull()?.uri, 140.dp, radius = 20.dp, px = 384)
+                    Artwork(list.firstOrNull()?.uri, 180.dp, radius = 20.dp, px = 512)
                     Spacer(Modifier.height(16.dp))
-                    Text(title, style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Pulse.TextMid)
-                    Spacer(Modifier.height(16.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                    Spacer(Modifier.height(20.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        PillButton(
+                            text = "Play",
+                            icon = Icons.Rounded.PlayArrow,
+                            onClick = { vm.player.playQueue(list, 0) }
+                        )
                         PillButton(
                             text = "Shuffle",
                             icon = Icons.Rounded.Shuffle,
                             onClick = {
                                 if (list.isNotEmpty()) {
-                                    vm.playQueue(list, Random.nextInt(list.size), shuffle = true)
+                                    val shuffled = list.shuffled(Random(System.currentTimeMillis()))
+                                    vm.player.playQueue(shuffled, 0)
                                 }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        PillButton(
-                            text = "Play",
-                            icon = Icons.Rounded.PlayArrow,
-                            onClick = {
-                                if (list.isNotEmpty()) {
-                                    vm.playQueue(list, 0)
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
+                            }
                         )
                     }
                 }
             }
 
-            itemsIndexed(list, key = { _, t -> t.id }) { index, track ->
+            itemsIndexed(list, key = { _, it -> it.id }) { index, track ->
                 TrackRow(
                     t = track,
-                    current = track.id == ps.mediaId,
-                    playing = ps.isPlaying,
-                    onClick = { vm.playQueue(list, index) },
-                    onLongClick = { vm.toggleSelect(track.id) },
-                    onMore = { vm.openTrackMenu(track) }
+                    index = index + 1,
+                    isPlaying = ps.mediaId == track.id,
+                    onClick = { vm.player.playQueue(list, index) },
+                    onMore = { vm.openTrackMenu(track) },
+                    onToggleFavorite = { vm.toggleFavorite(track.id) }
                 )
             }
         }

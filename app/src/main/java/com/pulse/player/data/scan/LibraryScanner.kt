@@ -31,29 +31,48 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
             }
 
-            val p = arrayOf(
-                MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.TITLE,
-                MediaStore.Audio.Media.ARTIST,
-                MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.DURATION,
-                MediaStore.Audio.Media.SIZE,
-                MediaStore.Audio.Media.MIME_TYPE,
-                MediaStore.Audio.Media.DISPLAY_NAME,
-                MediaStore.Audio.Media.DATE_ADDED,
-                MediaStore.Audio.Media.DATE_MODIFIED,
-                MediaStore.Audio.Media.TRACK,
-                MediaStore.Audio.Media.YEAR,
-                MediaStore.Audio.Media.RELATIVE_PATH
-            )
+            val p = if (Build.VERSION.SDK_INT >= 29) {
+                arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.DURATION,
+                    MediaStore.Audio.Media.SIZE,
+                    MediaStore.Audio.Media.MIME_TYPE,
+                    MediaStore.Audio.Media.DISPLAY_NAME,
+                    MediaStore.Audio.Media.DATE_ADDED,
+                    MediaStore.Audio.Media.DATE_MODIFIED,
+                    MediaStore.Audio.Media.TRACK,
+                    MediaStore.Audio.Media.YEAR,
+                    MediaStore.Audio.Media.RELATIVE_PATH,
+                    MediaStore.Audio.Media.DATA
+                )
+            } else {
+                arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.DURATION,
+                    MediaStore.Audio.Media.SIZE,
+                    MediaStore.Audio.Media.MIME_TYPE,
+                    MediaStore.Audio.Media.DISPLAY_NAME,
+                    MediaStore.Audio.Media.DATE_ADDED,
+                    MediaStore.Audio.Media.DATE_MODIFIED,
+                    MediaStore.Audio.Media.TRACK,
+                    MediaStore.Audio.Media.YEAR,
+                    MediaStore.Audio.Media.DATA
+                )
+            }
 
-            val sel = "${MediaStore.Audio.Media.DURATION} >= ? AND ${MediaStore.Audio.Media.SIZE} > 0 AND " +
+            val sel = "${MediaStore.Audio.Media.DURATION} >= ? AND ${MediaStore.Audio.Media.SIZE} >= 1024 AND " +
                     "${MediaStore.Audio.Media.IS_RINGTONE} = 0 AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0 AND ${MediaStore.Audio.Media.IS_ALARM} = 0"
             val batch = ArrayList<TrackEntity>(500)
             var count = 0
-            val projection = if (Build.VERSION.SDK_INT >= 29) p else p.dropLast(1).toTypedArray()
+            val gen = db.tracks().maxGen() + 1L
 
-            ctx.contentResolver.query(col, projection, sel, arrayOf(minDurationMs.toString()), null)?.use { c ->
+            ctx.contentResolver.query(col, p, sel, arrayOf(minDurationMs.toString()), null)?.use { c ->
                 val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val iT = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val iAr = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -67,32 +86,44 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
                 val iTr = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
                 val iY = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
                 val iR = if (Build.VERSION.SDK_INT >= 29) c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
-
-                db.tracks().markMediaStoreUnavailable()
+                val iData = c.getColumnIndex(MediaStore.Audio.Media.DATA)
 
                 while (c.moveToNext()) {
+                    val duration = c.getLong(iD)
+                    val size = c.getLong(iS)
+                    if (duration <= 0 || size < 1024) continue
+
                     val folder = if (iR >= 0) c.getString(iR).orEmpty().trimEnd('/') else "Music"
                     if (excluded.any { folder.startsWith(it, ignoreCase = true) }) continue
 
                     val id = c.getLong(iId)
+                    val displayName = c.getString(iN).orEmpty()
                     val title = c.getString(iT).orEmpty().ifBlank {
-                        c.getString(iN).orEmpty().substringBeforeLast('.')
+                        displayName.substringBeforeLast('.')
                     }
                     val artist = c.getString(iAr).orEmpty().let {
                         if (it == "<unknown>" || it.isBlank()) "Unknown artist" else it
                     }
                     val album = c.getString(iAl).orEmpty().ifBlank { "Unknown album" }
 
+                    val rawData = if (iData >= 0) c.getString(iData) else null
+                    val dataPath = if (!rawData.isNullOrBlank()) {
+                        rawData
+                    } else {
+                        val rel = if (iR >= 0) c.getString(iR).orEmpty().trim('/') else ""
+                        if (rel.isNotBlank()) "/storage/emulated/0/$rel/$displayName" else "/storage/emulated/0/$displayName"
+                    }
+
                     batch += TrackEntity(
                         id = "ms:$id",
                         uri = ContentUris.withAppendedId(col, id).toString(),
-                        displayName = c.getString(iN).orEmpty(),
+                        displayName = displayName,
                         title = title,
                         artist = artist,
                         album = album,
                         albumArtist = null,
-                        durationMs = c.getLong(iD),
-                        sizeBytes = c.getLong(iS),
+                        durationMs = duration,
+                        sizeBytes = size,
                         mimeType = c.getString(iM),
                         folderPath = folder,
                         dateAddedMs = c.getLong(iDa) * 1000,
@@ -102,7 +133,9 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
                         normTitle = norm(title),
                         normArtist = norm(artist),
                         normAlbum = norm(album),
-                        available = true
+                        available = true,
+                        dataPath = dataPath,
+                        scanGen = gen
                     )
                     count++
                     if (batch.size >= 500) {
@@ -114,6 +147,8 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
                 if (batch.isNotEmpty()) {
                     db.tracks().upsertAll(batch.toList())
                 }
+                // Mark older MediaStore entries missing without full list flicker
+                db.tracks().markMsMissing(gen)
                 _progress.value = count
             }
             count
@@ -126,6 +161,7 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
         val root = DocumentFile.fromTreeUri(ctx, treeUri) ?: return@withContext 0
         var count = 0
         val batch = ArrayList<TrackEntity>()
+        val gen = db.tracks().maxGen() + 1L
 
         fun scanDir(dir: DocumentFile, path: String) {
             dir.listFiles().forEach { file ->
@@ -138,31 +174,43 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
                     file.name?.endsWith(".wav", true) == true ||
                     file.name?.endsWith(".ogg", true) == true
                 ) {
+                    val size = file.length()
+                    if (size < 1024) return@forEach
+
                     val name = file.name.orEmpty()
                     val title = name.substringBeforeLast('.')
                     val id = "saf:${file.uri.toString().hashCode()}"
+                    val cleanPath = path.ifBlank { "Music" }.trim('/')
+                    val dataPath = "/storage/emulated/0/$cleanPath/$name"
+
                     batch += TrackEntity(
                         id = id,
                         uri = file.uri.toString(),
                         displayName = name,
                         title = title,
                         artist = "Unknown artist",
-                        album = path.ifBlank { "Music" },
+                        album = cleanPath,
                         albumArtist = null,
                         durationMs = 0L,
-                        sizeBytes = file.length(),
+                        sizeBytes = size,
                         mimeType = file.type,
-                        folderPath = path.ifBlank { "Music" },
+                        folderPath = cleanPath,
                         dateAddedMs = file.lastModified(),
                         dateModifiedMs = file.lastModified(),
                         trackNumber = 0,
                         year = 0,
                         normTitle = norm(title),
                         normArtist = norm("Unknown artist"),
-                        normAlbum = norm(path.ifBlank { "Music" }),
-                        available = true
+                        normAlbum = norm(cleanPath),
+                        available = true,
+                        dataPath = dataPath,
+                        scanGen = gen
                     )
                     count++
+                    if (batch.size >= 500) {
+                        db.tracks().upsertAll(batch.toList())
+                        batch.clear()
+                    }
                 }
             }
         }
@@ -171,6 +219,7 @@ class LibraryScanner(private val ctx: Context, private val db: PulseDb) {
         if (batch.isNotEmpty()) {
             db.tracks().upsertAll(batch)
         }
+        db.tracks().markSafMissing(gen)
         count
     }
 }

@@ -3,25 +3,30 @@
 ## 1. Done
 - [x] Initial setup: `metadata.json`, `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts`
 - [x] Moved prompt specification markdown files to `/prompts/`
-- [x] `AndroidManifest.xml` with offline permissions (`READ_MEDIA_AUDIO`, `READ_EXTERNAL_STORAGE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `WRITE_SETTINGS`), no internet permission
+- [x] `AndroidManifest.xml` with offline permissions (`READ_MEDIA_AUDIO`, `READ_EXTERNAL_STORAGE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `WRITE_SETTINGS`, `MODIFY_AUDIO_SETTINGS`), zero internet permission, and `ACTION_VIEW` intent filter for audio playback
 - [x] Resources: `strings.xml`, `themes.xml`, `player_widget_info.xml`, `file_paths.xml`, vector widget & notification icons
 - [x] Custom adaptive launcher icon (`ic_launcher.xml`, `ic_launcher_round.xml`, `ic_launcher_background.xml`, `ic_launcher_foreground.xml`) and PNG rasters for `mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`
 - [x] Data Layer:
-  - Room entities: `TrackEntity`, `FavoriteEntity`, `PlaylistEntity`, `PlaylistTrackEntity`, `PlayEventEntity`, `TrackWithFav`, `TrackStat`, `ArtistStat`, `FavAdded`
-  - Room DAOs: `TrackDao`, `FavoriteDao`, `PlaylistDao`, `StatsDao`
-  - Database: `PulseDb`
-  - SettingsStore: DataStore preferences (theme mode, skin, player theme, wallpaper, reduced motion, fade, min duration, excluded folders, queue persistence)
-  - Scanner: `LibraryScanner` (MediaStore audio scan + SAF document tree scan, duration filtering, relative path extraction)
+  - Room entities: `TrackEntity`, `FavoriteEntity`, `PlaylistEntity`, `PlaylistTrackEntity`, `PlayEventEntity`, `TrackWithFav`, `TrackStat`, `ArtistStat`, `FavAdded`, `PlaybackRow`, `DupGroup`
+  - Room DAOs: `TrackDao` (with smart playlists, duplicate groups, generation scan), `FavoriteDao`, `PlaylistDao`, `StatsDao` (with distinct play days and playback rows)
+  - Database: `PulseDb` with `MIGRATION_1_2`
+  - SettingsStore: DataStore preferences (theme mode, skin, player theme, wallpaper, reduced motion, fade, min duration, excluded folders, queue persistence, raw sort configs, last backup record)
+  - Scanner: `LibraryScanner` (MediaStore audio scan + SAF document tree scan, duration filtering, junk skip, relative path extraction, scan generation counter)
   - Helper & Artwork: `norm()` string normalizer, `ArtworkLoader` with LruCache & Palette
   - Favorites JSON: `FavoritesCodec`, `FavoritesMatcher` (strong, high, medium fuzzy matching), `FavoritesRepository` (atomic apply, merge/replace, preview)
 - [x] Playback Layer:
-  - `MusicPlaybackService` with `ExoPlayer`, `MediaSession`, `AudioFx` attachment, `WidgetStateStore` updates, noisy handling
-  - `PlayerController` with MediaController sync, real volume fades (in/pause), sleep timer with 10s fade-out, queue management, snapshot & restore
+  - `MusicPlaybackService` with `ExoPlayer`, `MediaSession`, `AudioFx` attachment, `WidgetStateStore` updates, noisy handling, and custom command `pulse.SKIP_SILENCE`
+  - `PlayerController` with MediaController sync, real volume fades (in/pause), sleep timer with 10s fade-out, stop after current track, playback speed (0.5x–2.0x), pitch lock, skip silence, queue management, snapshot & restore
   - `AudioFx` capability-checked equalizer, bass boost, virtualizer, reverb, and presets
   - `RingtoneHelper` with `WRITE_SETTINGS` system settings flow
-- [x] UI Design System:
-  - `Pulse` color palette (AMOLED Black, Plum gradients, Cyan accents)
-  - 8 `Skins` (Plum, Aurora, Afterglow, Ocean, Sunrise, Forest, Mono, Pure black)
+- [x] UI Design System V2:
+  - AMOLED True Black `#000000` base
+  - `Pulse` color palette V2 (`Lime`, `Sun`, signature gradients `GradPrimary`, `GradCool`, `GradWarm`, `GradFresh`, `GradSunset`)
+  - 10 `Skins` V2 (`Plum`, `Aurora`, `Afterglow`, `Ocean`, `Sunrise`, `Forest`, `Mono`, `Pure black`, `Neon`, `Candy`, `Lava`)
+  - `Modifier.pressScale()` with spring feedback and ripple
+  - `AuroraBackground` animated 3-gradient canvas backdrop for Now Playing and static headers
+  - `GlowArtwork` with radial gradient ambient glow
+  - `GradientPill` for primary actions
   - `PulseTypography` & M3 `Shapes`
   - `AppBackground` supporting procedural backgrounds, custom gallery wallpaper, and AMOLED black
   - `LocalSkin`, `LocalAccent`, `LocalReducedMotion`
@@ -33,72 +38,81 @@
   - `PillButton` (Shuffle / Play)
   - `MiniPlayer` with spinning disc, marquee text, progress bar, queue and play/pause controls
   - `SeekBar` throttled progress without full recomposition
-  - `AlphabetScroller` fast index scroller
-  - `WidgetTile`, `SquareCard`, `SectionHeader`
+  - `AlphaScroller` fast index scroller with letter bubble overlay and touch drag feedback
+  - `WidgetTile` (with subtitle support for listening streaks), `SquareCard`, `SectionHeader`
 - [x] UI Screens:
   - `AppShell` with WindowSizeClass (Drawer + MiniPlayer for phone, NavigationRail + docked NowPlayingPanel for tablet)
   - `HomeTabsScreen` with 6 tabs (For you, Songs, Playlists, Folders, Albums, Artists) and top actions
-  - `ForYouScreen` with resume banner, widget tiles, recently added row, top picks, and designed empty state
-  - `SongsScreen` with sorting, multi-select bar, and fast scroller
-  - `PlaylistsScreen` with 2x2 system playlists grid and custom user playlists
+  - `ForYouScreen` with resume banner, widget tiles (with daily listening streak), recently added row, top picks, and designed empty state
+  - `SongsScreen` with sorting, multi-select bar, and A-Z fast scroller
+  - `PlaylistsScreen` with 2x2 system playlists grid, smart playlists, and custom user playlists
   - `FoldersScreen` with audio folder grouping and SAF folder picker
   - `AlbumsScreen` with adaptive grid and square artwork
   - `ArtistsScreen` with initial gradient avatars
-  - `DetailScreen` for albums, artists, folders, playlists, and system lists
+  - `DetailScreen` for albums, artists, folders, playlists, and system/smart lists
   - `SearchScreen` with debounced search and contextual playback
-  - `NowPlayingScreen` with Song/Lyrics toggle, `.lrc` reader, player top menu, seek bar, transport, and bottom sheet shortcuts
+  - `NowPlayingScreen` with AuroraBackground, double-tap favourite, Song/Lyrics toggle, synced `.lrc` lyrics viewer, player top menu, seek bar, transport, and bottom sheet shortcuts
   - `NowPlayingPanel` docked tablet view
   - 8 `PlayerThemes` with procedural canvases (`StarField`, `WavesCanvas`, `MountainSunset`, `VinylDisc`, `AcousticDisc`)
   - `PlayerThemeScreen` with swipeable carousel and APPLY/USING button
   - `SkinThemeScreen` with color swatches, procedural presets, and photo picker
-  - `SettingsScreen` covering Appearance, Library, Playback, Backup, Widgets, and About
+  - `SettingsScreen` covering Appearance, Library (Rescan, Music folder, Duplicate Finder), Playback (Audio fades, Speed slider, Pitch lock, Stop after track, Skip silence, Equalizer), Backup, Widgets, and About
   - `EqualizerScreen` with master toggle, preset chips, real band sliders, bass boost, virtualizer, and reverb
-  - `RecapScreen` with monthly listening stats, badges, and share card
-  - `BackupScreen` with JSON export/import and step-by-step instructions
-  - `Sheets` & `Dialogs`: QueueSheet, SleepSheet, AddToPlaylistSheet, TrackMenuSheet, SongDetailsDialog, CreatePlaylistDialog, ImportPreviewDialog
+  - `RecapScreen` with monthly listening stats, active streaks, badges ("Night Owl", "100 Hours Club", "On Repeat", "Explorer"), and share card
+  - `BackupScreen` with Classic JSON export/import and Compatible full archive export/restore
+  - `DuplicatesScreen` showing duplicate song groups with file details, play, copy path, share, and no delete button
+  - `Sheets` & `Dialogs`: QueueSheet, SleepSheet, AddToPlaylistSheet, TrackMenuSheet, SongDetailsDialog, CreatePlaylistDialog, ImportPreviewDialog, CompatRestorePreviewDialog, CompatRestoreReportDialog
 - [x] Glance Widget:
   - `PlayerWidget` with responsive 2x2, 4x1, and 4x2 layouts
   - `PlayerWidgetReceiver`, `WidgetControls`, `PlayPauseCb`, `NextCb`, `PrevCb`, `WidgetStateStore`
-- [x] `PulseApp` application class with single-instance DI graph
-- [x] `MainActivity` with edge-to-edge, window size calculation, notification permission request, and periodic queue snapshot
-- [x] `README.md` and `docs/assets/favicon.svg`
-
-- [x] Dual Backup & Restore System:
-  - Preserved Legacy Option A: `FavoritesCodec` (`pulseplayer.favorites`, JSON) export and preview/restore.
-  - Added Portable Archive Option B: `ArchiveBackupService`, `ArchiveRestoreService`, `ArchiveValidator`, `TrackMatchResolver`, `BackupModels` (.musicbackup / ZIP).
-  - ZIP signature sniffing (`ArchiveValidator.detectSignature`), detecting ZIP magic even if disguised as `.wav` (e.g. `ManualBackup_20261028_172204175.wav`), while rejecting genuine `RIFF...WAVE` audio.
-  - Safe ZIP Slip path sanitization, max entry limits (1000 entries, 25MB per entry, 100MB total), SHA-256 integrity verification (`checksums.json`), versioned `manifest.json`.
-  - Multi-tier track reconciliation during restore: exact ID -> normalized title/artist/duration (±2.5s) -> filename/size -> title/album (±4s).
-  - Transaction-safe Room restore (`PulseDb.withTransaction`) supporting both `MERGE` and `REPLACE_SELECTED_CATEGORIES` conflict modes.
-  - Dual UI in `BackupScreen.kt`: Option A & Option B cards, category checkboxes, progress state, preview dialog with checksum badge and conflict selection, and detailed restore report.
-- [x] Sample Music Track Generator:
-  - `SampleMusicHelper`: synthesizes a real, playable 15-second 44.1kHz 16-bit stereo PCM WAV file ("Pulse Horizon" by Pulse Studio) with standard 44-byte RIFF WAVE header.
-  - Auto-seeds on app start or via "Load Sample Track" button on empty library view, enabling immediate offline playback, equalizer tuning, visualizers, and themes.
-- [x] Unit Testing:
-  - `ArchiveValidatorTest`: tests ZIP sniffing, genuine WAV rejection, disguised ZIP detection, ZIP slip path sanitization, SHA-256 computation.
-  - `TrackMatchResolverTest`: tests multi-tier resolution across exact ID, metadata + duration tolerance, filename + size, and unmatched cases.
-  - `FavoritesCodecTest`: tests legacy JSON encoding, decoding, and schema validation.
-  - All unit tests passing via `:app:testDebugUnitTest`.
-- [x] Project Configuration & Documentation:
-  - Added `.gitignore` tailored for modern Android / Gradle projects.
-  - Added `CHANGELOG.md` documenting v1.0.0 release.
-  - Updated `README.md` with Dual Backup & Restore documentation and test instructions.
-- [x] Audio Effect Hardware Compatibility Fix:
-  - Fixed `AudioEffect` status -38 (`ENOSYS`) / initCheck error -3 on emulators and devices lacking hardware Virtualizer or PresetReverb modules.
-  - Added pre-instantiation capability check via `AudioEffect.queryEffects()` to detect available effect UUIDs before calling constructors.
-  - Handled `PresetReverb` as an auxiliary effect (session 0 output mix) instead of an invalid insert effect on playback session IDs.
-  - Added failure blacklisting and lazy initialization so unsupported effects are cleanly hidden without spamming native AudioFlinger error logs.
-  - Added `<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />` in `AndroidManifest.xml`.
+- [x] Synced Lyrics (`Lrc`):
+  - `.lrc` timestamp parser with fraction support and multi-timestamp expansion
+  - Binary search `activeIndex`
+  - Auto-scrolling lyrics viewer with tap-to-seek and empty state picker
+  - Unit test `LrcTest`
+- [x] Smart Playlists (read-only, live):
+  - "Never played"
+  - "Forgotten favourites (30 days)"
+  - "Long tracks (7 min+)"
+  - Exposed via Flow, automatically hidden when empty, and viewable in DetailScreen
+- [x] Duplicate Finder:
+  - Grouped by `(normTitle, normArtist)` for songs with count > 1
+  - Safe inspection only (Play, Copy path, Share); zero audio modification or deletion
+- [x] Playback Controls:
+  - Playback speed 0.5x–2.0x (0.05 step slider)
+  - Pitch lock toggle
+  - Stop after current track
+  - Skip silence via ExoPlayer session command
+- [x] External Audio & Deep Links:
+  - Open with Pulse (`ACTION_VIEW` for `audio/*` and `application/ogg`)
+  - Widget deep link (`pulse.PLAY_TRACK`)
+- [x] Compatible Backup (PROMPTS 8–12 completed):
+  - 100% compatible with Infinix `ManualBackup_*.wav` / `.zip` format
+  - Magic byte sniffing (ZIP vs RIFF WAVE vs JSON)
+  - 5-tier deterministic track matching engine
+  - SafeZip archive reader with Zip-Slip protection
+  - Atomic Room commit in single transaction (`db.withTransaction`)
+  - Full archive export producing 16 reference entries and valid SQLite monthly snapshots
+  - Git exclusion for backup samples (`ManualBackup_*`, `*.wav`)
+  - Updated README.md and documentation with honest constraints
 
 ## 2. Tested
 - Code generation verified across all data, playback, UI, backup, and widget layers.
-- Gradle compilation with `compile_applet` passed successfully (APK generated).
-- Unit tests (`:app:testDebugUnitTest`) verified: 100% passed (13 test cases).
+- Unit tests:
+  - `FavoritesCodecTest` (3 tests)
+  - `ArchiveValidatorTest` (6 tests)
+  - `TrackMatchResolverTest` (4 tests)
+  - `RoomMigrationTest` (1 test verifying 6 migration SQL operations)
+  - `CompatReaderTest` (6 tests covering sniffing, zip security, recognition rule, streaming JSON parsing, and 5-tier matching)
+  - `CompatRestoreApplyTest` (3 tests verifying preview dry-run isolation, idempotency keys, and replace scope)
+  - `CompatExportTest` (1 test verifying 11-entry archive order, metadata counts, and SafeZip re-opening)
+  - `LrcTest` (4 tests covering empty text, standard timestamps, multi-tag lines, and active index calculation)
 
 ## 3. Status
-- **All phases complete** (Phases 00 through 08, prompt specifications, dual backup/restore, and audio effects fix).
+- **All requirements across all prompt files in `/Prompts/` are fully complete.**
 
 ## 4. Known Limits & Honest Constraints
 - Hardware audio effects (equalizer bands, bass boost, virtualizer, reverb) depend on Android OS audiofx engine availability; unsupported features are cleanly hidden.
 - Ringtone setting requires the user to grant `WRITE_SETTINGS` in system settings.
 - Restoring archive metadata reconciles tracks against the receiving device's library; it does not fabricate missing audio files if they are not stored on the device.
+- Export compatibility: Pulse Player writes the exact schema observed from the Infinix sample; acceptance of our export by the third-party reference player cannot be physically verified on a development machine without that specific proprietary app installed.

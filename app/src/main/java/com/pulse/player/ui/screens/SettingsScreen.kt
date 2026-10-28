@@ -22,6 +22,7 @@ import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Checkroom
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
@@ -33,6 +34,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -49,34 +52,41 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val reducedMotion by vm.reducedMotion.collectAsStateWithLifecycle()
     val fadeEnabled by vm.fadeEnabled.collectAsStateWithLifecycle()
+    val playerState by vm.player.state.collectAsStateWithLifecycle()
+
     val safLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
+        contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
-        if (uri != null) vm.addSafFolder(uri)
+        if (uri != null) {
+            vm.scanTree(uri)
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = vm::back) {
+            IconButton(onClick = { vm.back() }) {
                 Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
             }
             Spacer(Modifier.width(8.dp))
-            Text("Settings", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Settings", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 SettingsSectionHeader("Appearance")
@@ -131,6 +141,9 @@ fun SettingsScreen(vm: MainViewModel) {
                         SettingsActionRow("Choose Music Folder", "Pick a folder with Storage Access Framework", Icons.Rounded.FolderOpen) {
                             safLauncher.launch(null)
                         }
+                        SettingsActionRow("Duplicate Finder", "Find duplicate songs across your library (list only)", Icons.Rounded.ContentCopy) {
+                            vm.go(Screen.Duplicates)
+                        }
                     }
                 }
             }
@@ -157,6 +170,91 @@ fun SettingsScreen(vm: MainViewModel) {
                                 colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
                             )
                         }
+
+                        // Playback Speed Slider
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Playback Speed", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(
+                                    "%.2fx".format(playerState.speed),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Pulse.Cyan,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Slider(
+                                value = playerState.speed,
+                                onValueChange = { raw ->
+                                    val stepped = (raw * 20f).roundToInt() / 20f
+                                    vm.player.setSpeed(stepped.coerceIn(0.5f, 2.0f))
+                                },
+                                valueRange = 0.5f..2.0f,
+                                steps = 29,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Pulse.Cyan,
+                                    activeTrackColor = Pulse.Cyan,
+                                    inactiveTrackColor = Pulse.Outline
+                                )
+                            )
+                        }
+
+                        // Pitch Lock Switch
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Lock Pitch", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Preserve natural voice pitch when altering speed", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                            }
+                            Switch(
+                                checked = playerState.pitchLocked,
+                                onCheckedChange = { vm.player.setPitchLocked(it) },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                            )
+                        }
+
+                        // Stop After Current Track Switch
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Stop After Current Track", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Pause playback automatically when current song finishes", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                            }
+                            Switch(
+                                checked = playerState.sleepEndOfTrack,
+                                onCheckedChange = { enabled ->
+                                    if (enabled) vm.player.sleepAtEndOfTrack() else vm.player.cancelSleep()
+                                },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                            )
+                        }
+
+                        // Skip Silence Switch
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Skip Silence", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Skip silent passages seamlessly during playback", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                            }
+                            Switch(
+                                checked = playerState.skipSilence,
+                                onCheckedChange = { vm.player.setSkipSilence(it) },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                            )
+                        }
+
                         SettingsNavRow("Equalizer & Sound Effects", Icons.Rounded.Equalizer) {
                             vm.go(Screen.Equalizer)
                         }

@@ -44,6 +44,8 @@ data class PlaybackUiState(
     val shuffle: Boolean = false,
     val repeat: Int = Player.REPEAT_MODE_OFF,
     val speed: Float = 1f,
+    val pitchLocked: Boolean = true,
+    val skipSilence: Boolean = false,
     val sleepRemainingMs: Long = 0,
     val sleepEndOfTrack: Boolean = false,
     val error: String? = null

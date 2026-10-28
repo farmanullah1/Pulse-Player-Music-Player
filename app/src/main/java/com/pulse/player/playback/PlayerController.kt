@@ -2,6 +2,7 @@ package com.pulse.player.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
@@ -11,6 +12,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.pulse.player.data.db.PlayEventEntity
 import com.pulse.player.data.db.PulseDb
@@ -151,46 +153,72 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         )
         .build()
 
-    // Commands
-    fun playQueue(tracks: List<Track>, startIndex: Int, shuffle: Boolean = false) {
-        val c = mc ?: return
+    fun playTrack(t: Track) {
+        mc?.let {
+            it.setMediaItem(t.toItem())
+            it.prepare()
+            fadeIn(it)
+        }
+    }
+
+    fun playQueue(tracks: List<Track>, startIdx: Int = 0) {
         if (tracks.isEmpty()) return
-        c.setMediaItems(tracks.map { it.toItem() }, startIndex.coerceIn(0, tracks.lastIndex), 0L)
-        c.shuffleModeEnabled = shuffle
-        c.prepare()
-        fadeIn(c)
+        mc?.let {
+            it.setMediaItems(tracks.map { tr -> tr.toItem() }, startIdx.coerceIn(0, tracks.lastIndex), 0L)
+            it.prepare()
+            fadeIn(it)
+        }
+    }
+
+    fun playExternal(uri: android.net.Uri) {
+        val item = MediaItem.Builder()
+            .setMediaId("ext:${uri.hashCode()}")
+            .setUri(uri)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(uri.lastPathSegment ?: "External Audio")
+                    .setArtist("External")
+                    .build()
+            )
+            .build()
+        mc?.let {
+            it.setMediaItem(item)
+            it.prepare()
+            fadeIn(it)
+        }
     }
 
     fun togglePlay() {
-        val c = mc ?: return
-        if (c.isPlaying) {
-            fadePause(c)
-        } else {
-            if (c.playbackState == Player.STATE_IDLE) c.prepare()
-            fadeIn(c)
+        mc?.let {
+            if (it.isPlaying) {
+                fadePause(it)
+            } else {
+                fadeIn(it)
+            }
         }
     }
 
     fun next() {
-        mc?.seekToNextMediaItem()
+        mc?.let {
+            if (it.hasNextMediaItem()) {
+                it.seekToNextMediaItem()
+            }
+        }
     }
 
     fun previous() {
         mc?.let {
-            if (it.currentPosition > 3000) it.seekTo(0) else it.seekToPreviousMediaItem()
+            if (it.hasPreviousMediaItem()) {
+                it.seekToPreviousMediaItem()
+            } else {
+                it.seekTo(0L)
+            }
         }
     }
 
     fun seekTo(ms: Long) {
         mc?.seekTo(ms)
         _pos.value = ms
-    }
-
-    fun skipBy(ms: Long) {
-        mc?.let {
-            val target = (it.currentPosition + ms).coerceIn(0, if (it.duration < 0) 0 else it.duration)
-            seekTo(target)
-        }
     }
 
     fun toggleShuffle() {
@@ -207,8 +235,27 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
+    fun setPlaybackParameters(speed: Float, lockPitch: Boolean) {
+        _state.update { it.copy(speed = speed, pitchLocked = lockPitch) }
+        mc?.playbackParameters = PlaybackParameters(speed, if (lockPitch) 1f else speed)
+    }
+
     fun setSpeed(s: Float) {
-        mc?.playbackParameters = PlaybackParameters(s, 1f)
+        val lock = _state.value.pitchLocked
+        setPlaybackParameters(s, lock)
+    }
+
+    fun setPitchLocked(lock: Boolean) {
+        val spd = _state.value.speed
+        setPlaybackParameters(spd, lock)
+    }
+
+    fun setSkipSilence(enabled: Boolean) {
+        _state.update { it.copy(skipSilence = enabled) }
+        mc?.let { c ->
+            val bundle = Bundle().apply { putBoolean("enabled", enabled) }
+            c.sendCustomCommand(SessionCommand("pulse.SKIP_SILENCE", Bundle.EMPTY), bundle)
+        }
     }
 
     fun playNext(t: Track) {

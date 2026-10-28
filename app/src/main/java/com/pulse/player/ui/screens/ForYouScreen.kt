@@ -67,6 +67,7 @@ fun ForYouScreen(vm: MainViewModel) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val ps by vm.player.state.collectAsStateWithLifecycle()
     val today by vm.todayMinutes.collectAsStateWithLifecycle()
+    val streak by vm.streakDays.collectAsStateWithLifecycle()
     val favCount by vm.favoriteCount.collectAsStateWithLifecycle()
     val recent = remember(tracks) { tracks.sortedByDescending { it.dateAddedMs }.take(12) }
     val top by vm.topPicks.collectAsStateWithLifecycle()
@@ -119,6 +120,7 @@ fun ForYouScreen(vm: MainViewModel) {
                     WidgetTile(
                         title = "Today",
                         value = "$today min",
+                        subtitle = if (streak > 0) "$streak day streak" else null,
                         icon = Icons.Rounded.Headphones,
                         colors = listOf(Pulse.Violet, Pulse.Magenta),
                         modifier = Modifier.weight(1f)

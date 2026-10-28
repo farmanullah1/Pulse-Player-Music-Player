@@ -27,17 +27,68 @@ interface TrackDao {
     @Query("SELECT * FROM tracks")
     suspend fun allOnce(): List<TrackEntity>
 
+    @Query("SELECT * FROM tracks WHERE available = 1")
+    suspend fun availableOnce(): List<TrackEntity>
+
     @Query("SELECT COUNT(*) FROM tracks WHERE available = 1")
     fun observeCount(): Flow<Int>
 
     @Upsert
     suspend fun upsertAll(items: List<TrackEntity>)
 
+    @Query("SELECT COALESCE(MAX(scanGen), 0) FROM tracks")
+    suspend fun maxGen(): Long
+
+    @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'ms:%' AND scanGen < :gen")
+    suspend fun markMsMissing(gen: Long)
+
+    @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'saf:%' AND scanGen < :gen")
+    suspend fun markSafMissing(gen: Long)
+
     @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'ms:%'")
     suspend fun markMediaStoreUnavailable()
 
     @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'saf:%'")
     suspend fun markSafUnavailable()
+
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
+        "LEFT JOIN favorites f ON f.trackId = t.id " +
+        "WHERE t.available = 1 AND NOT EXISTS (SELECT 1 FROM play_events e WHERE e.trackId = t.id) " +
+        "ORDER BY t.dateAddedMs DESC LIMIT 500"
+    )
+    fun neverPlayed(): Flow<List<TrackWithFav>>
+
+    @Query(
+        "SELECT t.*, 1 AS isFavorite FROM favorites f " +
+        "JOIN tracks t ON t.id = f.trackId " +
+        "WHERE t.available = 1 AND NOT EXISTS (SELECT 1 FROM play_events e WHERE e.trackId = t.id AND e.playedAtMs > :since) " +
+        "ORDER BY f.addedAtMs DESC"
+    )
+    fun forgottenFavorites(since: Long): Flow<List<TrackWithFav>>
+
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
+        "LEFT JOIN favorites f ON f.trackId = t.id " +
+        "WHERE t.available = 1 AND t.durationMs >= 420000 " +
+        "ORDER BY t.durationMs DESC LIMIT 500"
+    )
+    fun longTracks(): Flow<List<TrackWithFav>>
+
+    @Query(
+        "SELECT normTitle, normArtist, COUNT(*) AS c FROM tracks " +
+        "WHERE available = 1 AND normTitle != '' " +
+        "GROUP BY normTitle, normArtist HAVING c > 1 " +
+        "ORDER BY c DESC LIMIT 200"
+    )
+    suspend fun dupGroups(): List<DupGroup>
+
+    @Query(
+        "SELECT * FROM tracks " +
+        "WHERE available = 1 AND normTitle = :t AND normArtist = :a " +
+        "ORDER BY sizeBytes DESC"
+    )
+    suspend fun dupMembers(t: String, a: String): List<TrackEntity>
 }
 
 @Dao
@@ -138,6 +189,15 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylistTracks(items: List<PlaylistTrackEntity>)
 
+    @Query("SELECT * FROM playlists WHERE name = :name COLLATE NOCASE LIMIT 1")
+    suspend fun byName(name: String): PlaylistEntity?
+
+    @Query("UPDATE playlists SET sortKey = :key, sortOrder = :order WHERE id = :id")
+    suspend fun setSort(id: Long, key: String?, order: Int?)
+
+    @Query("SELECT trackId FROM playlist_tracks WHERE playlistId = :id ORDER BY position")
+    suspend fun trackIds(id: Long): List<String>
+
     @Transaction
     suspend fun delete(id: Long) {
         clearTracks(id)
@@ -147,17 +207,23 @@ interface PlaylistDao {
 
 @Dao
 interface StatsDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(e: PlayEventEntity)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(events: List<PlayEventEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertEvents(items: List<PlayEventEntity>): List<Long>
 
     @Query("SELECT * FROM play_events ORDER BY playedAtMs DESC LIMIT :limit")
     suspend fun getRecentEvents(limit: Int): List<PlayEventEntity>
 
     @Query("DELETE FROM play_events")
     suspend fun clearAllEvents()
+
+    @Query("DELETE FROM play_events")
+    suspend fun clearEvents()
 
     @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events WHERE playedAtMs BETWEEN :from AND :to")
     suspend fun totalMs(from: Long, to: Long): Long
@@ -190,4 +256,14 @@ interface StatsDao {
         "CAST(strftime('%H', playedAtMs / 1000, 'unixepoch', 'localtime') AS INTEGER) < 5)"
     )
     suspend fun nightMs(from: Long, to: Long): Long
+
+    @Query(
+        "SELECT e.trackId AS trackId, t.dataPath AS dataPath, e.playedAtMs AS playedAtMs, " +
+        "e.listenedMs AS listenedMs, e.completed AS completed " +
+        "FROM play_events e JOIN tracks t ON t.id = e.trackId ORDER BY e.playedAtMs"
+    )
+    suspend fun playbackRows(): List<PlaybackRow>
+
+    @Query("SELECT DISTINCT date(playedAtMs / 1000, 'unixepoch', 'localtime') AS d FROM play_events ORDER BY d DESC LIMIT 400")
+    suspend fun playDays(): List<String>
 }

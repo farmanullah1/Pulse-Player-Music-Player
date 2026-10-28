@@ -1,17 +1,24 @@
 package com.pulse.player.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,28 +39,158 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pulse.player.playback.Track
 import com.pulse.player.ui.theme.LocalReducedMotion
 import com.pulse.player.ui.theme.Pulse
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+fun Modifier.interactionSource(s: MutableInteractionSource): Modifier =
+    composed { this.then(Modifier.indication(s, ripple())) }
+
+fun Modifier.pressScale(enabled: Boolean = true): Modifier = composed {
+    val reduced = LocalReducedMotion.current
+    val src = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val s by animateFloatAsState(
+        targetValue = if (pressed && enabled && !reduced) 0.96f else 1f,
+        animationSpec = spring(0.55f, Spring.StiffnessMedium),
+        label = "press"
+    )
+    this.interactionSource(src).graphicsLayer {
+        scaleX = s
+        scaleY = s
+    }
+}
+
+fun Color.darkened(f: Float): Color =
+    Color(red * (1 - f), green * (1 - f), blue * (1 - f), alpha)
+
+@Composable
+fun AuroraBackground(
+    accent: Color,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val reduced = LocalReducedMotion.current
+    val t by if (reduced) {
+        remember { mutableFloatStateOf(0f) }
+    } else {
+        rememberInfiniteTransition(label = "aurora").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(14000, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "t"
+        )
+    }
+    val a1 by animateColorAsState(accent.darkened(0.55f), tween(500), label = "a1")
+    val a2 by animateColorAsState(Pulse.Violet.copy(alpha = .55f), tween(500), label = "a2")
+
+    Box(
+        modifier = modifier
+            .background(Color.Black)
+            .drawBehind {
+                val w = size.width
+                val h = size.height
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(a1, Color.Transparent),
+                        center = Offset(w * (0.2f + 0.3f * t), h * 0.18f),
+                        radius = w * 0.9f
+                    )
+                )
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(a2.copy(alpha = .35f), Color.Transparent),
+                        center = Offset(w * (0.9f - 0.3f * t), h * 0.55f),
+                        radius = w * 0.8f
+                    )
+                )
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black),
+                        startY = h * 0.55f
+                    )
+                )
+            },
+        content = content
+    )
+}
+
+@Composable
+fun GlowArtwork(
+    uri: String?,
+    size: Dp,
+    glow: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(8.dp)
+                .drawBehind {
+                    drawCircle(
+                        Brush.radialGradient(listOf(glow.copy(alpha = 0.55f), Color.Transparent)),
+                        radius = this.size.minDimension * 0.75f
+                    )
+                }
+        )
+        Artwork(uri, size * 0.9f, radius = 20.dp, px = 512)
+    }
+}
+
+@Composable
+fun GradientPill(
+    text: String,
+    icon: ImageVector,
+    colors: List<Color>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .height(52.dp)
+            .clip(CircleShape)
+            .background(Brush.horizontalGradient(colors))
+            .pressScale()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, null, tint = Color.White)
+        Spacer(Modifier.width(8.dp))
+        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
+    }
+}
 
 @Composable
 fun HeartButton(
@@ -142,6 +279,7 @@ fun WidgetTile(
     icon: ImageVector,
     colors: List<Color>,
     modifier: Modifier,
+    subtitle: String? = null,
     onClick: () -> Unit
 ) {
     Box(
@@ -149,6 +287,7 @@ fun WidgetTile(
             .height(96.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(colors.map { it.copy(alpha = 0.85f) }))
+            .pressScale()
             .clickable(onClick = onClick)
             .padding(16.dp)
     ) {
@@ -171,6 +310,13 @@ fun WidgetTile(
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White
             )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
         }
     }
 }
@@ -184,6 +330,7 @@ fun SquareCard(
     Column(
         Modifier
             .width(size)
+            .pressScale()
             .clickable(onClick = onClick)
     ) {
         Artwork(t.uri, size, radius = 14.dp, px = 384)

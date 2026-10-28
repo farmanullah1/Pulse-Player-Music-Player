@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.app
 import com.pulse.player.data.db.ArtistStat
 import com.pulse.player.data.db.TrackEntity
@@ -76,6 +77,7 @@ data class RecapData(
 fun RecapScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
     val db = ctx.app.db
+    val streak by vm.streakDays.collectAsStateWithLifecycle()
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
     var recap by remember { mutableStateOf<RecapData?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -91,9 +93,13 @@ fun RecapScreen(vm: MainViewModel) {
                 val top = db.stats().topTracks(from, to, 5)
                 val tracksMap = db.tracks().byIds(top.map { it.trackId }).associateBy { it.id }
                 val badges = buildList {
-                    if (total >= 10 * 3_600_000L) add("10+ Hours Club")
-                    if (db.stats().nightMs(from, to) >= total * 0.4) add("Night Owl Listener")
-                    if ((top.firstOrNull()?.plays ?: 0) >= 15) add("On Repeat")
+                    if (total >= 100 * 3_600_000L) add("100 Hours Club")
+                    else if (total >= 10 * 3_600_000L) add("10+ Hours Club")
+                    if (db.stats().nightMs(from, to) >= total * 0.4) add("Night Owl")
+                    if ((top.firstOrNull()?.plays ?: 0) >= 30) add("On Repeat")
+                    else if ((top.firstOrNull()?.plays ?: 0) >= 15) add("Repeat Fan")
+                    val distinctCount = db.stats().topTracks(from, to, 101).size
+                    if (distinctCount >= 100) add("Explorer")
                 }
                 recap = RecapData(
                     totalMs = total,
@@ -204,6 +210,15 @@ fun RecapScreen(vm: MainViewModel) {
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
+                            if (streak > 0) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "$streak day active streak 🔥",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Pulse.Cyan,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
