@@ -94,8 +94,8 @@ fun PulseTheme(
 @Composable
 fun AppBackground(
     mode: ThemeMode,
-    wallpaperPath: String? = null,
     modifier: Modifier = Modifier,
+    wallpaperPath: String? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val skin = LocalSkin.current

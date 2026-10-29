@@ -95,7 +95,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
     BackHandler(expandedPlayer) { vm.closeNowPlaying() }
     BackHandler(!expandedPlayer && screen !is Screen.Home) { vm.back() }
 
-    AppBackground(themeMode, wallpaperPath) {
+    AppBackground(themeMode, wallpaperPath = wallpaperPath) {
         Row(
             Modifier
                 .fillMaxSize()

@@ -1,6 +1,11 @@
 package com.pulse.player.data.scan
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import android.net.Uri
 import com.pulse.player.data.db.PulseDb
 import com.pulse.player.data.db.TrackEntity
@@ -37,6 +42,13 @@ object SampleMusicHelper {
                     if (wavFile.exists()) wavFile.delete()
                     tmpFile.renameTo(wavFile)
                 }
+            }
+        }
+
+        val coverFile = File(sampleDir, "pulse_horizon.jpg")
+        if (!coverFile.exists() || coverFile.length() < 1000L) {
+            runCatching {
+                generateSampleCover(coverFile)
             }
         }
 
@@ -163,5 +175,41 @@ object SampleMusicHelper {
                 bos.flush()
             }
         }
+    }
+
+    private fun generateSampleCover(outputFile: File) {
+        val width = 512
+        val height = 512
+        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Gradient background (Deep Violet to Neon Cyan)
+        val shader = LinearGradient(
+            0f, 0f, width.toFloat(), height.toFloat(),
+            intArrayOf(0xFF2A0845.toInt(), 0xFF6441A5.toInt(), 0xFF00C3FF.toInt()),
+            null,
+            Shader.TileMode.CLAMP
+        )
+        paint.shader = shader
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+
+        // Glowing Sun in the horizon
+        paint.shader = null
+        paint.color = 0xFFFF2A6D.toInt()
+        canvas.drawCircle(width / 2f, height * 0.45f, 110f, paint)
+
+        // Sun horizontal scanlines
+        paint.color = 0xFF2A0845.toInt()
+        paint.strokeWidth = 6f
+        for (i in 0..6) {
+            val y = height * 0.40f + i * 16f
+            canvas.drawLine(width * 0.2f, y, width * 0.8f, y, paint)
+        }
+
+        FileOutputStream(outputFile).use { out ->
+            bmp.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        }
+        bmp.recycle()
     }
 }

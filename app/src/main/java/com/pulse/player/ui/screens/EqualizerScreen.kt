@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,7 +54,7 @@ fun EqualizerScreen(vm: MainViewModel) {
     var selectedPreset by remember { mutableStateOf("Normal") }
     var bassVal by remember { mutableFloatStateOf(0f) }
     var virtVal by remember { mutableFloatStateOf(0f) }
-    var selectedReverb by remember { mutableStateOf(0) }
+    var selectedReverb by remember { mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize()) {
         Row(

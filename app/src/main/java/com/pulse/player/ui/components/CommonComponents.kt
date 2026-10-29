@@ -70,7 +70,7 @@ import java.util.Date
 import java.util.Locale
 
 fun Modifier.interactionSource(s: MutableInteractionSource): Modifier =
-    composed { this.then(Modifier.indication(s, ripple())) }
+    this.indication(s, ripple())
 
 fun Modifier.pressScale(enabled: Boolean = true): Modifier = composed {
     val reduced = LocalReducedMotion.current

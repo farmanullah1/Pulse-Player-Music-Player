@@ -33,12 +33,12 @@ fun TrackRow(
     t: Track,
     current: Boolean,
     playing: Boolean,
+    modifier: Modifier = Modifier,
     selected: Boolean = false,
     selectMode: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onMore: () -> Unit,
-    modifier: Modifier = Modifier
+    onMore: () -> Unit
 ) {
     Row(
         modifier = modifier
