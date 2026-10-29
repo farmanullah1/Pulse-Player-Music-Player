@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.Upload
@@ -62,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -101,8 +103,8 @@ fun BackupScreen(vm: MainViewModel) {
         }
     }
 
-    // Launcher for Smart Picker (routes JSON -> Classic, ZIP -> Compatible, WAV -> Error)
-    val smartPickerLauncher = rememberLauncherForActivityResult(
+    // Launcher for SAF Picker (routes JSON -> Classic, ZIP -> Compatible, WAV audio -> Error)
+    val safBackupPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
@@ -120,7 +122,7 @@ fun BackupScreen(vm: MainViewModel) {
         }
     }
 
-    // Launchers for Legacy JSON Favourites
+    // Launchers for Option A (Legacy JSON Favourites)
     val legacyExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -153,11 +155,17 @@ fun BackupScreen(vm: MainViewModel) {
             Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = vm::back) {
+            IconButton(
+                onClick = vm::back,
+                modifier = Modifier.testTag("backup_back_button")
+            ) {
                 Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
             }
             Spacer(Modifier.width(8.dp))
-            Text("Backup & Restore", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Column {
+                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Dual System: Legacy JSON & Compatible Archive", style = MaterialTheme.typography.labelSmall, color = Pulse.TextMid)
+            }
         }
 
         LazyColumn(
@@ -285,7 +293,9 @@ fun BackupScreen(vm: MainViewModel) {
                 }
             }
 
-            // Smart Restore Card
+            // ==========================================
+            // OPTION B: COMPATIBLE ARCHIVE BACKUP
+            // ==========================================
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Pulse.Elevated),
@@ -300,64 +310,85 @@ fun BackupScreen(vm: MainViewModel) {
                                     .background(Pulse.Cyan.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Rounded.Unarchive, null, tint = Pulse.Cyan, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Rounded.SettingsBackupRestore, null, tint = Pulse.Cyan, modifier = Modifier.size(24.dp))
                             }
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text("Smart Restore Picker", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                                Text("Auto-detects format (ZIP archive or JSON favorites)", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "OPTION B",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Pulse.Cyan,
+                                        modifier = Modifier
+                                            .background(Pulse.Cyan.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Compatible Archive Backup", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                }
+                                Text("Matches Infinix & reference archive format", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan)
                             }
                         }
 
                         Text(
-                            text = "Pick any backup file. Pulse Player inspects the format, verifies signatures, previews your content, and prompts for confirmation before touching any data.",
+                            text = "Create or restore a backup compatible with the supplied ZIP-based .wav archive format. Saves favourites, playlists, listening history, sort settings, and excluded folders.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Pulse.TextMid
                         )
 
-                        Button(
-                            onClick = { smartPickerLauncher.launch(arrayOf("*/*")) },
-                            enabled = !archiveOp.inProgress,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                        // Bundled Reference Fixture Inspection Button (Prompt 12 & 13)
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Icon(Icons.Rounded.Download, null)
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Rounded.Info, null, tint = Pulse.Mint, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Bundled Reference Archive Fixture", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                                }
+                                Text(
+                                    "Inspect the included reference archive: ManualBackup_20261028_172204175.wav (13,509 songs, 41 playlists, settings, history).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Pulse.TextMid
+                                )
+                                Button(
+                                    onClick = { vm.inspectSampleReferenceBackup() },
+                                    enabled = !archiveOp.inProgress,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("compat_inspect_sample_button"),
+                                    shape = CircleShape,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Mint, contentColor = Color.Black)
+                                ) {
+                                    Icon(Icons.Rounded.Unarchive, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Inspect Sample Reference Archive", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        // Restore Compatible Backup (SAF Picker)
+                        OutlinedButton(
+                            onClick = { safBackupPickerLauncher.launch(arrayOf("*/*")) },
+                            enabled = !archiveOp.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("compat_restore_button"),
+                            shape = CircleShape
+                        ) {
+                            Icon(Icons.Rounded.Download, null, tint = Pulse.Cyan)
                             Spacer(Modifier.width(8.dp))
-                            Text("Select Backup to Restore", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // Full Backup (Compatible) Card
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Pulse.Mint.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.SettingsBackupRestore, null, tint = Pulse.Mint, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text("Full Backup (Compatible)", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                                Text("Matches Infinix & reference archive format", style = MaterialTheme.typography.labelSmall, color = Pulse.Mint)
-                            }
+                            Text("Restore Compatible Backup (SAF)", color = Color.White, fontWeight = FontWeight.Bold)
                         }
 
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Saves favourites, playlists, play history, sort and scan settings in one file you can move to another phone. Music audio files are not included.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
+                            "Create Compatible Backup Categories:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
                         )
 
                         // Category Checkboxes with Live Counts
@@ -412,51 +443,44 @@ fun BackupScreen(vm: MainViewModel) {
                                 checked = compatExportAsZip,
                                 onCheckedChange = { vm.setCompatExportAsZip(it) },
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Pulse.Mint,
-                                    checkedTrackColor = Pulse.Mint.copy(alpha = 0.5f)
+                                    checkedThumbColor = Pulse.Cyan,
+                                    checkedTrackColor = Pulse.Cyan.copy(alpha = 0.5f)
                                 )
                             )
                         }
 
                         if (!compatExportAsZip) {
                             Text(
-                                "Warning: A .wav-named backup inside your Music folder can show up as a broken song. Keep it outside Music.",
+                                "Notice: A .wav-named backup inside your Music folder can appear as an audio file in third-party media scanners. Keep backups in Documents or Backups.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Pulse.Coral
                             )
                         }
 
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(
-                                onClick = {
-                                    val stamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
-                                    val ext = if (compatExportAsZip) "zip" else "wav"
-                                    compatExportLauncher.launch("ManualBackup_$stamp.$ext")
-                                },
-                                enabled = !archiveOp.inProgress,
-                                modifier = Modifier.weight(1f),
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Mint, contentColor = Color.Black)
-                            ) {
-                                Icon(Icons.Rounded.Upload, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Create Backup", fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = { smartPickerLauncher.launch(arrayOf("*/*")) },
-                                enabled = !archiveOp.inProgress,
-                                modifier = Modifier.weight(1f),
-                                shape = CircleShape
-                            ) {
-                                Text("Restore Backup", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+                        Button(
+                            onClick = {
+                                val stamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
+                                val ext = if (compatExportAsZip) "zip" else "wav"
+                                compatExportLauncher.launch("ManualBackup_$stamp.$ext")
+                            },
+                            enabled = !archiveOp.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("compat_create_backup_button"),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                        ) {
+                            Icon(Icons.Rounded.Upload, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Create Compatible Backup", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            // Classic Backup (Favourites JSON)
+            // ==========================================
+            // OPTION A: EXISTING BACKUP (FAVORITES JSON)
+            // ==========================================
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
@@ -475,13 +499,25 @@ fun BackupScreen(vm: MainViewModel) {
                             }
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text("Classic · favourites only", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "OPTION A",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Pulse.Violet,
+                                        modifier = Modifier
+                                            .background(Pulse.Violet.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Existing Backup (Favorites JSON)", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                }
                                 Text("pulseplayer.favorites JSON format", style = MaterialTheme.typography.labelSmall, color = Pulse.Violet)
                             }
                         }
 
                         Text(
-                            text = "Preserves compatibility with lightweight Pulse Player favorite backups. Exports and imports your $favCount favourites in a single human-readable JSON file.",
+                            text = "Preserve the existing backup workflow. Exports and imports your favorites in a human-readable JSON file. Lightweight and dedicated strictly to your favorite tracks.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Pulse.TextMid
                         )
@@ -492,11 +528,15 @@ fun BackupScreen(vm: MainViewModel) {
                                     legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json")
                                 },
                                 enabled = favCount > 0 && !archiveOp.inProgress,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("legacy_export_button"),
                                 shape = CircleShape,
                                 colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet, contentColor = Color.White)
                             ) {
-                                Text(if (favCount > 0) "Export ($favCount)" else "No Favourites", fontWeight = FontWeight.Bold)
+                                Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (favCount > 0) "Export ($favCount)" else "No Favs", fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
@@ -504,9 +544,13 @@ fun BackupScreen(vm: MainViewModel) {
                                     legacyImportLauncher.launch(arrayOf("application/json", "*/*"))
                                 },
                                 enabled = !archiveOp.inProgress,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("legacy_import_button"),
                                 shape = CircleShape
                             ) {
+                                Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp), tint = Pulse.Violet)
+                                Spacer(Modifier.width(6.dp))
                                 Text("Import JSON", color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
@@ -533,7 +577,9 @@ fun BackupScreen(vm: MainViewModel) {
                         )
                         OutlinedButton(
                             onClick = { safFolderLauncher.launch(null) },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("choose_folder_button"),
                             shape = CircleShape
                         ) {
                             Text("Choose Music Folder", color = Color.White)
@@ -644,7 +690,10 @@ fun BackupScreen(vm: MainViewModel) {
                     }
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = vm::dismissCompatPreview) {
+                        TextButton(
+                            onClick = vm::dismissCompatPreview,
+                            modifier = Modifier.testTag("compat_restore_cancel_button")
+                        ) {
                             Text("Cancel", color = Color.White)
                         }
                         Spacer(Modifier.width(8.dp))
@@ -656,6 +705,7 @@ fun BackupScreen(vm: MainViewModel) {
                                     vm.executeCompatRestore(preview.staged, selectedCategories, false)
                                 }
                             },
+                            modifier = Modifier.testTag("compat_restore_confirm_button"),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (replaceMode) Pulse.Coral else Pulse.Cyan,
                                 contentColor = Color.Black
@@ -729,7 +779,9 @@ fun BackupScreen(vm: MainViewModel) {
                                 pendingUnmatchedList = report.unmatchedPaths
                                 saveUnmatchedLauncher.launch("unmatched_tracks.txt")
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("compat_save_unmatched_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = Pulse.Surface, contentColor = Pulse.Cyan)
                         ) {
                             Icon(Icons.Rounded.Download, null, modifier = Modifier.size(16.dp))

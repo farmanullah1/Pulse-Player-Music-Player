@@ -525,6 +525,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun inspectSampleReferenceBackup() = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Loading reference sample backup...")
+        try {
+            val assetStream = app.assets.open("ManualBackup_20261028_172204175.wav")
+            val tempFile = File.createTempFile("sample_ref_", ".wav", app.cacheDir)
+            assetStream.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            val uri = Uri.fromFile(tempFile)
+            smartInspect(uri, "ManualBackup_20261028_172204175.wav")
+        } catch (e: Exception) {
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "Could not open reference backup: ${e.message}")
+        }
+    }
+
     fun executeCompatRestore(staged: StagedBackup, categories: Set<String>, replace: Boolean) = viewModelScope.launch {
         compatPreview.value = null
         archiveOperation.value = BackupOperationState(inProgress = true, stage = "Restoring data...")
