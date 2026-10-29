@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -443,15 +444,32 @@ fun LyricsView(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("No lyrics found for this track", color = Pulse.TextMid)
-                Button(
-                    onClick = { lrcPicker.launch(arrayOf("*/*", "text/*")) },
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Pulse.Elevated,
-                        contentColor = Pulse.Cyan
-                    )
-                ) {
-                    Text("Choose .lrc file")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { lrcPicker.launch(arrayOf("*/*", "text/*")) },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Pulse.Elevated,
+                            contentColor = Pulse.Cyan
+                        )
+                    ) {
+                        Text("Choose .lrc")
+                    }
+                    Button(
+                        onClick = {
+                            vm.closeNowPlaying()
+                            vm.go(Screen.Transcribe)
+                        },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Pulse.Cyan,
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Transcribe (AI)", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         } else {

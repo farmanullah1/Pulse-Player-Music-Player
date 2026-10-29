@@ -52,6 +52,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
+import android.widget.Toast
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import kotlin.math.roundToInt
 
 @Composable
@@ -60,6 +71,8 @@ fun SettingsScreen(vm: MainViewModel) {
     val reducedMotion by vm.reducedMotion.collectAsStateWithLifecycle()
     val fadeEnabled by vm.fadeEnabled.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    var inputKey by remember { mutableStateOf("") }
 
     val safLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -288,6 +301,63 @@ fun SettingsScreen(vm: MainViewModel) {
                         Column {
                             Text("Home Screen Widget", fontWeight = FontWeight.Bold, color = Color.White)
                             Text("Long-press home screen → Widgets → Pulse Player. Supports 2x2, 4x1, and 4x2 responsive layouts.", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                        }
+                    }
+                }
+            }
+
+            item {
+                SettingsSectionHeader("AI Features & Studio")
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SettingsNavRow("Audio & Lyrics Transcribe (gemini-3.5-transcribe)", Icons.Rounded.Mic) {
+                            vm.go(Screen.Transcribe)
+                        }
+                        SettingsNavRow("AI Music Studio (Google Lyria)", Icons.Rounded.AutoAwesome) {
+                            vm.go(Screen.GenerateMusic)
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+                        Text("Gemini API Key", style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Required for audio transcription and Lyria music generation. Can also be set as GEMINI_API_KEY in the AI Studio Secrets panel.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Pulse.TextMid
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = inputKey,
+                                onValueChange = { inputKey = it },
+                                placeholder = { Text("Paste API Key...", color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Pulse.Cyan,
+                                    unfocusedBorderColor = Pulse.Outline,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                            Button(
+                                onClick = {
+                                    if (inputKey.isNotBlank()) {
+                                        vm.setGeminiApiKey(inputKey)
+                                        Toast.makeText(ctx, "Gemini API Key saved!", Toast.LENGTH_SHORT).show()
+                                        inputKey = ""
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                            ) {
+                                Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

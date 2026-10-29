@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -134,6 +135,8 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                             Screen.Backup -> BackupScreen(vm)
                             Screen.Search -> SearchScreen(vm)
                             Screen.Duplicates -> DuplicatesScreen(vm)
+                            Screen.Transcribe -> TranscribeScreen(vm)
+                            Screen.GenerateMusic -> GenerateMusicScreen(vm)
                             is Screen.Detail -> DetailScreen(vm, s)
                         }
                     }
@@ -232,7 +235,8 @@ fun PulseDrawer(
                 DrawerItemData("Favourites", Icons.Rounded.Favorite, Screen.Detail("system", "favorites")),
                 DrawerItemData("Backup & Transfer", Icons.Rounded.Backup, Screen.Backup),
                 DrawerItemData("Skin Theme", Icons.Rounded.Checkroom, Screen.SkinTheme),
-                DrawerItemData("Player Theme", Icons.Rounded.AutoAwesome, Screen.PlayerTheme),
+                DrawerItemData("Transcribe Audio", Icons.Rounded.Mic, Screen.Transcribe),
+                DrawerItemData("AI Music Studio", Icons.Rounded.AutoAwesome, Screen.GenerateMusic),
                 DrawerItemData("Settings", Icons.Rounded.Settings, Screen.Settings)
             )
 

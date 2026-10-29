@@ -39,6 +39,7 @@ class SettingsStore(private val ctx: Context) {
         val songSortOrder = intPreferencesKey("song_sort_order")
         val deviceId = stringPreferencesKey("install_id")
         val lastBackup = stringPreferencesKey("last_backup_json")
+        val geminiApiKey = stringPreferencesKey("gemini_api_key")
     }
 
     val themeMode: Flow<ThemeMode> = ctx.dataStore.data.map {
@@ -56,6 +57,15 @@ class SettingsStore(private val ctx: Context) {
     val safTrees: Flow<Set<String>> = ctx.dataStore.data.map { it[K.safTrees] ?: emptySet() }
     val songSortKey: Flow<String> = ctx.dataStore.data.map { it[K.songSortKey] ?: "dateAdded" }
     val songSortOrder: Flow<Int> = ctx.dataStore.data.map { it[K.songSortOrder] ?: -1 }
+    val geminiApiKey: Flow<String?> = ctx.dataStore.data.map { it[K.geminiApiKey] }
+
+    suspend fun setGeminiApiKey(key: String) = ctx.dataStore.edit { it[K.geminiApiKey] = key.trim() }
+
+    suspend fun effectiveGeminiApiKey(): String {
+        val custom = geminiApiKey.first()?.trim().orEmpty()
+        if (custom.isNotBlank()) return custom
+        return com.pulse.player.BuildConfig.GEMINI_API_KEY.trim()
+    }
 
     suspend fun setTheme(m: ThemeMode) = ctx.dataStore.edit { it[K.theme] = m.name }
     suspend fun setSkin(id: String) = ctx.dataStore.edit {

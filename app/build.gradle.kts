@@ -17,6 +17,21 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val envFile = file("${rootDir}/.env")
+        var envApiKey = ""
+        if (envFile.exists()) {
+            envFile.readLines().forEach { line ->
+                val trimmed = line.trim()
+                if (trimmed.startsWith("GEMINI_API_KEY=")) {
+                    envApiKey = trimmed.substringAfter("=").trim().trim('"', '\'')
+                }
+            }
+        }
+        val apiKey = project.findProperty("GEMINI_API_KEY") as? String
+            ?: System.getenv("GEMINI_API_KEY")
+            ?: envApiKey
+        buildConfigField("String", "GEMINI_API_KEY", "\"$apiKey\"")
     }
 
     signingConfigs {
@@ -56,6 +71,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -91,6 +107,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

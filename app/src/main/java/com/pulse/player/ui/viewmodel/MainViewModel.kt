@@ -49,7 +49,29 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.pulse.player.data.ai.AudioRecorderHelper
+import com.pulse.player.data.ai.GeminiAudioClient
+import com.pulse.player.data.ai.GeneratedMusicResult
+import com.pulse.player.data.ai.TranscriptionResult
+import com.pulse.player.data.scan.norm
+import java.io.File
 import java.util.ArrayDeque
+import java.util.Calendar
+
+sealed interface TranscriptionState {
+    data object Idle : TranscriptionState
+    data object Recording : TranscriptionState
+    data class Transcribing(val progressText: String = "Transcribing with gemini-3.5-transcribe...") : TranscriptionState
+    data class Success(val result: TranscriptionResult, val audioFile: File?, val timestamp: Long = System.currentTimeMillis()) : TranscriptionState
+    data class Error(val message: String) : TranscriptionState
+}
+
+sealed interface MusicGenState {
+    data object Idle : MusicGenState
+    data class Generating(val prompt: String, val model: String) : MusicGenState
+    data class Success(val result: GeneratedMusicResult, val track: Track) : MusicGenState
+    data class Error(val message: String) : MusicGenState
+}
 
 enum class SortField { TITLE, ARTIST, DATE_ADDED, DURATION }
 
@@ -652,4 +674,150 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    // AI Audio Transcription & Lyria Music Generation
+    private val audioRecorder = AudioRecorderHelper(viewModelScope)
+    val isRecording = audioRecorder.isRecording
+    val recordingDurationSec = audioRecorder.durationSec
+    val recordingAmplitude = audioRecorder.maxAmplitude
+    private var currentRecordedFile: File? = null
+
+    val transcriptionState = MutableStateFlow<TranscriptionState>(TranscriptionState.Idle)
+    val musicGenState = MutableStateFlow<MusicGenState>(MusicGenState.Idle)
+
+    fun startAudioRecording(): Boolean {
+        val res = audioRecorder.start(getApplication())
+        return if (res.isSuccess) {
+            currentRecordedFile = res.getOrNull()
+            transcriptionState.value = TranscriptionState.Recording
+            true
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Failed to start microphone recording"
+            transcriptionState.value = TranscriptionState.Error(err)
+            false
+        }
+    }
+
+    fun stopAndTranscribeAudio(customPrompt: String? = null) {
+        val file = audioRecorder.stop() ?: currentRecordedFile
+        if (file == null || !file.exists() || file.length() == 0L) {
+            transcriptionState.value = TranscriptionState.Error("No audio was recorded.")
+            return
+        }
+        viewModelScope.launch {
+            transcriptionState.value = TranscriptionState.Transcribing("Transcribing audio with gemini-3.5-transcribe...")
+            val apiKey = settings.effectiveGeminiApiKey()
+            val result = GeminiAudioClient.transcribeAudio(file, apiKey, customPrompt)
+            if (result.isSuccess) {
+                transcriptionState.value = TranscriptionState.Success(result.getOrThrow(), file)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Transcription failed"
+                transcriptionState.value = TranscriptionState.Error(err)
+            }
+        }
+    }
+
+    fun cancelAudioRecording() {
+        audioRecorder.cancel()
+        currentRecordedFile = null
+        transcriptionState.value = TranscriptionState.Idle
+    }
+
+    fun resetTranscriptionState() {
+        transcriptionState.value = TranscriptionState.Idle
+    }
+
+    fun transcribeTrack(track: Track, customPrompt: String? = null) = viewModelScope.launch {
+        transcriptionState.value = TranscriptionState.Transcribing("Transcribing '${track.title}' with gemini-3.5-transcribe...")
+        val apiKey = settings.effectiveGeminiApiKey()
+        val ctx = getApplication<Application>()
+        val tempFile = File(ctx.cacheDir, "track_transcribe_${System.currentTimeMillis()}.mp3")
+        val copied = runCatching {
+            ctx.contentResolver.openInputStream(Uri.parse(track.uri))?.use { input ->
+                tempFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            tempFile.exists() && tempFile.length() > 0
+        }.getOrDefault(false)
+
+        if (!copied) {
+            transcriptionState.value = TranscriptionState.Error("Unable to read audio file for ${track.title}.")
+            return@launch
+        }
+
+        val res = GeminiAudioClient.transcribeAudio(tempFile, apiKey, customPrompt)
+        if (res.isSuccess) {
+            transcriptionState.value = TranscriptionState.Success(res.getOrThrow(), tempFile)
+        } else {
+            transcriptionState.value = TranscriptionState.Error(res.exceptionOrNull()?.message ?: "Transcription failed")
+        }
+    }
+
+    fun saveLyricsForTrack(trackId: String, lyricsText: String): Boolean {
+        return runCatching {
+            val ctx = getApplication<Application>()
+            val dir = File(ctx.filesDir, "lyrics").apply { mkdirs() }
+            val safeId = trackId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            File(dir, "$safeId.lrc").writeText(lyricsText)
+            true
+        }.getOrDefault(false)
+    }
+
+    fun generateMusic(prompt: String, model: String = "lyria-3-clip-preview") = viewModelScope.launch {
+        musicGenState.value = MusicGenState.Generating(prompt, model)
+        val apiKey = settings.effectiveGeminiApiKey()
+        val ctx = getApplication<Application>()
+        val res = GeminiAudioClient.generateMusic(ctx, prompt, model, apiKey)
+        if (res.isSuccess) {
+            val genResult = res.getOrThrow()
+            val mmr = android.media.MediaMetadataRetriever()
+            val durationMs = runCatching {
+                mmr.setDataSource(genResult.file.absolutePath)
+                mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 30_000L
+            }.getOrDefault(30_000L)
+            runCatching { mmr.release() }
+
+            val trackId = "gen:${genResult.file.name}"
+            val uriStr = Uri.fromFile(genResult.file).toString()
+            val now = System.currentTimeMillis()
+            val entity = TrackEntity(
+                id = trackId,
+                uri = uriStr,
+                displayName = genResult.file.name,
+                title = genResult.title,
+                artist = "Google Lyria ($model)",
+                album = "AI Generated Tracks",
+                albumArtist = "Google Lyria",
+                durationMs = durationMs,
+                sizeBytes = genResult.file.length(),
+                mimeType = "audio/mp3",
+                folderPath = genResult.file.parent ?: "ai_music",
+                dateAddedMs = now,
+                dateModifiedMs = now,
+                trackNumber = 1,
+                year = Calendar.getInstance().get(Calendar.YEAR),
+                normTitle = norm(genResult.title),
+                normArtist = norm("Google Lyria"),
+                normAlbum = norm("AI Generated Tracks"),
+                available = true,
+                dataPath = genResult.file.absolutePath
+            )
+            db.tracks().upsertAll(listOf(entity))
+            val newTrack = entity.toTrackWithFav(false).toTrack()
+            musicGenState.value = MusicGenState.Success(genResult, newTrack)
+        } else {
+            val err = res.exceptionOrNull()?.message ?: "Music generation failed"
+            musicGenState.value = MusicGenState.Error(err)
+        }
+    }
+
+    fun resetMusicGenState() {
+        musicGenState.value = MusicGenState.Idle
+    }
+
+    fun setGeminiApiKey(key: String) = viewModelScope.launch {
+        settings.setGeminiApiKey(key)
+    }
 }
+

@@ -128,7 +128,7 @@ class SafeZip(val file: File) : Closeable {
     val names: Set<String>
 
     init {
-        val seen = HashSet<String>()
+        val seen = LinkedHashSet<String>()
         var total = 0L
         var count = 0
         for (e in zip.entries()) {

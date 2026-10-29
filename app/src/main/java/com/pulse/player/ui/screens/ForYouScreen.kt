@@ -23,11 +23,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Shuffle
@@ -155,6 +157,28 @@ fun ForYouScreen(vm: MainViewModel) {
                         modifier = Modifier.weight(1f)
                     ) {
                         vm.go(Screen.Equalizer)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    WidgetTile(
+                        title = "Transcribe",
+                        value = "gemini-3.5",
+                        subtitle = "Record & lyrics",
+                        icon = Icons.Rounded.Mic,
+                        colors = listOf(Pulse.Coral, Pulse.Magenta),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        vm.go(Screen.Transcribe)
+                    }
+                    WidgetTile(
+                        title = "Music Studio",
+                        value = "Google Lyria",
+                        subtitle = "Generate music",
+                        icon = Icons.Rounded.AutoAwesome,
+                        colors = listOf(Pulse.Cyan, Pulse.Violet),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        vm.go(Screen.GenerateMusic)
                     }
                 }
             }
