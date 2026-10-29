@@ -22,18 +22,23 @@ object ArtworkLoader {
         cache.get(key)?.let { return@withContext it }
 
         val bmp = runCatching {
-            if (Build.VERSION.SDK_INT >= 29) {
-                ctx.contentResolver.loadThumbnail(Uri.parse(uri), Size(px, px), null)
+            val parsed = Uri.parse(uri)
+            if (Build.VERSION.SDK_INT >= 29 && parsed.scheme == "content") {
+                ctx.contentResolver.loadThumbnail(parsed, Size(px, px), null)
             } else {
                 val retriever = MediaMetadataRetriever()
                 try {
-                    retriever.setDataSource(ctx, Uri.parse(uri))
+                    if (parsed.scheme == "file" || parsed.path?.startsWith("/") == true) {
+                        retriever.setDataSource(parsed.path ?: uri)
+                    } else {
+                        retriever.setDataSource(ctx, parsed)
+                    }
                     val picture = retriever.embeddedPicture
                     if (picture != null) {
                         BitmapFactory.decodeByteArray(picture, 0, picture.size)
                     } else null
                 } finally {
-                    retriever.release()
+                    runCatching { retriever.release() }
                 }
             }
         }.getOrNull()

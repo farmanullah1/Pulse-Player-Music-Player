@@ -47,6 +47,7 @@ fun StarField(modifier: Modifier = Modifier) {
         label = "t"
     )
     Canvas(modifier) {
+        if (size.width <= 1f || size.height <= 1f) return@Canvas
         stars.forEachIndexed { i, (x, y, r) ->
             drawCircle(
                 color = Color.White.copy(alpha = if (reduced) 0.8f else if (i % 3 == 0) twinkle else 0.8f),
@@ -67,6 +68,7 @@ fun WavesCanvas(modifier: Modifier = Modifier) {
         label = "p"
     )
     Canvas(modifier) {
+        if (size.width <= 1f || size.height <= 1f) return@Canvas
         listOf(0.55f to 0.35f, 0.65f to 0.25f, 0.75f to 0.18f).forEachIndexed { i, (yy, a) ->
             val path = Path().apply {
                 moveTo(0f, size.height)
@@ -89,16 +91,18 @@ fun WavesCanvas(modifier: Modifier = Modifier) {
 @Composable
 fun MountainSunset(modifier: Modifier = Modifier) {
     Canvas(modifier) {
+        if (size.width <= 1f || size.height <= 1f) return@Canvas
         drawRect(Brush.verticalGradient(listOf(Color(0xFFFF8C5A), Color(0xFFC2377A), Color(0xFF1B1030))))
-        drawCircle(Color(0xFFFFD27A), size.width * 0.12f, Offset(size.width * 0.7f, size.height * 0.45f))
+        drawCircle(Color(0xFFFFD27A), (size.width * 0.12f).coerceAtLeast(1f), Offset(size.width * 0.7f, size.height * 0.45f))
         listOf(0.62f to Color(0xFF4B2A6B), 0.75f to Color(0xFF2B1B4A), 0.88f to Color(0xFF140C28)).forEach { (base, c) ->
             val p = Path().apply {
                 moveTo(0f, size.height)
                 lineTo(0f, size.height * base)
                 var x = 0f
                 var up = true
+                val step = (size.width / 5f).coerceAtLeast(10f)
                 while (x < size.width) {
-                    x += size.width / 5
+                    x += step
                     lineTo(x, size.height * (base + if (up) -0.08f else 0.02f))
                     up = !up
                 }
@@ -122,6 +126,7 @@ fun VinylDisc(s: PlaybackUiState, modifier: Modifier = Modifier) {
     val arm by animateFloatAsState(if (s.isPlaying) 0f else -25f, spring(), label = "arm")
     Box(modifier.size(300.dp), Alignment.Center) {
         Canvas(Modifier.size(280.dp).graphicsLayer { rotationZ = rot.value }) {
+            if (size.minDimension <= 1f) return@Canvas
             drawCircle(Color(0xFF0B0B0F))
             for (i in 1..9) {
                 drawCircle(
@@ -138,6 +143,7 @@ fun VinylDisc(s: PlaybackUiState, modifier: Modifier = Modifier) {
                 transformOrigin = TransformOrigin(0.92f, 0.08f)
             }
         ) {
+            if (size.width <= 1f || size.height <= 1f) return@Canvas
             drawLine(
                 Color(0xFFDDDDDD),
                 Offset(size.width * 0.92f, size.height * 0.08f),
@@ -160,6 +166,7 @@ fun AcousticDisc(s: PlaybackUiState, modifier: Modifier = Modifier) {
     }
     Box(modifier.size(300.dp), Alignment.Center) {
         Canvas(Modifier.size(280.dp).graphicsLayer { rotationZ = rot.value }) {
+            if (size.minDimension <= 1f) return@Canvas
             drawCircle(Brush.radialGradient(listOf(Color(0xFF6B3E26), Color(0xFF1E0F08))))
             for (i in 1..8) {
                 drawCircle(

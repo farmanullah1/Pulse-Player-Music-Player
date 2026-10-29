@@ -119,26 +119,30 @@ fun AuroraBackground(
             .drawBehind {
                 val w = size.width
                 val h = size.height
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(a1, Color.Transparent),
-                        center = Offset(w * (0.2f + 0.3f * t), h * 0.18f),
-                        radius = w * 0.9f
+                if (w > 0f && h > 0f) {
+                    val r1 = (w * 0.9f).coerceAtLeast(1f)
+                    val r2 = (w * 0.8f).coerceAtLeast(1f)
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(a1, Color.Transparent),
+                            center = Offset(w * (0.2f + 0.3f * t), h * 0.18f),
+                            radius = r1
+                        )
                     )
-                )
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(a2.copy(alpha = .35f), Color.Transparent),
-                        center = Offset(w * (0.9f - 0.3f * t), h * 0.55f),
-                        radius = w * 0.8f
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(a2.copy(alpha = .35f), Color.Transparent),
+                            center = Offset(w * (0.9f - 0.3f * t), h * 0.55f),
+                            radius = r2
+                        )
                     )
-                )
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black),
-                        startY = h * 0.55f
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black),
+                            startY = h * 0.55f
+                        )
                     )
-                )
+                }
             },
         content = content
     )
@@ -157,10 +161,17 @@ fun GlowArtwork(
                 .matchParentSize()
                 .padding(8.dp)
                 .drawBehind {
-                    drawCircle(
-                        Brush.radialGradient(listOf(glow.copy(alpha = 0.55f), Color.Transparent)),
-                        radius = this.size.minDimension * 0.75f
-                    )
+                    val minDim = this.size.minDimension
+                    if (minDim > 0f) {
+                        val r = (minDim * 0.75f).coerceAtLeast(1f)
+                        drawCircle(
+                            Brush.radialGradient(
+                                colors = listOf(glow.copy(alpha = 0.55f), Color.Transparent),
+                                radius = r
+                            ),
+                            radius = r
+                        )
+                    }
                 }
         )
         Artwork(uri, size * 0.9f, radius = 20.dp, px = 512)

@@ -29,9 +29,15 @@ object SampleMusicHelper {
             sampleDir.mkdirs()
         }
         val wavFile = File(sampleDir, "pulse_horizon.wav")
-
-        if (!wavFile.exists() || wavFile.length() < 1000L) {
-            generateMelodicWav(wavFile, durationSeconds = 15)
+        val tmpFile = File(sampleDir, "pulse_horizon.wav.tmp")
+        if (!wavFile.exists() || wavFile.length() < 100_000L) {
+            runCatching {
+                generateMelodicWav(tmpFile, durationSeconds = 15)
+                if (tmpFile.exists() && tmpFile.length() > 100_000L) {
+                    if (wavFile.exists()) wavFile.delete()
+                    tmpFile.renameTo(wavFile)
+                }
+            }
         }
 
         val track = TrackEntity(
@@ -43,7 +49,7 @@ object SampleMusicHelper {
             album = "Neon Drift",
             albumArtist = "Pulse Studio",
             durationMs = 15_000L,
-            sizeBytes = wavFile.length(),
+            sizeBytes = if (wavFile.exists()) wavFile.length() else 2646044L,
             mimeType = "audio/x-wav",
             folderPath = sampleDir.absolutePath,
             dateAddedMs = System.currentTimeMillis(),
@@ -67,26 +73,25 @@ object SampleMusicHelper {
         val totalFrames = sampleRate * durationSeconds
         val dataSizeBytes = totalFrames * numChannels * (bitsPerSample / 8)
 
-        val fos = FileOutputStream(outputFile)
-        val bos = BufferedOutputStream(fos)
+        FileOutputStream(outputFile).use { fos ->
+            BufferedOutputStream(fos).use { bos ->
+                // Write 44-byte standard RIFF WAVE header
+                val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+                header.put("RIFF".toByteArray(Charsets.US_ASCII))
+                header.putInt(36 + dataSizeBytes)
+                header.put("WAVE".toByteArray(Charsets.US_ASCII))
+                header.put("fmt ".toByteArray(Charsets.US_ASCII))
+                header.putInt(16) // Subchunk1Size for PCM
+                header.putShort(1.toShort()) // AudioFormat = 1 (PCM)
+                header.putShort(numChannels.toShort())
+                header.putInt(sampleRate)
+                header.putInt(sampleRate * numChannels * (bitsPerSample / 8)) // ByteRate
+                header.putShort((numChannels * (bitsPerSample / 8)).toShort()) // BlockAlign
+                header.putShort(bitsPerSample.toShort())
+                header.put("data".toByteArray(Charsets.US_ASCII))
+                header.putInt(dataSizeBytes)
 
-        // Write 44-byte standard RIFF WAVE header
-        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
-        header.put("RIFF".toByteArray(Charsets.US_ASCII))
-        header.putInt(36 + dataSizeBytes)
-        header.put("WAVE".toByteArray(Charsets.US_ASCII))
-        header.put("fmt ".toByteArray(Charsets.US_ASCII))
-        header.putInt(16) // Subchunk1Size for PCM
-        header.putShort(1.toShort()) // AudioFormat = 1 (PCM)
-        header.putShort(numChannels.toShort())
-        header.putInt(sampleRate)
-        header.putInt(sampleRate * numChannels * (bitsPerSample / 8)) // ByteRate
-        header.putShort((numChannels * (bitsPerSample / 8)).toShort()) // BlockAlign
-        header.putShort(bitsPerSample.toShort())
-        header.put("data".toByteArray(Charsets.US_ASCII))
-        header.putInt(dataSizeBytes)
-
-        bos.write(header.array())
+                bos.write(header.array())
 
         // Musical progression: C4 -> G3 -> A3 -> F3 (Synth chords + arpeggiator)
         // Frequencies in Hz
@@ -151,11 +156,12 @@ object SampleMusicHelper {
             }
         }
 
-        if (bufferIndex > 0) {
-            bos.write(buffer, 0, bufferIndex)
-        }
+                if (bufferIndex > 0) {
+                    bos.write(buffer, 0, bufferIndex)
+                }
 
-        bos.flush()
-        bos.close()
+                bos.flush()
+            }
+        }
     }
 }

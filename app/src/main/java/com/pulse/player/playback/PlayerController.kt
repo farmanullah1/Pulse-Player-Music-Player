@@ -71,7 +71,7 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
 
     private val listener = object : Player.Listener {
         override fun onEvents(p: Player, e: Player.Events) {
-            sync(p as MediaController)
+            sync(p)
         }
 
         override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
@@ -106,7 +106,7 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
-    private fun sync(c: MediaController) {
+    private fun sync(c: Player) {
         val md = c.mediaMetadata
         _state.update {
             it.copy(

@@ -542,11 +542,13 @@ fun PlayerTopMenu(vm: MainViewModel) {
 fun SeekBar(position: StateFlow<Long>, duration: Long, onSeek: (Long) -> Unit) {
     val pos by position.collectAsStateWithLifecycle()
     var drag by remember { mutableStateOf<Float?>(null) }
-    val value = drag ?: if (duration > 0) (pos / duration.toFloat()).coerceIn(0f, 1f) else 0f
+    val rawProgress = if (duration > 0) pos / duration.toFloat() else 0f
+    val safeProgress = if (rawProgress.isNaN() || rawProgress.isInfinite()) 0f else rawProgress.coerceIn(0f, 1f)
+    val value = drag ?: safeProgress
 
     Column {
         Slider(
-            value = value.coerceIn(0f, 1f),
+            value = (drag ?: safeProgress).coerceIn(0f, 1f),
             onValueChange = { drag = it },
             onValueChangeFinished = {
                 drag?.let { onSeek((it * duration).toLong()) }
