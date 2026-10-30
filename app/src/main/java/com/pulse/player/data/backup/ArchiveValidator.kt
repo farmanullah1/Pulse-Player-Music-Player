@@ -1,16 +1,15 @@
 package com.pulse.player.data.backup
 
-import org.json.JSONObject
+import com.pulse.player.data.backup.full.BackupLimits
+import com.pulse.player.data.backup.full.validateEntryName
 import java.io.InputStream
 import java.security.MessageDigest
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
 
 object ArchiveValidator {
 
-    const val MAX_ENTRY_COUNT = 1000
-    const val MAX_ENTRY_SIZE_BYTES = 25L * 1024L * 1024L // 25 MB
-    const val MAX_TOTAL_UNCOMPRESSED_BYTES = 100L * 1024L * 1024L // 100 MB
+    const val MAX_ENTRY_COUNT = BackupLimits.MAX_ENTRIES
+    const val MAX_ENTRY_SIZE_BYTES = BackupLimits.MAX_ENTRY_BYTES
+    const val MAX_TOTAL_UNCOMPRESSED_BYTES = BackupLimits.MAX_TOTAL_UNCOMPRESSED
 
     sealed interface DetectionResult {
         object ValidZipArchive : DetectionResult
@@ -57,20 +56,11 @@ object ArchiveValidator {
     }
 
     /**
-     * Checks if the entry name contains zip slip attempts (traversal, absolute path, null bytes).
+     * Checks if the entry name conforms to security rules.
      */
     fun sanitizeEntryName(name: String): String? {
-        val normalized = name.replace('\\', '/')
-        if (normalized.startsWith("/") ||
-            normalized.contains("../") ||
-            normalized.contains("/..") ||
-            normalized == ".." ||
-            normalized.contains("\u0000") ||
-            (normalized.length >= 2 && normalized[1] == ':' && normalized[0].isLetter())
-        ) {
-            return null // Invalid or malicious path
-        }
-        return normalized
+        if (!validateEntryName(name)) return null
+        return name.replace('\\', '/')
     }
 
     /**

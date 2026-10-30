@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.pulse.player"
-    compileSdk = 35
+    compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
         applicationId = "com.aistudio.pulseplayer.wvfykq"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        minSdk = libs.versions.minSdk.get().toInt()
+        targetSdk = libs.versions.targetSdk.get().toInt()
+        versionCode = libs.versions.versionCode.get().toInt()
+        versionName = libs.versions.versionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -78,6 +78,10 @@ android {
         abortOnError = false
         checkReleaseBuilds = false
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

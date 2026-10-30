@@ -10,13 +10,36 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TrackDao {
+    companion object {
+        const val VISIBLE = "t.available = 1 AND t.durationMs >= :minMs AND NOT (t.sourceType = 'COPIED' AND EXISTS (SELECT 1 FROM tracks m WHERE m.sourceType = 'MEDIASTORE' AND m.available = 1 AND m.sizeBytes = t.sizeBytes AND m.normTitle = t.normTitle AND ABS(m.durationMs - t.durationMs) < 2000))"
+    }
+
     @Query(
         "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite " +
         "FROM tracks t LEFT JOIN favorites f ON f.trackId = t.id " +
-        "WHERE t.available = 1 AND t.durationMs >= :minMs " +
+        "WHERE t.available = 1 AND t.durationMs >= :minMs AND NOT (t.sourceType = 'COPIED' AND EXISTS (SELECT 1 FROM tracks m WHERE m.sourceType = 'MEDIASTORE' AND m.available = 1 AND m.sizeBytes = t.sizeBytes AND m.normTitle = t.normTitle AND ABS(m.durationMs - t.durationMs) < 2000)) " +
         "ORDER BY t.title COLLATE NOCASE"
     )
     fun observeAll(minMs: Long): Flow<List<TrackWithFav>>
+
+    @Query(
+        "SELECT COUNT(*) FROM tracks t " +
+        "WHERE t.available = 1 AND t.durationMs >= :minMs AND NOT (t.sourceType = 'COPIED' AND EXISTS (SELECT 1 FROM tracks m WHERE m.sourceType = 'MEDIASTORE' AND m.available = 1 AND m.sizeBytes = t.sizeBytes AND m.normTitle = t.normTitle AND ABS(m.durationMs - t.durationMs) < 2000))"
+    )
+    fun observeCount(minMs: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE available = 1")
+    fun observeCount(): Flow<Int>
+
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
+        "LEFT JOIN favorites f ON f.trackId = t.id WHERE t.available = 0 " +
+        "ORDER BY t.title COLLATE NOCASE"
+    )
+    fun observeMissing(): Flow<List<TrackWithFav>>
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE available = 0")
+    fun observeMissingCount(): Flow<Int>
 
     @Query("SELECT * FROM tracks WHERE id IN (:ids)")
     suspend fun byIds(ids: List<String>): List<TrackEntity>
@@ -30,26 +53,11 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE available = 1")
     suspend fun availableOnce(): List<TrackEntity>
 
-    @Query("SELECT COUNT(*) FROM tracks WHERE available = 1")
-    fun observeCount(): Flow<Int>
-
     @Upsert
     suspend fun upsertAll(items: List<TrackEntity>)
 
     @Query("SELECT COALESCE(MAX(scanGen), 0) FROM tracks")
     suspend fun maxGen(): Long
-
-    @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'ms:%' AND scanGen < :gen")
-    suspend fun markMsMissing(gen: Long)
-
-    @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'saf:%' AND scanGen < :gen")
-    suspend fun markSafMissing(gen: Long)
-
-    @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'ms:%'")
-    suspend fun markMediaStoreUnavailable()
-
-    @Query("UPDATE tracks SET available = 0 WHERE id LIKE 'saf:%'")
-    suspend fun markSafUnavailable()
 
     @Query(
         "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
@@ -89,6 +97,27 @@ interface TrackDao {
         "ORDER BY sizeBytes DESC"
     )
     suspend fun dupMembers(t: String, a: String): List<TrackEntity>
+}
+
+@Dao
+interface ScanDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun seen(ids: List<ScanSeenEntity>)
+
+    @Query("DELETE FROM scan_seen")
+    suspend fun clearSeen()
+
+    @Query("UPDATE tracks SET available = 1 WHERE sourceType = 'MEDIASTORE' AND id IN (SELECT id FROM scan_seen)")
+    suspend fun markSeenAvailable()
+
+    @Query("UPDATE tracks SET available = 0 WHERE sourceType = 'MEDIASTORE' AND id NOT IN (SELECT id FROM scan_seen)")
+    suspend fun markUnseenUnavailable()
+
+    @Query("UPDATE tracks SET available = (id IN (SELECT id FROM scan_seen)) WHERE sourceType = 'SAF' AND folderUri = :tree")
+    suspend fun markSafUnseenForTree(tree: String)
+
+    @Query("SELECT COUNT(*) FROM tracks WHERE sourceType = 'MEDIASTORE' AND available = 1")
+    suspend fun availableMediaStore(): Int
 }
 
 @Dao
@@ -138,6 +167,9 @@ interface FavoriteDao {
 interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAtMs")
     fun observePlaylists(): Flow<List<PlaylistEntity>>
+
+    @Query("SELECT * FROM playlists ORDER BY createdAtMs")
+    suspend fun allPlaylistsOnce(): List<PlaylistEntity>
 
     @Query("SELECT COUNT(*) FROM playlist_tracks WHERE playlistId = :id")
     fun observeCount(id: Long): Flow<Int>
@@ -219,6 +251,30 @@ interface StatsDao {
     @Query("SELECT * FROM play_events ORDER BY playedAtMs DESC LIMIT :limit")
     suspend fun getRecentEvents(limit: Int): List<PlayEventEntity>
 
+    @Query("SELECT * FROM play_events WHERE monthKey = :monthKey ORDER BY playedAtMs DESC")
+    suspend fun eventsForMonth(monthKey: String): List<PlayEventEntity>
+
+    @Query("SELECT COALESCE(SUM(listenedMs), 0) FROM play_events WHERE monthKey = :monthKey AND counted = 1")
+    suspend fun totalMsForMonth(monthKey: String): Long
+
+    @Query("SELECT COUNT(*) FROM play_events WHERE monthKey = :monthKey AND wasSkipped = 1")
+    suspend fun skippedCountForMonth(monthKey: String): Int
+
+    @Query(
+        "SELECT trackId, COUNT(*) AS plays, SUM(listenedMs) AS ms FROM play_events " +
+        "WHERE monthKey = :monthKey AND counted = 1 " +
+        "GROUP BY trackId ORDER BY plays DESC LIMIT :limit"
+    )
+    suspend fun topTracksForMonth(monthKey: String, limit: Int): List<TrackStat>
+
+    @Query(
+        "SELECT t.artist AS artist, COUNT(*) AS plays, SUM(e.listenedMs) AS ms " +
+        "FROM play_events e JOIN tracks t ON t.id = e.trackId " +
+        "WHERE e.monthKey = :monthKey AND e.counted = 1 " +
+        "GROUP BY t.artist ORDER BY ms DESC LIMIT :limit"
+    )
+    suspend fun topArtistsForMonth(monthKey: String, limit: Int): List<ArtistStat>
+
     @Query("DELETE FROM play_events")
     suspend fun clearAllEvents()
 
@@ -266,4 +322,16 @@ interface StatsDao {
 
     @Query("SELECT DISTINCT date(playedAtMs / 1000, 'unixepoch', 'localtime') AS d FROM play_events ORDER BY d DESC LIMIT 400")
     suspend fun playDays(): List<String>
+}
+
+@Dao
+interface LyricsDao {
+    @Query("SELECT * FROM lyrics WHERE trackId = :id")
+    fun observe(id: String): Flow<LyricsEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(l: LyricsEntity)
+
+    @Query("DELETE FROM lyrics WHERE trackId = :id")
+    suspend fun remove(id: String)
 }

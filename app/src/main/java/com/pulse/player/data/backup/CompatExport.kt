@@ -5,18 +5,25 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Build
 import android.util.JsonWriter
+import androidx.room.withTransaction
+import com.pulse.player.data.backup.full.FullBackupValidator
+import com.pulse.player.data.backup.full.ValidationResult
 import com.pulse.player.data.db.PlaybackRow
+import com.pulse.player.data.db.PlaylistEntity
 import com.pulse.player.data.db.PulseDb
+import com.pulse.player.data.db.TrackEntity
 import com.pulse.player.data.settings.SettingsStore
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.YearMonth
@@ -25,6 +32,14 @@ import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
+private data class CompatSnapshot(
+    val tracks: List<TrackEntity>,
+    val withPath: List<TrackEntity>,
+    val fav: List<TrackEntity>,
+    val lists: List<PlaylistEntity>,
+    val rows: List<PlaybackRow>
+)
 
 data class ExportCats(
     val tags: Boolean = true,
@@ -48,19 +63,36 @@ suspend fun exportCompat(
         val tmp = File.createTempFile("backup_", ".zip", ctx.cacheDir)
         val snapFiles = ArrayList<File>()
         try {
-            val tracks = db.tracks().availableOnce()
-            val withPath = tracks.filter { !it.dataPath.isNullOrBlank() }
-            val fav = db.favorites().allTracksOnce()
-            val lists = db.playlists().observePlaylists().first()
-            val rows = db.stats().playbackRows().filter { !it.dataPath.isNullOrBlank() }
+            val snapshot = db.withTransaction {
+                val t = db.tracks().availableOnce()
+                val wp = t.filter { !it.dataPath.isNullOrBlank() }
+                val f = db.favorites().allTracksOnce()
+                val l = db.playlists().allPlaylistsOnce()
+                val r = db.stats().playbackRows().filter { !it.dataPath.isNullOrBlank() }
+                CompatSnapshot(t, wp, f, l, r)
+            }
+            val tracks = snapshot.tracks
+            val withPath = snapshot.withPath
+            val fav = snapshot.fav
+            val lists = snapshot.lists
+            val rows = snapshot.rows
             val zone = ZoneId.systemDefault()
             val nowYm = YearMonth.now(zone)
+
+            val entryHashes = mutableMapOf<String, Pair<Long, String>>()
 
             ZipOutputStream(BufferedOutputStream(FileOutputStream(tmp))).use { z ->
                 suspend fun entry(name: String, write: suspend (OutputStream) -> Unit) {
                     onStage(name)
+                    val baos = ByteArrayOutputStream()
+                    write(baos)
+                    val bytes = baos.toByteArray()
+                    val md = MessageDigest.getInstance("SHA-256")
+                    val sha = md.digest(bytes).joinToString("") { "%02x".format(it) }
+                    entryHashes[name] = Pair(bytes.size.toLong(), sha)
+
                     z.putNextEntry(ZipEntry(name))
-                    write(z)
+                    z.write(bytes)
                     z.closeEntry()
                 }
 
@@ -295,7 +327,7 @@ suspend fun exportCompat(
                     }
                 }
 
-                // 16. metadata.inf (written LAST)
+                // 16. metadata.inf
                 val stamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
                 json(Compat.META) {
                     beginObject()
@@ -313,14 +345,36 @@ suspend fun exportCompat(
                     name("playlists").value((lists.size + 1).toLong())
                     endObject()
                 }
+
+                // 17. pulse.manifest.json (written LAST)
+                val manifestObj = JSONObject().apply {
+                    put("format", "pulse-full-1")
+                    put("createdAt", Instant.now().toString())
+                    val arr = JSONArray()
+                    entryHashes.forEach { (name, info) ->
+                        arr.put(JSONObject().apply {
+                            put("name", name)
+                            put("size", info.first)
+                            put("sha256", info.second)
+                        })
+                    }
+                    put("entries", arr)
+                    put("counts", JSONObject().apply {
+                        put("favorites", fav.size)
+                        put("playlists", lists.size)
+                        put("events", rows.size)
+                    })
+                }
+                val manifestBytes = manifestObj.toString(2).toByteArray(Charsets.UTF_8)
+                z.putNextEntry(ZipEntry("pulse.manifest.json"))
+                z.write(manifestBytes)
+                z.closeEntry()
             }
 
-            // Verify before writing to SAF destination
-            SafeZip(tmp).use { v ->
-                check(v.has(Compat.META)) { "Verification failed: metadata.inf is missing." }
-                v.open(Compat.META).use { it.readObject() }
-                if (cats.playlists) check(v.has(Compat.PLAYLISTS)) { "Verification failed: playlists missing." }
-                if (cats.recap) check(v.has(Compat.PLAYBACK)) { "Verification failed: playback records missing." }
+            // Self-check validation before writing to SAF destination
+            val checkResult = FullBackupValidator.validate(tmp)
+            if (checkResult is ValidationResult.Invalid) {
+                error("Export self-check failed: ${checkResult.reason}")
             }
 
             ctx.contentResolver.openOutputStream(dest, "wt")!!.use { out ->

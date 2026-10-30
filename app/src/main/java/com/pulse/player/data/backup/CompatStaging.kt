@@ -1,7 +1,7 @@
 package com.pulse.player.data.backup
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
+import com.pulse.player.data.backup.full.checkSnapshotStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -123,20 +123,18 @@ suspend fun stage(ctx: Context, zip: SafeZip): StagedBackup = withContext(Dispat
     var bad = 0
     val snapEntries = zip.names.filter { Compat.SNAPSHOT_RE.matches(it) }
     for (n in snapEntries) {
-        val tmp = File.createTempFile("snap_", ".db", ctx.cacheDir)
-        try {
-            zip.open(n).use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
-            SQLiteDatabase.openDatabase(tmp.path, null, SQLiteDatabase.OPEN_READONLY).use { d ->
-                d.rawQuery("SELECT COUNT(*) FROM statistics_playback", null).use { c ->
-                    c.moveToFirst()
-                }
+        val stream = runCatching { zip.open(n) }.getOrNull()
+        if (stream != null) {
+            val valid = checkSnapshotStream(stream, zip.size(n))
+            if (valid) {
+                ok++
+            } else {
+                bad++
+                warnings += "Snapshot $n failed SQLite header validation and was skipped."
             }
-            ok++
-        } catch (e: Exception) {
+        } else {
             bad++
             warnings += "Snapshot $n could not be read and was skipped."
-        } finally {
-            tmp.delete()
         }
     }
 

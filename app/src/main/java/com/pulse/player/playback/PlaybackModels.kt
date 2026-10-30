@@ -48,5 +48,8 @@ data class PlaybackUiState(
     val skipSilence: Boolean = false,
     val sleepRemainingMs: Long = 0,
     val sleepEndOfTrack: Boolean = false,
-    val error: String? = null
+    val canSeek: Boolean = false,
+    val error: String? = null,
+    val trackError: ErrorPolicy.TrackError? = null,
+    val queueNotice: String? = null
 )

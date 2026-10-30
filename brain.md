@@ -1,118 +1,129 @@
 # Pulse Player — Development Log (`brain.md`)
 
 ## 1. Done
-- [x] Initial setup: `metadata.json`, `settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts`
-- [x] Moved prompt specification markdown files to `/prompts/`
-- [x] `AndroidManifest.xml` with offline permissions (`READ_MEDIA_AUDIO`, `READ_EXTERNAL_STORAGE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, `WRITE_SETTINGS`, `MODIFY_AUDIO_SETTINGS`), zero internet permission, and `ACTION_VIEW` intent filter for audio playback
-- [x] Resources: `strings.xml`, `themes.xml`, `player_widget_info.xml`, `file_paths.xml`, vector widget & notification icons
-- [x] Custom adaptive launcher icon (`ic_launcher.xml`, `ic_launcher_round.xml`, `ic_launcher_background.xml`, `ic_launcher_foreground.xml`) and PNG rasters for `mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`
-- [x] Data Layer:
-  - Room entities: `TrackEntity`, `FavoriteEntity`, `PlaylistEntity`, `PlaylistTrackEntity`, `PlayEventEntity`, `TrackWithFav`, `TrackStat`, `ArtistStat`, `FavAdded`, `PlaybackRow`, `DupGroup`
-  - Room DAOs: `TrackDao` (with smart playlists, duplicate groups, generation scan), `FavoriteDao`, `PlaylistDao`, `StatsDao` (with distinct play days and playback rows)
-  - Database: `PulseDb` with `MIGRATION_1_2`
-  - SettingsStore: DataStore preferences (theme mode, skin, player theme, wallpaper, reduced motion, fade, min duration, excluded folders, queue persistence, raw sort configs, last backup record)
-  - Scanner: `LibraryScanner` (MediaStore audio scan + SAF document tree scan, duration filtering, junk skip, relative path extraction, scan generation counter)
-  - Helper & Artwork: `norm()` string normalizer, `ArtworkLoader` with LruCache & Palette
-  - Favorites JSON: `FavoritesCodec`, `FavoritesMatcher` (strong, high, medium fuzzy matching), `FavoritesRepository` (atomic apply, merge/replace, preview)
-- [x] Playback Layer:
-  - `MusicPlaybackService` with `ExoPlayer`, `MediaSession`, `AudioFx` attachment, `WidgetStateStore` updates, noisy handling, and custom command `pulse.SKIP_SILENCE`
-  - `PlayerController` with MediaController sync, real volume fades (in/pause), sleep timer with 10s fade-out, stop after current track, playback speed (0.5x–2.0x), pitch lock, skip silence, queue management, snapshot & restore
-  - `AudioFx` capability-checked equalizer, bass boost, virtualizer, reverb, and presets
-  - `RingtoneHelper` with `WRITE_SETTINGS` system settings flow
-- [x] UI Design System V2:
-  - AMOLED True Black `#000000` base
-  - `Pulse` color palette V2 (`Lime`, `Sun`, signature gradients `GradPrimary`, `GradCool`, `GradWarm`, `GradFresh`, `GradSunset`)
-  - 10 `Skins` V2 (`Plum`, `Aurora`, `Afterglow`, `Ocean`, `Sunrise`, `Forest`, `Mono`, `Pure black`, `Neon`, `Candy`, `Lava`)
-  - `Modifier.pressScale()` with spring feedback and ripple
-  - `AuroraBackground` animated 3-gradient canvas backdrop for Now Playing and static headers
-  - `GlowArtwork` with radial gradient ambient glow
-  - `GradientPill` for primary actions
-  - `PulseTypography` & M3 `Shapes`
-  - `AppBackground` supporting procedural backgrounds, custom gallery wallpaper, and AMOLED black
-  - `LocalSkin`, `LocalAccent`, `LocalReducedMotion`
-- [x] UI Components:
-  - `Artwork` with thumbnail caching and vector fallback
-  - `HeartButton` with bouncy spring animation
-  - `PlayingBars` with infinite height animation (respects reduced motion)
-  - `TrackRow` with combined clickable, artwork, date, and 3-dot menu
-  - `PillButton` (Shuffle / Play)
-  - `MiniPlayer` with spinning disc, marquee text, progress bar, queue and play/pause controls
-  - `SeekBar` throttled progress without full recomposition
-  - `AlphaScroller` fast index scroller with letter bubble overlay and touch drag feedback
-  - `WidgetTile` (with subtitle support for listening streaks), `SquareCard`, `SectionHeader`
-- [x] UI Screens:
-  - `AppShell` with WindowSizeClass (Drawer + MiniPlayer for phone, NavigationRail + docked NowPlayingPanel for tablet)
-  - `HomeTabsScreen` with 6 tabs (For you, Songs, Playlists, Folders, Albums, Artists) and top actions
-  - `ForYouScreen` with resume banner, widget tiles (with daily listening streak), recently added row, top picks, and designed empty state
-  - `SongsScreen` with sorting, multi-select bar, and A-Z fast scroller
-  - `PlaylistsScreen` with 2x2 system playlists grid, smart playlists, and custom user playlists
-  - `FoldersScreen` with audio folder grouping and SAF folder picker
-  - `AlbumsScreen` with adaptive grid and square artwork
-  - `ArtistsScreen` with initial gradient avatars
-  - `DetailScreen` for albums, artists, folders, playlists, and system/smart lists
-  - `SearchScreen` with debounced search and contextual playback
-  - `NowPlayingScreen` with AuroraBackground, double-tap favourite, Song/Lyrics toggle, synced `.lrc` lyrics viewer, player top menu, seek bar, transport, and bottom sheet shortcuts
-  - `NowPlayingPanel` docked tablet view
-  - 8 `PlayerThemes` with procedural canvases (`StarField`, `WavesCanvas`, `MountainSunset`, `VinylDisc`, `AcousticDisc`)
-  - `PlayerThemeScreen` with swipeable carousel and APPLY/USING button
-  - `SkinThemeScreen` with color swatches, procedural presets, and photo picker
-  - `SettingsScreen` covering Appearance, Library (Rescan, Music folder, Duplicate Finder), Playback (Audio fades, Speed slider, Pitch lock, Stop after track, Skip silence, Equalizer), Backup, Widgets, and About
-  - `EqualizerScreen` with master toggle, preset chips, real band sliders, bass boost, virtualizer, and reverb
-  - `RecapScreen` with monthly listening stats, active streaks, badges ("Night Owl", "100 Hours Club", "On Repeat", "Explorer"), and share card
-  - `BackupScreen` with Classic JSON export/import and Compatible full archive export/restore
-  - `DuplicatesScreen` showing duplicate song groups with file details, play, copy path, share, and no delete button
-  - `Sheets` & `Dialogs`: QueueSheet, SleepSheet, AddToPlaylistSheet, TrackMenuSheet, SongDetailsDialog, CreatePlaylistDialog, ImportPreviewDialog, CompatRestorePreviewDialog, CompatRestoreReportDialog
-- [x] Glance Widget:
-  - `PlayerWidget` with responsive 2x2, 4x1, and 4x2 layouts
-  - `PlayerWidgetReceiver`, `WidgetControls`, `PlayPauseCb`, `NextCb`, `PrevCb`, `WidgetStateStore`
-- [x] Synced Lyrics (`Lrc`):
-  - `.lrc` timestamp parser with fraction support and multi-timestamp expansion
-  - Binary search `activeIndex`
-  - Auto-scrolling lyrics viewer with tap-to-seek and empty state picker
-  - Unit test `LrcTest`
-- [x] Smart Playlists (read-only, live):
-  - "Never played"
-  - "Forgotten favourites (30 days)"
-  - "Long tracks (7 min+)"
-  - Exposed via Flow, automatically hidden when empty, and viewable in DetailScreen
-- [x] Duplicate Finder:
-  - Grouped by `(normTitle, normArtist)` for songs with count > 1
-  - Safe inspection only (Play, Copy path, Share); zero audio modification or deletion
-- [x] Playback Controls:
-  - Playback speed 0.5x–2.0x (0.05 step slider)
-  - Pitch lock toggle
-  - Stop after current track
-  - Skip silence via ExoPlayer session command
-- [x] External Audio & Deep Links:
-  - Open with Pulse (`ACTION_VIEW` for `audio/*` and `application/ogg`)
-  - Widget deep link (`pulse.PLAY_TRACK`)
-- [x] Compatible Backup (PROMPTS 8–12 completed):
-  - 100% compatible with Infinix `ManualBackup_*.wav` / `.zip` format
-  - Magic byte sniffing (ZIP vs RIFF WAVE vs JSON)
-  - 5-tier deterministic track matching engine
-  - SafeZip archive reader with Zip-Slip protection
-  - Atomic Room commit in single transaction (`db.withTransaction`)
-  - Full archive export producing 16 reference entries and valid SQLite monthly snapshots
-  - Git exclusion for backup samples (`ManualBackup_*`, `*.wav`)
-  - Updated README.md and documentation with honest constraints
+- [x] Phase 0: Setup Spec Index & Temp Code
+  - Created `docs/spec/SPEC_INDEX.md` mapping all 9 phases (Phase 0–8) to required files
+  - Created `docs/TEMP_CODE.md` template for tracking temporary code tags
+  - Conducted comprehensive audit of the project against Spec Index and fix pack (files 12–17)
+- [x] Phase 1: Foundation (Prompts 15–18):
+  - Created `gradle/libs.versions.toml` version catalog linked to `app/build.gradle.kts`
+  - Added identity columns to `TrackEntity`, added `ScanSeenEntity`, `LyricsEntity`, session fields in `PlayEventEntity`
+  - Updated `PulseDb` to schema version 3, added `MIGRATION_2_3`, and pre-migration backup copy helper
+  - Implemented `ScanState` and `ScanDao` with staged `scan_seen` reconciliation (single writer of `available = 0`)
+  - Implemented `StorageReceiver` for removable media mount/unmount events
+  - Stripped forbidden `INTERNET` permission from `AndroidManifest.xml` (100% offline player)
+  - Implemented `PermissionState` and `PermissionMonitor`
+  - Implemented `SafScanner.scanTree` and `MusicCopier` with unique name resolution and cancellation rollback
+  - Defined canonical `VISIBLE` constant in `TrackDao` with duration thresholds and duplicate `COPIED` row hiding
+  - Implemented `ArtRef` and bucketed sizes (96, 192, 384, 768) in `ArtworkLoader` with cache trimming in `PulseApp.onTrimMemory`
+  - Added Missing songs chip and banner in `SongsScreen`
+  - Added unit tests: `IdentityModelTest`, `Migration2To3Test`, `ScanReconcileTest`, `PermissionStateTest`, `ArtworkKeyTest`, `VisibleCountTest`
+- [x] Phase 2 (Prompt 19) — Audio Transition Controller:
+  - Implemented `AudioTransitionController` with smoothstep fading, concurrency cancellation, user volume preservation, and `restore()`
+  - Implemented `FadingPlayer` (ForwardingPlayer wrapper) intercepting playback actions
+  - Implemented `SleepTimerEngine` with 10-second fade-out and end-of-track pausing
+  - Enforced single writer of `player.volume`
+  - Added unit tests: `AudioTransitionControllerTest` and `SleepTimerEngineTest`
+- [x] Phase 2 (Prompt 20) — Engine, Controller Lifecycle, Errors & Seek Guards:
+  - Implemented `PlaybackEngine` process-wide coordinator for transitions, sleep timer, and error handling
+  - Implemented `ErrorPolicy` with categorized errors (`MISSING_FILE`, `NO_PERMISSION`, `UNSUPPORTED`, `OTHER`), single auto-retry for transient errors, and user-actionable error card (`retry()`, `skip()`)
+  - Updated `PlayerController` with explicit `attach()`/`detach()` lifecycle, exponential back-off reconnection (max 5 tries, 500ms to 8s), and decoupled play-history logging (enforcing Rule 5)
+  - Implemented `canSeek` check and bounded `seekTo(ms)` and `skipBy(deltaMs)` with clamping to `[0, duration]`
+  - Implemented `RingtoneResult` (`Done`, `NeedsPermission`, `Failed`) in `RingtoneHelper`
+  - Added unit tests: `ErrorPolicyTest` and `SeekGuardTest`
+- [x] Phase 2 (Prompt 21) — Queue Model & Media3 Shuffle Separation:
+  - Implemented `QueueModel` with deduplicated original items, deterministic seeded shuffle, `enableShuffleFrom`, and non-restarting `disableShuffle()`
+  - Implemented `MediaController.reorderAroundCurrent()` extension to reorder queue around the playing item without restarting audio
+  - Implemented `QueueSnapshot` JSON serialization/deserialization via `org.json`
+  - Implemented `restoreQueue()` with nearest surviving track fallback, position reset to 0 on track loss, and `startPaused = true`
+  - Integrated `QueueModel` into `PlayerController` with debounced (500ms) snapshot saving, 15s periodic saving while playing, and queue drop notices
+  - Zero `shuffleModeEnabled = true` writers (Media3 shuffle stays permanently disabled)
+  - Added unit tests: `QueueModelTest` and `QueueRestoreTest`
+- [x] Phase 2 (Prompt 22) — Session Statistics (SessionTracker):
+  - Implemented `StatsPolicy` constants and rules (`COUNT_MIN_REAL_MS = 30s`, `COUNT_MIN_FRACTION = 0.5`, `SKIP_MAX_FRACTION = 0.25`, `IGNORE_BELOW_REAL_MS = 2s`)
+  - Implemented `SessionTracker` as the single exclusive writer of `play_events` table during playback
+  - Speed-aware duration tracking with monotonic clock (`elapsedRealtime`) excluding pause, buffering, and error states
+  - Process death recovery via `checkpoint()` and `recoverOpenSession()` (cadence on state changes + 15s periodic ticker while playing)
+  - Time-zone and month key computing (`%04d%02d`) stored with `zoneId` at write time
+  - Added `StatsDao` recap queries by `monthKey` (`eventsForMonth`, `totalMsForMonth`, `skippedCountForMonth`, `topTracksForMonth`, `topArtistsForMonth`)
+  - Wired `SessionTracker` listener into `PlaybackEngine`
+  - Added unit tests: `SessionTrackerTest`, `SessionRecoveryTest`, `MonthKeyTest`
+- [x] Phase 5 (Prompt 23) — Classic Backup Separation:
+  - Created `data.backup.common` (`BackupKind`, `BackupSniffer`, `LimitedStream`, `sha1`, `pathKey`) for neutral shared helpers
+  - Created `data.backup.classic` (`FavItem`, `FavoritesCodec`, `FavoritesMatcher`, `FavoritesRepository`, `MatchResult`) separating Classic favorites JSON from Full backup
+  - Routed input through `BackupSniffer.sniff()` to prevent cross-contamination (e.g. "This looks like a Full backup — open the Full backup importer?")
+  - Provided backward-compatible forwarding typealiases in `data.favorites`
+  - Added unit tests: `ClassicBackupTest`
+- [x] Phase 6 (Prompt 24) — Full Backup Validation & Hardening:
+  - Implemented `BackupLimits` (max 200 MB archive, max 64 entries, max 50 MB entry, max 150 MB total uncompressed, max 200:1 ratio, max 500,000 JSON items)
+  - Implemented strict `validateEntryName` preventing path traversal (`..`), absolute paths (`/`, `\`), null bytes (`\0`), drive letters (`:`), and control characters
+  - Implemented two validation tiers: `Reference` (structural + CRC + count sanity) and `OwnExport` (verified SHA-256 integrity manifest)
+  - Replaced all archive `openDatabase` calls with 16-byte SQLite format header validation (`checkSnapshotEntry` / `checkSnapshotStream`)
+  - Enforced `openDatabase on archive = 0` grep gate
+  - Added unit tests: `FullBackupValidationTest` covering valid reference/export archives, tampered files, zip-slip, entry limits, and non-SQLite snapshot headers
+
+- [x] Phase 6 (Prompt 25) — Full Backup Preview, Merge, Export & Self-Check:
+  - Updated `CompatExport` with atomic database snapshot via `withTransaction`, `pulse.manifest.json` written as last entry with SHA-256 hashes, and post-export self-check validation
+  - Updated `CompatRestore` with `RestoreMode` (Merge, Replace), automatic `pre-restore.json` safety export before Replace mode, and single Room `withTransaction` for all database writes
+  - Replaced all user-visible instances of the forbidden word "compatible" with "Full backup (reference format)" ("compatible" in UI = 0)
+  - Added honest UI note: "Writes the same layout as the reference file. Acceptance by other apps has not been tested."
+  - Added unit tests: `FullBackupRestoreTest` and `OwnExportRoundTripTest`
+
+- [x] Phase 4 (Prompt 26) — Immersive Components:
+  - Implemented `BlurCache` and separable `boxBlur` algorithm with horizontal sliding-window sum, matrix transposition, and radius clamping
+  - Implemented `ArtworkBackground` with off-thread cached blur, 450ms cross-fade (0ms when reduced motion), and contrast-safe vertical scrim gradient
+  - Implemented `PlayerTopBar`, `SongInformation` (with marquee title flanked by shuffle and repeat), `PlaybackSeekBar` (with drag state and accessibility semantics), `PrimaryPlaybackControls` (72dp play button, buffering indicator), and `SecondaryPlayerActions`
+  - Implemented `QueueItem`, `EqualizerBars` (3 animated bars, static during reduced motion), `QueueTrackRow` (highlighting active row in orange with `Now playing` state description), and `QueuePanel` (peeking / expanding)
+  - Hooked `BlurCache.clear()` to `PulseApp.onTrimMemory`
+  - Added unit tests: `BoxBlurTest` (uniform preservation, half-black/half-white mid-grey edge, radius clamping, coordinates transposition)
+
+- [x] Phase 4 (Prompt 27) — Immersive Theme Assembly & Lyrics:
+  - Added `PlayerLayout.IMMERSIVE` and 9th canonical theme `PlayerTheme("immersive", "Immersive Artwork Player", ...)` in `PlayerThemes`
+  - Added `ImmersiveCardBackground` multi-circle soft ring preview in `ThemePreviewCard`
+  - Implemented `LrcParser` with fraction parsing, multi-timestamp line support, binary search `activeIndex`, and non-synced text detection
+  - Implemented `LyricsDao` and wired `lyrics()` into `PulseDb`
+  - Added `LyricsContent` (with auto-scrolling synced lyrics and plain text viewer) and `Foreground` with Artwork / Lyrics toggle
+  - Wired `ImmersivePlayerLayout` into `NowPlayingScreen` with tablet wide layout and phone short layout support
+  - Added unit tests: `LrcParserTest`, `ThemeRegistryTest`, `ImmersivePlayerTest`
+
+- [x] Phase 7 (Prompt 28) — Spec Conflicts Cleanup & Documentation:
+  - Updated `README.md` to canonically state "9 Custom Player Themes" (Classic, Mountain Horizon, Mesh Glass, Minimal Mood, Acoustic, Vinyl, Coastal Ocean, Starry Sky, Immersive Artwork Player)
+  - Removed all occurrences of the word "compatible" from `README.md`, standardizing on "Full backup (reference format)"
+  - Verified `docs/TEMP_CODE.md` contains 0 pending temporary code items (`TODO-TEMP = 0`)
+  - Verified `docs/spec/SPEC_INDEX.md` aligns with all 9 phases
+
+- [x] Phase 8 (Prompt 29) — Final Audit & Completion:
+  - Audited all grep gates: `TODO-TEMP=0`, `player.volume writers=1`, `available=0 writers=1`, `openDatabase on archive=0`, `destructive migration=0`, `media3 shuffle=0`, `"compatible" in UI=0`, `INTERNET permission=0`
+  - Verified 9 canonical player themes (`classic, mountain, mesh, minimal, acoustic, vinyl, coast, starry, immersive`), default "classic"
+  - Verified `docs/TEMP_CODE.md` and `docs/spec/SPEC_INDEX.md`
+  - Generated formal Completion Report matching `Prompts/17_TESTS_RECOVERY_AND_PROMPTS.md` §5
 
 ## 2. Tested
-- Code generation verified across all data, playback, UI, backup, and widget layers.
-- Unit tests:
-  - `FavoritesCodecTest` (3 tests)
-  - `ArchiveValidatorTest` (6 tests)
-  - `TrackMatchResolverTest` (4 tests)
-  - `RoomMigrationTest` (1 test verifying 6 migration SQL operations)
-  - `CompatReaderTest` (6 tests covering sniffing, zip security, recognition rule, streaming JSON parsing, and 5-tier matching)
-  - `CompatRestoreApplyTest` (3 tests verifying preview dry-run isolation, idempotency keys, and replace scope)
-  - `CompatExportTest` (1 test verifying 11-entry archive order, metadata counts, and SafeZip re-opening)
-  - `LrcTest` (4 tests covering empty text, standard timestamps, multi-tag lines, and active index calculation)
+- Static verification completed across all 9 phases (Phase 0–8, Prompts 14–29).
+- Unit tests written:
+  - `IdentityModelTest`, `Migration2To3Test`, `ScanReconcileTest`, `PermissionStateTest`, `ArtworkKeyTest`, `VisibleCountTest`
+  - `AudioTransitionControllerTest`, `SleepTimerEngineTest`, `ErrorPolicyTest`, `SeekGuardTest`, `QueueModelTest`, `QueueRestoreTest`
+  - `SessionTrackerTest`, `SessionRecoveryTest`, `MonthKeyTest`
+  - `ClassicBackupTest`
+  - `FullBackupValidationTest`, `FullBackupRestoreTest`, `OwnExportRoundTripTest`
+  - `BoxBlurTest`, `LrcParserTest`, `ThemeRegistryTest`, `ImmersivePlayerTest`
+- Grep gates:
+  - `TODO-TEMP = 0`
+  - `player.volume writers = 1` (`AudioTransitionController`)
+  - `available = 0 writers = 1` (`ScanDao.markUnseenUnavailable`)
+  - `openDatabase on archive = 0`
+  - `destructive migration = 0`
+  - `media3 shuffle = 0`
+  - `"compatible" in UI strings = 0`
+  - `INTERNET permission = 0`
+- Themes: 9 selectable themes in `PlayerThemes`, default "classic".
+- `./gradlew assembleDebug` / `testDebugUnitTest`: NOT RUN (local host CLI lacks Android SDK / `ANDROID_HOME`).
 
-## 3. Status
-- **All requirements across all prompt files in `/Prompts/` are fully complete.**
+## 3. Not Done (Next Steps)
+- None (All phases 0 through 8 and prompts 14 through 29 fully completed).
 
 ## 4. Known Limits & Honest Constraints
-- Hardware audio effects (equalizer bands, bass boost, virtualizer, reverb) depend on Android OS audiofx engine availability; unsupported features are cleanly hidden.
+- Local host environment does not have the Android SDK (`ANDROID_HOME` / `sdk.dir`) configured, so Gradle cannot compile APKs or run Android unit tests on this CLI machine; the project must be compiled/tested inside Android Studio or with an installed Android SDK.
+- Hardware audio effects depend on Android OS audiofx engine availability; unsupported features are cleanly hidden.
 - Ringtone setting requires the user to grant `WRITE_SETTINGS` in system settings.
-- Restoring archive metadata reconciles tracks against the receiving device's library; it does not fabricate missing audio files if they are not stored on the device.
-- Export compatibility: Pulse Player writes the exact schema observed from the Infinix sample; acceptance of our export by the third-party reference player cannot be physically verified on a development machine without that specific proprietary app installed.
+- Restoring archive metadata reconciles tracks against the receiving device's library; it does not fabricate missing audio files.

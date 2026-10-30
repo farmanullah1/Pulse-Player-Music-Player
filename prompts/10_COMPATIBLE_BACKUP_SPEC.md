@@ -1,6 +1,6 @@
 # 10 — Compatible Backup & Restore (reads/writes the sample "ManualBackup_*.wav" format)
 
-> **Extends the Pulse Player spec pack (00–09). Does not replace anything.** The existing favourites-JSON export/import (file 07) stays exactly as it is and is called **Classic backup** in the UI. This file adds a second method, **Full backup (compatible)**, that reads and writes the same structure as the user's real sample file.
+> **Extends the Pulse Player spec pack (00–09). Does not replace anything.** The existing favourites-JSON export/import (file 07) stays exactly as it is and is called **Classic backup** in the UI. This file adds a second method, **Full backup (reference format)**, that reads and writes the same structure as the user's real sample file.
 >
 > This file replaces the earlier ChatGPT "Dual Backup" prompt. That prompt invented its own `.musicbackup` format (`manifest.json`, `checksums.json`, …) instead of following the sample, so a real sample file would **not** have imported. **Do not use `.musicbackup`, `manifest.json` or `checksums.json`.** Follow only the format documented below.
 >
@@ -73,7 +73,7 @@ This is a **shape illustration only** (never ship these values). `timestamp` = e
 ## 3. UI (extends the Backup & Transfer screen from file 07)
 Two clearly separated cards plus one smart entry:
 - **Classic backup (favourites JSON)** — unchanged from file 07. Label it "Classic · favourites only".
-- **Full backup (compatible)** — "Saves favourites, playlists, play history, sort and scan settings in one file you can move to another phone. Music files are **not** included."
+- **Full backup (reference format)** — "Saves favourites, playlists, play history, sort and scan settings in one file you can move to another phone. Music files are **not** included."
   - Category checkboxes mirroring the 7 flags: Music tags · Covers · Lyrics · Playlists & favourites · Sort settings · Scan & hidden settings · Listening history (recap). Each shows its real record count.
   - **Create backup** → SAF `CreateDocument`, suggested name `ManualBackup_<yyyyMMdd_HHmmssSSS>.wav` (same naming as the sample) with a switch "Save as .zip instead". Use MIME `application/octet-stream` and show the name the provider actually saved.
   - **Restore backup** → SAF `OpenDocument` with `*/*` (providers label this file as audio; never filter by MIME).

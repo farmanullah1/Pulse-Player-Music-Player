@@ -1,5 +1,6 @@
 package com.pulse.player.data.scan
 
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -8,33 +9,39 @@ import android.net.Uri
 import android.os.Build
 import android.util.LruCache
 import android.util.Size
-import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+data class ArtRef(val stableKey: String, val uri: String, val modifiedMs: Long)
+
 object ArtworkLoader {
-    private val cache = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+    val sizes = intArrayOf(96, 192, 384, 768)
+
+    fun bucket(px: Int): Int = sizes.firstOrNull { it >= px } ?: sizes.last()
+
+    private val cache = object : LruCache<String, Bitmap>(
+        maxOf(8 shl 20, (Runtime.getRuntime().maxMemory() / 16).toInt())
+    ) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
-    // Cache URIs confirmed to have no artwork to eliminate redundant JNI MediaMetadataRetriever calls
     private val noArtworkCache = LruCache<String, Boolean>(2000)
 
-    suspend fun load(ctx: Context, uri: String, px: Int): Bitmap? = withContext(Dispatchers.IO) {
-        val key = "$uri@$px"
-        cache.get(key)?.let { return@withContext it }
-        if (noArtworkCache.get(key) == true) {
-            return@withContext null
-        }
+    fun key(r: ArtRef, px: Int): String = "${r.stableKey}|${r.modifiedMs}|${bucket(px)}"
 
-        val parsed = runCatching { Uri.parse(uri) }.getOrNull()
+    suspend fun load(ctx: Context, r: ArtRef, px: Int): Bitmap? = withContext(Dispatchers.IO) {
+        val b = bucket(px)
+        val k = key(r, px)
+        cache.get(k)?.let { return@withContext it }
+        if (noArtworkCache.get(k) == true) return@withContext null
+
+        val parsed = runCatching { Uri.parse(r.uri) }.getOrNull()
         if (parsed == null) {
-            noArtworkCache.put(key, true)
+            noArtworkCache.put(k, true)
             return@withContext null
         }
 
-        // 1. For local file paths, check for companion album art (e.g. pulse_horizon.jpg, cover.jpg)
         val filePath = when {
             parsed.scheme == "file" -> parsed.path
             parsed.path?.startsWith("/") == true -> parsed.path
@@ -59,95 +66,101 @@ object ArtworkLoader {
             for (candidate in candidateCovers) {
                 if (candidate.exists() && candidate.length() > 0) {
                     val decoded = runCatching {
-                        decodeSampledBitmap(candidate.absolutePath, px, px)
+                        decodeSampledBitmap(candidate.absolutePath, b, b)
                     }.getOrNull()
                     if (decoded != null) {
-                        cache.put(key, decoded)
+                        cache.put(k, decoded)
                         return@withContext decoded
                     }
                 }
             }
 
-            // WAV and raw PCM files do not carry embedded ID3 APIC frames. Skip MediaMetadataRetriever to avoid JNI error logs.
             val ext = file.extension.lowercase()
             if (ext in listOf("wav", "wave", "pcm")) {
-                noArtworkCache.put(key, true)
+                noArtworkCache.put(k, true)
                 return@withContext null
             }
         }
 
-        // 2. Query MediaStore thumbnail on Android 10+ for content URIs
-        val bmp = runCatching {
+        // Try ContentResolver thumbnail
+        val contentBmp = runCatching {
             if (Build.VERSION.SDK_INT >= 29 && parsed.scheme == "content") {
                 runCatching {
-                    ctx.contentResolver.loadThumbnail(parsed, Size(px, px), null)
+                    ctx.contentResolver.loadThumbnail(parsed, Size(b, b), null)
                 }.getOrNull()
             } else {
                 null
             }
         }.getOrNull()
 
-        if (bmp != null) {
-            cache.put(key, bmp)
-            return@withContext bmp
+        if (contentBmp != null) {
+            cache.put(k, contentBmp)
+            return@withContext contentBmp
         }
 
-        // 3. Fallback to MediaMetadataRetriever with safety guards
+        // Try MediaMetadataRetriever
         val retrievedBmp = runCatching {
             val retriever = MediaMetadataRetriever()
             try {
                 if (filePath != null) {
                     retriever.setDataSource(filePath)
                 } else {
-                    retriever.setDataSource(ctx, parsed)
+                    ctx.contentResolver.openFileDescriptor(parsed, "r")?.use { pfd ->
+                        retriever.setDataSource(pfd.fileDescriptor)
+                    }
                 }
-                val picture = runCatching { retriever.embeddedPicture }.getOrNull()
-                if (picture != null && picture.isNotEmpty()) {
-                    val opts = BitmapFactory.Options().apply {
-                        inJustDecodeBounds = true
-                    }
-                    BitmapFactory.decodeByteArray(picture, 0, picture.size, opts)
-                    val sample = maxOf(1, minOf(opts.outWidth / px, opts.outHeight / px))
-                    val decodeOpts = BitmapFactory.Options().apply {
-                        inSampleSize = sample
-                    }
-                    BitmapFactory.decodeByteArray(picture, 0, picture.size, decodeOpts)
+                val rawArt = retriever.embeddedPicture
+                if (rawArt != null && rawArt.isNotEmpty()) {
+                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(rawArt, 0, rawArt.size, opts)
+                    opts.inSampleSize = calculateInSampleSize(opts, b, b)
+                    opts.inJustDecodeBounds = false
+                    BitmapFactory.decodeByteArray(rawArt, 0, rawArt.size, opts)
                 } else null
             } finally {
-                runCatching { retriever.release() }
+                retriever.release()
             }
         }.getOrNull()
 
         if (retrievedBmp != null) {
-            cache.put(key, retrievedBmp)
+            cache.put(k, retrievedBmp)
             retrievedBmp
         } else {
-            noArtworkCache.put(key, true)
+            noArtworkCache.put(k, true)
             null
         }
     }
 
-    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
-        val options = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
+    // Compatibility method
+    suspend fun load(ctx: Context, uri: String, px: Int): Bitmap? =
+        load(ctx, ArtRef(uri, uri, 0L), px)
+
+    fun trim(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            cache.evictAll()
+        } else if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            cache.trimToSize(cache.size() / 2)
         }
+    }
+
+    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, options)
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+        options.inJustDecodeBounds = false
+        return BitmapFactory.decodeFile(path, options)
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
         var inSampleSize = 1
-        if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
-            val halfHeight = options.outHeight / 2
-            val halfWidth = options.outWidth / 2
-            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
                 inSampleSize *= 2
             }
         }
-        val decodeOptions = BitmapFactory.Options().apply {
-            this.inSampleSize = inSampleSize
-        }
-        return BitmapFactory.decodeFile(path, decodeOptions)
-    }
-
-    fun dominant(bmp: Bitmap): Int {
-        val p = Palette.from(bmp).maximumColorCount(12).generate()
-        return p.getDarkMutedColor(p.getMutedColor(p.getDominantColor(0xFF2A0826.toInt())))
+        return inSampleSize
     }
 }

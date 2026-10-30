@@ -136,7 +136,7 @@ A fast, colorful, 100% offline music player for Android. Built with Kotlin, Jetp
 ## Highlights
 - Plays local audio (formats supported by your device), background playback, notification and lock-screen controls
 - Tabs: For you, Songs, Playlists, Folders, Albums, Artists; global search
-- 8 player themes with a swipeable preview carousel; skin themes and custom wallpapers
+- 9 player themes with a swipeable preview carousel; skin themes and custom wallpapers
 - Equalizer, bass boost, virtualizer, reverb (only where the device supports them)
 - Sleep timer with fade-out, playback speed, queue management
 - Favourites and playlists stored on-device

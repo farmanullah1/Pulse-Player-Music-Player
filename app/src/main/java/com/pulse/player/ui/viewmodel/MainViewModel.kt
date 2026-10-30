@@ -128,6 +128,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun closeAddToPlaylist() { addToPlaylistOpen.value = null }
     fun openTrackMenu(t: Track) { trackMenuTrack.value = t }
     fun closeTrackMenu() { trackMenuTrack.value = null }
+    fun openTrackOptions() { currentPlayingTrack()?.let { openTrackMenu(it) } }
+
+    val snackbarMessage = MutableStateFlow<String?>(null)
+    fun clearSnackbarMessage() { snackbarMessage.value = null }
 
     // Settings
     val themeMode: StateFlow<ThemeMode> = settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.DARK)
@@ -154,6 +158,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val tracks: StateFlow<List<Track>> = db.tracks().observeAll(minMs = 0L)
         .map { list -> list.map { it.toTrack() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val missingTracks: StateFlow<List<Track>> = db.tracks().observeMissing()
+        .map { list -> list.map { it.toTrack() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val missingCount: StateFlow<Int> = db.tracks().observeMissingCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val showMissing = MutableStateFlow(false)
+    fun toggleShowMissing() { showMissing.value = !showMissing.value }
 
     // Sorting
     val sortField = MutableStateFlow(SortField.TITLE)
@@ -206,6 +220,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleFavoriteCurrent() {
         player.state.value.mediaId?.let { toggleFavorite(it) }
+    }
+
+    fun isFavorite(id: String?): kotlinx.coroutines.flow.Flow<Boolean> =
+        if (id == null) kotlinx.coroutines.flow.flowOf(false) else db.favorites().observeIds().map { id in it }
+
+    val queueItems: StateFlow<List<com.pulse.player.ui.theme.immersive.QueueItem>> = player.queue.map { list ->
+        list.map {
+            com.pulse.player.ui.theme.immersive.QueueItem(
+                mediaId = it.id,
+                title = it.title,
+                artist = it.artist,
+                artUri = it.uri,
+                durationMs = it.durationMs
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun playAt(i: Int) = player.playAt(i)
+    fun removeAt(i: Int) = player.removeAt(i)
+    fun toggleShuffle() = player.toggleShuffle()
+    fun cycleRepeat() = player.cycleRepeat()
+    fun retry() = player.retry()
+    fun skip() = player.skip()
+
+    fun lyrics(trackId: String?): kotlinx.coroutines.flow.Flow<com.pulse.player.data.db.LyricsEntity?> =
+        if (trackId == null) kotlinx.coroutines.flow.flowOf(null) else db.lyrics().observe(trackId)
+
+    fun importLyrics(trackId: String, uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching {
+            val stream = getApplication<Application>().contentResolver.openInputStream(uri) ?: return@runCatching
+            val text = com.pulse.player.data.backup.common.LimitedStream.readUtf8(stream, maxBytes = 256 * 1024L)
+            if (text.contains('\u0000')) {
+                snackbarMessage.value = "Couldn't read that file"
+                return@runCatching
+            }
+            val parsed = com.pulse.player.data.lyrics.LrcParser.parse(text)
+            val entity = com.pulse.player.data.db.LyricsEntity(
+                trackId = trackId,
+                text = text,
+                synced = parsed != null,
+                importedAtMs = System.currentTimeMillis()
+            )
+            db.lyrics().put(entity)
+        }.onFailure {
+            snackbarMessage.value = "Couldn't read that file"
+        }
+    }
+
+    fun deleteLyrics(trackId: String) = viewModelScope.launch(Dispatchers.IO) {
+        db.lyrics().remove(trackId)
     }
 
     // Playlists
@@ -417,7 +481,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         importPreview.value = null
     }
 
-    // Compatible Archive Backup & Restore (Prompt 9, 10 & 11)
+    // Full Archive Backup & Restore (Reference Format)
     val compatPreview = MutableStateFlow<CompatRestorePreview?>(null)
     val compatReport = MutableStateFlow<CompatRestoreReport?>(null)
     val compatSelectedCategories = MutableStateFlow<Set<String>>(Compat.FLAGS.toSet())
@@ -459,7 +523,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun executeCompatExport(destUri: Uri) = viewModelScope.launch {
-        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Starting compatible backup export...")
+        archiveOperation.value = BackupOperationState(inProgress = true, stage = "Starting full backup export...")
         val res = exportCompat(
             ctx = app,
             db = db,

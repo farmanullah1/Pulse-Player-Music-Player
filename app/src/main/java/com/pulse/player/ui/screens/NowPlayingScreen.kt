@@ -109,6 +109,18 @@ import kotlinx.coroutines.flow.StateFlow
 @Composable
 fun NowPlayingScreen(vm: MainViewModel) {
     val s by vm.player.state.collectAsStateWithLifecycle()
+    val themeId by vm.playerThemeId.collectAsStateWithLifecycle()
+    val theme = PlayerThemes.firstOrNull { it.id == themeId } ?: PlayerThemes[0]
+
+    if (theme.layout == PlayerLayout.IMMERSIVE) {
+        com.pulse.player.ui.theme.immersive.ImmersivePlayerLayout(
+            s = s,
+            vm = vm,
+            onBack = vm::closeNowPlaying
+        )
+        return
+    }
+
     val ctx = LocalContext.current
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
     var dominant by remember { mutableIntStateOf(0xFF2A0826.toInt()) }

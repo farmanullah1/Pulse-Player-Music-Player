@@ -41,7 +41,7 @@ class SettingsStore(private val ctx: Context) {
 
 ## 2. Player theme model
 ```kotlin
-enum class PlayerLayout { CLASSIC, SHEET_QUEUE, MESH_GLASS, MINIMAL_DARK, VINYL, ACOUSTIC, COAST, STARRY }
+enum class PlayerLayout { CLASSIC, SHEET_QUEUE, MESH_GLASS, MINIMAL_DARK, VINYL, ACOUSTIC, COAST, STARRY, IMMERSIVE }
 data class PlayerTheme(val id: String, val name: String, val layout: PlayerLayout, val colors: List<Color>, val special: Boolean = false)
 
 val PlayerThemes = listOf(
@@ -52,7 +52,8 @@ val PlayerThemes = listOf(
     PlayerTheme("acoustic", "Acoustic", PlayerLayout.ACOUSTIC, listOf(Color(0xFF6B3E26), Color(0xFF1E0F08)), special = true),                               // Type D
     PlayerTheme("vinyl", "Vinyl", PlayerLayout.VINYL, listOf(Color(0xFF3A2A7A), Color(0xFF0E0A24)), special = true),                                       // Type D
     PlayerTheme("coast", "Coastal Ocean", PlayerLayout.COAST, listOf(Color(0xFF0F4C75), Color(0xFF051937))),                                                // Type E
-    PlayerTheme("starry", "Starry Sky", PlayerLayout.STARRY, listOf(Color(0xFF0A1030), Color(0xFF2A3350))))                                                 // Type E
+    PlayerTheme("starry", "Starry Sky", PlayerLayout.STARRY, listOf(Color(0xFF0A1030), Color(0xFF2A3350))),                                                // Type E
+    PlayerTheme("immersive", "Immersive Artwork Player", PlayerLayout.IMMERSIVE, listOf(Color(0xFF1B1B22), Color.Black)))   // file 16
 ```
 Layout summary (implement each as a composable `@Composable fun XLayout(s: PlaybackUiState, vm: MainViewModel, theme: PlayerTheme)` rendered inside `PlayerThemeHost`):
 - **CLASSIC:** rounded-square artwork (≈ 70% width, glow shadow), details below (file 05).
@@ -163,4 +164,4 @@ Downscale the copy to max 1600 px (`BitmapFactory.Options.inSampleSize`) before 
 If `dynamicAccent` is on, `LocalAccent` = vibrant color from the current artwork (Palette `getVibrantColor`) with min luminance fix; used for slider highlight and selection. Fallback `Pulse.Cyan`. Respect contrast.
 
 ## 7. Acceptance for this part
-Eight themes selectable; carousel scales center card; APPLY → USING works and persists after restart; Vinyl rotates only while playing; reduced motion stops all infinite animations; custom wallpaper survives restart; `brain.md` updated.
+Nine themes selectable (the ninth, "immersive", comes from file 16 §2); carousel scales center card; APPLY → USING works and persists after restart; Vinyl rotates only while playing; reduced motion stops all infinite animations; custom wallpaper survives restart; `brain.md` updated.

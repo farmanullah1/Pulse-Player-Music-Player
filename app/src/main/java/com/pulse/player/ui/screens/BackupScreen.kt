@@ -94,7 +94,7 @@ fun BackupScreen(vm: MainViewModel) {
     var showReplaceConfirmDialog by remember { mutableStateOf(false) }
     var pendingUnmatchedList by remember { mutableStateOf<List<String>?>(null) }
 
-    // Launcher for Full Compatible Backup Export
+    // Launcher for Full Backup Export
     val compatExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
@@ -103,7 +103,7 @@ fun BackupScreen(vm: MainViewModel) {
         }
     }
 
-    // Launcher for SAF Picker (routes JSON -> Classic, ZIP -> Compatible, WAV audio -> Error)
+    // Launcher for SAF Picker (routes JSON -> Classic, ZIP -> Full, WAV audio -> Error)
     val safBackupPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -164,7 +164,7 @@ fun BackupScreen(vm: MainViewModel) {
             Spacer(Modifier.width(8.dp))
             Column {
                 Text("Backup & Restore", style = MaterialTheme.typography.titleLarge, color = Color.White)
-                Text("Dual System: Legacy JSON & Compatible Archive", style = MaterialTheme.typography.labelSmall, color = Pulse.TextMid)
+                Text("Dual System: Favourites JSON & Full Reference Backup", style = MaterialTheme.typography.labelSmall, color = Pulse.TextMid)
             }
         }
 
@@ -294,7 +294,7 @@ fun BackupScreen(vm: MainViewModel) {
             }
 
             // ==========================================
-            // OPTION B: COMPATIBLE ARCHIVE BACKUP
+            // OPTION B: FULL ARCHIVE BACKUP (REFERENCE FORMAT)
             // ==========================================
             item {
                 Card(
@@ -325,14 +325,14 @@ fun BackupScreen(vm: MainViewModel) {
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Compatible Archive Backup", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                    Text("Full Backup (Reference Format)", style = MaterialTheme.typography.titleMedium, color = Color.White)
                                 }
-                                Text("Matches Infinix & reference archive format", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan)
+                                Text("Reference archive layout", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan)
                             }
                         }
 
                         Text(
-                            text = "Create or restore a backup compatible with the supplied ZIP-based .wav archive format. Saves favourites, playlists, listening history, sort settings, and excluded folders.",
+                            text = "Create or restore a full backup using the reference ZIP-based .wav archive layout. Saves favourites, playlists, listening history, sort settings, and excluded folders.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Pulse.TextMid
                         )
@@ -369,7 +369,7 @@ fun BackupScreen(vm: MainViewModel) {
                             }
                         }
 
-                        // Restore Compatible Backup (SAF Picker)
+                        // Restore Full Backup (SAF Picker)
                         OutlinedButton(
                             onClick = { safBackupPickerLauncher.launch(arrayOf("*/*")) },
                             enabled = !archiveOp.inProgress,
@@ -380,12 +380,12 @@ fun BackupScreen(vm: MainViewModel) {
                         ) {
                             Icon(Icons.Rounded.Download, null, tint = Pulse.Cyan)
                             Spacer(Modifier.width(8.dp))
-                            Text("Restore Compatible Backup (SAF)", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Restore Full Backup (SAF)", color = Color.White, fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Create Compatible Backup Categories:",
+                            "Full Backup Categories:",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
@@ -472,8 +472,14 @@ fun BackupScreen(vm: MainViewModel) {
                         ) {
                             Icon(Icons.Rounded.Upload, null)
                             Spacer(Modifier.width(8.dp))
-                            Text("Create Compatible Backup", fontWeight = FontWeight.Bold)
+                            Text("Create Full Backup", fontWeight = FontWeight.Bold)
                         }
+
+                        Text(
+                            text = "Writes the same layout as the reference file. Acceptance by other apps has not been tested.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Pulse.TextMid
+                        )
                     }
                 }
             }
@@ -590,7 +596,7 @@ fun BackupScreen(vm: MainViewModel) {
         }
     }
 
-    // Modal: Compatible Restore Preview Dialog (Prompt 10)
+    // Modal: Full Backup Restore Preview Dialog (Prompt 10)
     compatPreview?.let { preview ->
         val selectedCategories by vm.compatSelectedCategories.collectAsStateWithLifecycle()
         val replaceMode by vm.compatReplaceMode.collectAsStateWithLifecycle()
@@ -751,7 +757,7 @@ fun BackupScreen(vm: MainViewModel) {
         }
     }
 
-    // Modal: Compatible Restore Report Dialog (Prompt 10)
+    // Modal: Full Backup Restore Report Dialog (Prompt 10)
     compatReport?.let { report ->
         AlertDialog(
             onDismissRequest = vm::dismissCompatReport,

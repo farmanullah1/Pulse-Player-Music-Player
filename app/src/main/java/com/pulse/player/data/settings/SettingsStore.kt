@@ -40,6 +40,8 @@ class SettingsStore(private val ctx: Context) {
         val deviceId = stringPreferencesKey("install_id")
         val lastBackup = stringPreferencesKey("last_backup_json")
         val geminiApiKey = stringPreferencesKey("gemini_api_key")
+        val lastGoodScanAt = longPreferencesKey("last_good_scan_at")
+        val audioAsked = booleanPreferencesKey("audio_permission_asked")
     }
 
     val themeMode: Flow<ThemeMode> = ctx.dataStore.data.map {
@@ -58,6 +60,18 @@ class SettingsStore(private val ctx: Context) {
     val songSortKey: Flow<String> = ctx.dataStore.data.map { it[K.songSortKey] ?: "dateAdded" }
     val songSortOrder: Flow<Int> = ctx.dataStore.data.map { it[K.songSortOrder] ?: -1 }
     val geminiApiKey: Flow<String?> = ctx.dataStore.data.map { it[K.geminiApiKey] }
+
+    suspend fun lastGoodScanAt(): Long? = ctx.dataStore.data.first()[K.lastGoodScanAt]
+
+    suspend fun setLastGoodScanAt(ms: Long) {
+        ctx.dataStore.edit { it[K.lastGoodScanAt] = ms }
+    }
+
+    suspend fun audioPermissionAsked(): Boolean = ctx.dataStore.data.first()[K.audioAsked] ?: false
+
+    suspend fun setAudioPermissionAsked(asked: Boolean) {
+        ctx.dataStore.edit { it[K.audioAsked] = asked }
+    }
 
     suspend fun setGeminiApiKey(key: String) = ctx.dataStore.edit { it[K.geminiApiKey] = key.trim() }
 
@@ -82,6 +96,9 @@ class SettingsStore(private val ctx: Context) {
     suspend fun setFade(v: Boolean) = ctx.dataStore.edit { it[K.fade] = v }
     suspend fun addSafTree(uri: String) = ctx.dataStore.edit {
         it[K.safTrees] = (it[K.safTrees] ?: emptySet()) + uri
+    }
+    suspend fun removeSafTree(uri: String) = ctx.dataStore.edit {
+        it[K.safTrees] = (it[K.safTrees] ?: emptySet()) - uri
     }
     suspend fun saveQueue(ids: List<String>, index: Int, pos: Long) = ctx.dataStore.edit {
         it[K.queueIds] = ids.joinToString("\n")

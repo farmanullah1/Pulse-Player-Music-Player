@@ -43,7 +43,8 @@ enum class PlayerLayout {
     VINYL,
     ACOUSTIC,
     COAST,
-    STARRY
+    STARRY,
+    IMMERSIVE
 }
 
 data class PlayerTheme(
@@ -62,7 +63,8 @@ val PlayerThemes = listOf(
     PlayerTheme("acoustic", "Acoustic", PlayerLayout.ACOUSTIC, listOf(Color(0xFF6B3E26), Color(0xFF1E0F08)), special = true),
     PlayerTheme("vinyl", "Vinyl", PlayerLayout.VINYL, listOf(Color(0xFF3A2A7A), Color(0xFF0E0A24)), special = true),
     PlayerTheme("coast", "Coastal Ocean", PlayerLayout.COAST, listOf(Color(0xFF0F4C75), Color(0xFF051937))),
-    PlayerTheme("starry", "Starry Sky", PlayerLayout.STARRY, listOf(Color(0xFF0A1030), Color(0xFF2A3350)))
+    PlayerTheme("starry", "Starry Sky", PlayerLayout.STARRY, listOf(Color(0xFF0A1030), Color(0xFF2A3350))),
+    PlayerTheme("immersive", "Immersive Artwork Player", PlayerLayout.IMMERSIVE, listOf(Color(0xFF1B1B22), Color.Black))
 )
 
 @Composable
@@ -87,6 +89,7 @@ fun ThemePreviewCard(
                 PlayerLayout.STARRY -> StarField(Modifier.fillMaxSize())
                 PlayerLayout.COAST -> WavesCanvas(Modifier.fillMaxSize())
                 PlayerLayout.SHEET_QUEUE -> MountainSunset(Modifier.fillMaxSize())
+                PlayerLayout.IMMERSIVE -> ImmersiveCardBackground(Modifier.fillMaxSize())
                 else -> Unit
             }
 
@@ -187,3 +190,27 @@ fun ThemePreviewCard(
         }
     }
 }
+
+@Composable
+private fun ImmersiveCardBackground(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val cx = size.width * 0.5f
+        val cy = size.height * 0.4f
+        drawCircle(
+            color = Color(0xFFFF9500).copy(alpha = 0.25f),
+            radius = size.width * 0.45f,
+            center = androidx.compose.ui.geometry.Offset(cx - 30f, cy - 20f)
+        )
+        drawCircle(
+            color = Color(0xFFFF2A6D).copy(alpha = 0.20f),
+            radius = size.width * 0.5f,
+            center = androidx.compose.ui.geometry.Offset(cx + 40f, cy + 30f)
+        )
+        drawCircle(
+            color = Color(0xFF9B7BFF).copy(alpha = 0.22f),
+            radius = size.width * 0.4f,
+            center = androidx.compose.ui.geometry.Offset(cx, cy + 10f)
+        )
+    }
+}
+

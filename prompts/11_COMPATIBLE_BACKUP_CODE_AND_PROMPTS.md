@@ -223,17 +223,14 @@ suspend fun stage(ctx: Context, zip: SafeZip): StagedBackup = withContext(Dispat
         hidden = (o["hidden_songs"] as? List<*>)?.count { ((it as? Map<*, *>)?.get("is_hidden") as? Number)?.toInt() == 1 } ?: 0 }
     var lyricsNonEmpty = false
     if (zip.has(Compat.LYRICS)) zip.open(Compat.LYRICS).use { lyricsNonEmpty = it.forEachObject { } > 0 }
-    var ok = 0; var bad = 0
-    zip.names.mapNotNull { Compat.SNAPSHOT_RE.matchEntire(it)?.let { _ -> it } }.forEach { n ->
-        val tmp = File.createTempFile("snap_", ".db", ctx.cacheDir)
-        try { zip.open(n).use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
-            SQLiteDatabase.openDatabase(tmp.path, null, SQLiteDatabase.OPEN_READONLY).use { d ->
-                d.rawQuery("SELECT COUNT(*) FROM statistics_playback", null).use { c -> c.moveToFirst() } }
-            ok++ } catch (e: Exception) { bad++; warnings += "Snapshot $n could not be read and was skipped." } finally { tmp.delete() } }
+    var ok = 0; var bad = 0   // snapshots are NEVER opened as databases (file 15 §2.3): size + 16-byte header only
+    zip.names.filter { Compat.SNAPSHOT_RE.matches(it) }.forEach { n ->
+        val e = zip.entry(n)
+        if (e != null && checkSnapshotEntry(zip.file, e)) ok++ else { bad++; warnings += "Snapshot $n failed the header check and was ignored." } }
     StagedBackup(meta, flags, tagCount, tags, playlists, events, sortRaw, exclude, hidden, lyricsNonEmpty, ok, bad, warnings)
 }
 ```
-`SQLiteDatabase` is `Closeable` from API 16; keep `.use`. Snapshots are validated and counted only (spec §4).
+Snapshots are header-checked and counted only; their data is restored from `PlaybackRecords.json` (spec §4, file 15 §2.3). Adapt `zip.entry/zip.file` to the `SafeZip` wrapper API.
 
 ## 6. Dry-run preview and apply (one transaction)
 ```kotlin

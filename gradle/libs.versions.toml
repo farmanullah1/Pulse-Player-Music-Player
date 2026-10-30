@@ -1,0 +1,22 @@
+[versions]
+minSdk = "26"
+compileSdk = "35"
+targetSdk = "35"
+versionCode = "2"
+versionName = "1.0.1"
+
+# Libraries
+agp = "8.8.2"
+kotlin = "2.1.10"
+ksp = "2.1.10-1.0.29"
+media3 = "1.5.1"
+room = "2.6.1"
+glance = "1.1.1"
+composeBom = "2024.10.01"
+
+[libraries]
+androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.15.0" }
+androidx-documentfile = { module = "androidx.documentfile:documentfile", version = "1.0.1" }
+androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version = "1.0.0" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.1.1" }
+

@@ -19,6 +19,10 @@ data class MatchStats(
     var missing: Int = 0
 )
 
+enum class RestoreMode { Merge, Replace }
+
+data class Diff(val add: Int, val update: Int, val same: Int, val skip: Int)
+
 data class RestoreOptions(
     val categories: Set<String>,
     val replace: Boolean
@@ -150,6 +154,17 @@ suspend fun applyRestore(
         }
     } else {
         emptyList()
+    }
+
+    // Safety export before Replace mode: automatic pre-restore.json
+    if (o.replace) {
+        runCatching {
+            val favTracks = db.favorites().allTracksOnce()
+            val addedMap = db.favorites().addedAtList().associate { it.trackId to it.addedAtMs }
+            val safetyJson = com.pulse.player.data.backup.classic.FavoritesCodec.encode(favTracks, addedMap)
+            val safetyFile = java.io.File(ctx.filesDir, "pre-restore.json")
+            safetyFile.writeText(safetyJson, Charsets.UTF_8)
+        }
     }
 
     // 2. Commit once inside a single Room transaction

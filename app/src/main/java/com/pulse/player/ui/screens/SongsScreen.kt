@@ -56,11 +56,16 @@ import kotlin.random.Random
 @Composable
 fun SongsScreen(vm: MainViewModel) {
     val tracks by vm.sortedTracks.collectAsStateWithLifecycle()
+    val missingTracks by vm.missingTracks.collectAsStateWithLifecycle()
+    val missingCount by vm.missingCount.collectAsStateWithLifecycle()
+    val showMissing by vm.showMissing.collectAsStateWithLifecycle()
     val ps by vm.player.state.collectAsStateWithLifecycle()
     val scanning by vm.scanning.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+
+    val displayTracks = if (showMissing) missingTracks else tracks
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -75,7 +80,7 @@ fun SongsScreen(vm: MainViewModel) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${tracks.size} Songs",
+                            text = if (showMissing) "$missingCount Missing Songs" else "${tracks.size} Songs",
                             style = MaterialTheme.typography.titleLarge,
                             color = Color.White
                         )
@@ -102,8 +107,8 @@ fun SongsScreen(vm: MainViewModel) {
                             text = "Shuffle",
                             icon = Icons.Rounded.Shuffle,
                             onClick = {
-                                if (tracks.isNotEmpty()) {
-                                    vm.playQueue(tracks, Random.nextInt(tracks.size), shuffle = true)
+                                if (displayTracks.isNotEmpty()) {
+                                    vm.playQueue(displayTracks, Random.nextInt(displayTracks.size), shuffle = true)
                                 }
                             },
                             modifier = Modifier.weight(1f)
@@ -112,17 +117,44 @@ fun SongsScreen(vm: MainViewModel) {
                             text = "Play",
                             icon = Icons.Rounded.PlayArrow,
                             onClick = {
-                                if (tracks.isNotEmpty()) {
-                                    vm.playQueue(tracks, 0)
+                                if (displayTracks.isNotEmpty()) {
+                                    vm.playQueue(displayTracks, 0)
                                 }
                             },
                             modifier = Modifier.weight(1f)
                         )
                     }
+
+                    if (missingCount > 0) {
+                        androidx.compose.material3.FilterChip(
+                            selected = showMissing,
+                            onClick = { vm.toggleShowMissing() },
+                            label = {
+                                Text(
+                                    text = if (showMissing) "Show library songs" else "Missing songs ($missingCount)",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        )
+                        if (showMissing) {
+                            Surface(
+                                color = Pulse.SurfaceCard,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "These files weren't found on the last scan. Your favourites and playlists keep them.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Pulse.TextSecondary,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
+            itemsIndexed(displayTracks, key = { _, t -> t.id }) { index, track ->
                 TrackRow(
                     t = track,
                     current = track.id == ps.mediaId,
@@ -133,7 +165,7 @@ fun SongsScreen(vm: MainViewModel) {
                         if (selectMode) {
                             vm.toggleSelect(track.id)
                         } else {
-                            vm.playQueue(tracks, index)
+                            vm.playQueue(displayTracks, index)
                         }
                     },
                     onLongClick = { vm.toggleSelect(track.id) },
@@ -144,7 +176,7 @@ fun SongsScreen(vm: MainViewModel) {
         }
 
         AlphabetScroller(
-            titles = tracks.map { it.title },
+            titles = displayTracks.map { it.title },
             listState = listState,
             modifier = Modifier.align(Alignment.CenterEnd)
         )

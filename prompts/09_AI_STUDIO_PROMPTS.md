@@ -2,7 +2,7 @@
 
 ## How to use
 1. Put files `00`–`08` in the project under `docs/spec/` (or attach them in AI Studio).
-2. Paste **one prompt at a time**. Attach only the files named in that prompt.
+2. Paste **one prompt at a time**. Attach `SPEC_INDEX.md` (file 12 §2) and the files listed for that phase. If a phase file and a fix-pack file (12–17) disagree, the fix-pack file wins.
 3. Wait for it to finish and build. If it errors, paste the exact error back with: *"Fix this compile error. Output the complete corrected file(s)."*
 4. Only then send the next prompt.
 
@@ -14,7 +14,7 @@
 Read `00_START_HERE.md`, `01_PRODUCT_AND_FEATURES.md` and `02_DESIGN_SYSTEM.md` completely. You are building **Pulse Player**, a native Android offline music player (Kotlin, Compose, Media3, Room). Inspect the existing project files first and keep the existing package/application ID if there is one. Reply with: (1) what already exists, (2) your build plan using the 8 parts below, (3) any risks. Do not write feature code yet. Create `brain.md` with sections: Done, Tested, Not done, Known limits. Stop and wait.
 
 ## PROMPT 1 — Project foundation, database, scan
-Read `03_PROJECT_DATA_AND_SCAN.md`. Implement it completely: Gradle setup, manifest (no INTERNET permission), Room entities/DAOs/database, `norm()`, `PulseApp`, `LibraryScanner` (MediaStore), permission flow, `ArtworkLoader`. Output **complete files**, not snippets. Add a temporary minimal screen that lists scanned song titles to prove the scan works with real files (remove it in part 3). No dummy data. Fix compile errors. Update `brain.md`. Stop.
+Read `03_PROJECT_DATA_AND_SCAN.md`. Implement it completely: Gradle setup, manifest (no INTERNET permission), Room entities/DAOs/database, `norm()`, `PulseApp`, `LibraryScanner` (MediaStore), permission flow, `ArtworkLoader`. Output **complete files**, not snippets. Add a temporary minimal screen tagged `// TODO-TEMP(phase1): remove when Home/Songs exist` and listed in `docs/TEMP_CODE.md`, that lists scanned song titles to prove the scan works with real files (remove it in part 3). No dummy data. Fix compile errors. Update `brain.md`. Stop.
 
 ## PROMPT 2 — Playback
 Read `04_PLAYBACK_AND_AUDIO.md`. Implement `MusicPlaybackService`, `PlayerController`, `AudioFx`, sleep timer, fades, queue persistence, ringtone helper. Wire the temporary list so tapping a song plays it with background playback and notification controls. One player instance only. Output complete files. Update `brain.md`. Stop.

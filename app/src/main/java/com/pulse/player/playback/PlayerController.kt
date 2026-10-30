@@ -4,66 +4,143 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
+import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
-import com.pulse.player.data.db.PlayEventEntity
-import com.pulse.player.data.db.PulseDb
+import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
-class PlayerController(private val ctx: Context, private val db: PulseDb) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+@OptIn(UnstableApi::class)
+class PlayerController(
+    private val ctx: Context,
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
+) {
     private var mc: MediaController? = null
+    private var future: ListenableFuture<MediaController>? = null
+    private var tickJob: Job? = null
+    private var sleepJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var snapshotDebounceJob: Job? = null
+    private var attempts = 0
+
+    private var queueModel = QueueModel(emptyList(), null)
+    private val itemCache = mutableMapOf<String, MediaItem>()
+
+    var onSnapshotChanged: ((QueueSnapshot) -> Unit)? = null
+
     private val _state = MutableStateFlow(PlaybackUiState())
     val state = _state.asStateFlow()
 
     private val _pos = MutableStateFlow(0L)
-    val position = _pos.asStateFlow() // only seek bars collect this
+    val position = _pos.asStateFlow()
 
     private val _queue = MutableStateFlow<List<Track>>(emptyList())
     val queue = _queue.asStateFlow()
 
-    private var sleepJob: Job? = null
-    private var fadeJob: Job? = null
-    private var listenedMs = 0L
-    private var lastId: String? = null
-    var fadeEnabled = true
-
     init {
+        scope.launch {
+            PlaybackEngine.errors.current.collect { err ->
+                _state.update { it.copy(trackError = err) }
+            }
+        }
+        attach()
+    }
+
+    fun attach() {
+        if (future != null) return
         val token = SessionToken(ctx, ComponentName(ctx, MusicPlaybackService::class.java))
-        val f = MediaController.Builder(ctx, token).buildAsync()
+        val f = MediaController.Builder(ctx, token).setListener(object : MediaController.Listener {
+            override fun onDisconnected(controller: MediaController) {
+                onLost()
+            }
+        }).buildAsync()
+        future = f
         f.addListener({
-            runCatching {
-                mc = f.get().also {
-                    it.addListener(listener)
-                    sync(it)
+            runCatching { f.get() }.onSuccess { c ->
+                if (future === f) {
+                    mc = c
+                    attempts = 0
+                    c.addListener(listener)
+                    sync(c)
+                    updateTicker(c.isPlaying)
+                } else {
+                    c.release()
                 }
+            }.onFailure {
+                if (future === f) onLost()
             }
         }, ContextCompat.getMainExecutor(ctx))
+    }
 
-        scope.launch {
-            while (true) {
+    fun detach() {
+        reconnectJob?.cancel()
+        tickJob?.cancel()
+        snapshotDebounceJob?.cancel()
+        mc?.removeListener(listener)
+        future?.let { MediaController.releaseFuture(it) }
+        future = null
+        mc = null
+    }
+
+    private fun onLost() {
+        detach()
+        scheduleReconnect()
+    }
+
+    private fun scheduleReconnect() {
+        if (attempts >= 5) {
+            _state.update { it.copy(error = "Lost connection to the player. Reopen the app.") }
+            return
+        }
+        val wait = 500L shl attempts++
+        reconnectJob = scope.launch {
+            delay(wait)
+            attach()
+        }
+    }
+
+    private fun scheduleSnapshotSave() {
+        snapshotDebounceJob?.cancel()
+        snapshotDebounceJob = scope.launch {
+            delay(500)
+            takeQueueSnapshot()?.let { onSnapshotChanged?.invoke(it) }
+        }
+    }
+
+    private fun saveSnapshotNow() {
+        snapshotDebounceJob?.cancel()
+        takeQueueSnapshot()?.let { onSnapshotChanged?.invoke(it) }
+    }
+
+    private fun updateTicker(playing: Boolean) {
+        tickJob?.cancel()
+        if (!playing) return
+        tickJob = scope.launch {
+            var counter = 0
+            while (isActive) {
                 delay(250)
-                mc?.let {
-                    if (it.isPlaying) {
-                        _pos.value = it.currentPosition
-                        listenedMs += 250
-                    }
+                mc?.let { _pos.value = it.currentPosition }
+                counter++
+                if (counter >= 60) { // 60 * 250ms = 15s periodic save while playing
+                    counter = 0
+                    saveSnapshotNow()
                 }
             }
         }
@@ -72,45 +149,41 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
     private val listener = object : Player.Listener {
         override fun onEvents(p: Player, e: Player.Events) {
             sync(p)
-        }
-
-        override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-            logEvent(completed = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
-            lastId = item?.mediaId
-            listenedMs = 0
-            if (_state.value.sleepEndOfTrack && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                mc?.pause()
-                cancelSleep()
+            if (e.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+                updateTicker(p.isPlaying)
+                if (!p.isPlaying) {
+                    saveSnapshotNow()
+                }
             }
-        }
-
-        override fun onPlayerError(e: PlaybackException) {
-            _state.update { it.copy(error = "This file can't be played on this device.") }
-        }
-    }
-
-    private fun logEvent(completed: Boolean) {
-        val id = lastId ?: return
-        val ms = listenedMs
-        if (ms >= 30_000 || completed) {
-            scope.launch(Dispatchers.IO) {
-                db.stats().insert(
-                    PlayEventEntity(
-                        trackId = id,
-                        playedAtMs = System.currentTimeMillis(),
-                        listenedMs = ms,
-                        completed = completed
-                    )
-                )
+            if (e.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                val newId = p.currentMediaItem?.mediaId
+                if (newId != null && newId != queueModel.currentId) {
+                    val active = queueModel.active
+                    if (newId in active) {
+                        // Current track advanced naturally or via seek
+                        // Update current in model
+                        if (queueModel.shuffleEnabled) {
+                            queueModel.enableShuffleFrom(queueModel.shuffled, queueModel.seed, newId)
+                        } else {
+                            queueModel = QueueModel(queueModel.original, newId)
+                        }
+                    }
+                }
+                saveSnapshotNow()
+            }
+            if (e.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
+                scheduleSnapshotSave()
             }
         }
     }
 
     private fun sync(c: Player) {
         val md = c.mediaMetadata
+        val isSeekable = c.isCurrentMediaItemSeekable && c.duration != C.TIME_UNSET && c.duration > 0
+        val curId = c.currentMediaItem?.mediaId
         _state.update {
             it.copy(
-                mediaId = c.currentMediaItem?.mediaId,
+                mediaId = curId,
                 title = md.title?.toString().orEmpty(),
                 artist = md.artist?.toString().orEmpty(),
                 album = md.albumTitle?.toString().orEmpty(),
@@ -121,9 +194,10 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
                 durationMs = if (c.duration == C.TIME_UNSET || c.duration < 0) 0L else c.duration,
                 index = c.currentMediaItemIndex,
                 queueSize = c.mediaItemCount,
-                shuffle = c.shuffleModeEnabled,
+                shuffle = queueModel.shuffleEnabled, // Media3 shuffle stays disabled
                 repeat = c.repeatMode,
-                speed = c.playbackParameters.speed
+                speed = c.playbackParameters.speed,
+                canSeek = isSeekable
             )
         }
         _queue.value = (0 until c.mediaItemCount).map { i ->
@@ -153,22 +227,44 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         )
         .build()
 
+    fun setQueueNotice(notice: String?) {
+        _state.update { it.copy(queueNotice = notice) }
+    }
+
+    fun clearQueueNotice() {
+        _state.update { it.copy(queueNotice = null) }
+    }
+
     fun playTrack(t: Track) {
+        itemCache[t.id] = t.toItem()
+        queueModel = QueueModel(listOf(t.id), t.id)
         mc?.let {
             it.setMediaItem(t.toItem())
             it.prepare()
-            fadeIn(it)
+            it.play()
         }
+        saveSnapshotNow()
     }
 
     fun playQueue(tracks: List<Track>, startIdx: Int = 0, shuffle: Boolean = false) {
         if (tracks.isEmpty()) return
-        mc?.let {
-            it.shuffleModeEnabled = shuffle
-            it.setMediaItems(tracks.map { tr -> tr.toItem() }, startIdx.coerceIn(0, tracks.lastIndex), 0L)
-            it.prepare()
-            fadeIn(it)
+        tracks.forEach { itemCache[it.id] = it.toItem() }
+        val ids = tracks.map { it.id }.distinct()
+        val startId = ids.getOrNull(startIdx) ?: ids.firstOrNull()
+        queueModel = QueueModel(ids, startId)
+        if (shuffle) {
+            queueModel.enableShuffle(Random.nextLong())
         }
+        val activeIds = queueModel.active
+        val items = activeIds.mapNotNull { itemCache[it] }
+        val activeIndex = activeIds.indexOf(startId).coerceAtLeast(0)
+        mc?.let {
+            it.setMediaItems(items, activeIndex, 0L)
+            it.prepare()
+            it.play()
+        }
+        _state.update { it.copy(shuffle = queueModel.shuffleEnabled) }
+        saveSnapshotNow()
     }
 
     fun playExternal(uri: android.net.Uri) {
@@ -185,16 +281,16 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         mc?.let {
             it.setMediaItem(item)
             it.prepare()
-            fadeIn(it)
+            it.play()
         }
     }
 
     fun togglePlay() {
         mc?.let {
             if (it.isPlaying) {
-                fadePause(it)
+                it.pause()
             } else {
-                fadeIn(it)
+                it.play()
             }
         }
     }
@@ -217,13 +313,36 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
-    fun seekTo(ms: Long) {
-        mc?.seekTo(ms)
+    fun seekTo(ms: Long): Boolean {
+        val c = mc ?: return false
+        val d = c.duration
+        if (!c.isCurrentMediaItemSeekable || d == C.TIME_UNSET || d <= 0 || ms < 0 || ms > d) return false
+        c.seekTo(ms)
         _pos.value = ms
+        return true
+    }
+
+    fun skipBy(deltaMs: Long): Boolean {
+        val c = mc ?: return false
+        val d = c.duration
+        if (d == C.TIME_UNSET || d <= 0) return false
+        return seekTo((c.currentPosition + deltaMs).coerceIn(0, d))
     }
 
     fun toggleShuffle() {
-        mc?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled }
+        val c = mc ?: return
+        val curId = queueModel.currentId ?: c.currentMediaItem?.mediaId ?: return
+        if (queueModel.shuffleEnabled) {
+            queueModel.disableShuffle()
+        } else {
+            queueModel.enableShuffle(Random.nextLong())
+        }
+        val order = queueModel.active.mapNotNull { itemCache[it] }
+        if (order.isNotEmpty()) {
+            c.reorderAroundCurrent(order, curId)
+        }
+        _state.update { it.copy(shuffle = queueModel.shuffleEnabled) }
+        scheduleSnapshotSave()
     }
 
     fun cycleRepeat() {
@@ -234,6 +353,7 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
                 else -> Player.REPEAT_MODE_OFF
             }
         }
+        scheduleSnapshotSave()
     }
 
     fun setPlaybackParameters(speed: Float, lockPitch: Boolean) {
@@ -260,102 +380,124 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
     }
 
     fun playNext(t: Track) {
-        mc?.let {
-            val nextIndex = (it.currentMediaItemIndex + 1).coerceAtMost(it.mediaItemCount)
-            it.addMediaItem(nextIndex, t.toItem())
+        itemCache[t.id] = t.toItem()
+        queueModel.playNext(t.id)
+        val c = mc ?: return
+        val curId = queueModel.currentId ?: c.currentMediaItem?.mediaId
+        if (curId != null) {
+            val order = queueModel.active.mapNotNull { itemCache[it] }
+            if (order.isNotEmpty()) {
+                c.reorderAroundCurrent(order, curId)
+            }
+        } else {
+            c.setMediaItems(queueModel.active.mapNotNull { itemCache[it] })
+            c.prepare()
         }
+        scheduleSnapshotSave()
     }
 
-    fun addToQueue(t: Track) {
+    fun addToQueue(t: Track): Boolean {
+        val added = queueModel.append(t.id)
+        if (!added) {
+            _state.update { it.copy(queueNotice = "'${t.title}' is already in the queue") }
+            return false
+        }
+        itemCache[t.id] = t.toItem()
         mc?.addMediaItem(t.toItem())
+        scheduleSnapshotSave()
+        return true
     }
 
     fun removeFromQueue(i: Int) {
+        val active = queueModel.active
+        val id = active.getOrNull(i) ?: return
+        queueModel.remove(id)
         mc?.removeMediaItem(i)
+        scheduleSnapshotSave()
     }
 
     fun moveInQueue(from: Int, to: Int) {
+        queueModel.move(from, to)
         mc?.moveMediaItem(from, to)
+        scheduleSnapshotSave()
     }
 
     fun clearQueue() {
+        queueModel = QueueModel(emptyList(), null)
+        itemCache.clear()
         mc?.clearMediaItems()
+        scheduleSnapshotSave()
     }
 
     fun skipToQueueIndex(i: Int) {
         mc?.seekTo(i, 0L)
     }
 
-    // Real audio fades
-    private fun ramp(c: MediaController, from: Float, to: Float, ms: Long, done: () -> Unit = {}) {
-        fadeJob?.cancel()
-        fadeJob = scope.launch {
-            val steps = 12
-            for (i in 0..steps) {
-                c.volume = from + (to - from) * i / steps
-                delay(ms / steps)
-            }
-            done()
-        }
-    }
-
-    private fun fadeIn(c: MediaController) {
-        if (fadeEnabled) {
-            c.volume = 0f
-            c.play()
-            ramp(c, 0f, 1f, 350)
-        } else {
-            c.volume = 1f
+    fun playAt(i: Int) {
+        val c = mc ?: return
+        if (i in 0 until c.mediaItemCount) {
+            c.seekToDefaultPosition(i)
             c.play()
         }
     }
 
-    private fun fadePause(c: MediaController) {
-        if (fadeEnabled) {
-            ramp(c, c.volume, 0f, 250) {
-                c.pause()
-                c.volume = 1f
-            }
-        } else {
-            c.pause()
-        }
+    fun removeAt(i: Int) {
+        removeFromQueue(i)
     }
 
-    // Sleep timer
     fun startSleep(minutes: Int) {
         cancelSleep()
+        if (::PlaybackEngine.isInitialized && PlaybackEngine.exo != null) {
+            PlaybackEngine.sleep.start(minutes)
+        }
         val end = SystemClock.elapsedRealtime() + minutes * 60_000L
         sleepJob = scope.launch {
             while (true) {
                 val left = end - SystemClock.elapsedRealtime()
                 _state.update { it.copy(sleepRemainingMs = left.coerceAtLeast(0)) }
                 if (left <= 0) break
-                if (left <= 10_000) {
-                    mc?.let { it.volume = (left / 10_000f).coerceIn(0f, 1f) }
-                }
                 delay(500)
             }
-            mc?.pause()
-            mc?.volume = 1f
             _state.update { it.copy(sleepRemainingMs = 0) }
         }
     }
 
     fun sleepAtEndOfTrack() {
         cancelSleep()
+        if (::PlaybackEngine.isInitialized && PlaybackEngine.exo != null) {
+            PlaybackEngine.sleep.startEndOfTrack()
+        }
         _state.update { it.copy(sleepEndOfTrack = true) }
     }
 
     fun cancelSleep() {
         sleepJob?.cancel()
-        mc?.volume = 1f
+        if (::PlaybackEngine.isInitialized && PlaybackEngine.exo != null) {
+            PlaybackEngine.sleep.cancel()
+        }
         _state.update { it.copy(sleepRemainingMs = 0, sleepEndOfTrack = false) }
     }
 
-    // Queue snapshot & restore
+    fun retryError() = PlaybackEngine.errors.retry()
+    fun skipError() = PlaybackEngine.errors.skip()
+
+    fun takeQueueSnapshot(): QueueSnapshot? = mc?.let { c ->
+        if (queueModel.original.isEmpty()) return null
+        QueueSnapshot(
+            original = queueModel.original,
+            shuffled = queueModel.shuffled,
+            currentId = queueModel.currentId ?: c.currentMediaItem?.mediaId,
+            positionMs = c.currentPosition,
+            repeat = c.repeatMode,
+            shuffleEnabled = queueModel.shuffleEnabled,
+            seed = queueModel.seed,
+            savedAtMs = System.currentTimeMillis()
+        )
+    }
+
     fun snapshot(): Triple<List<String>, Int, Long>? = mc?.let { c ->
         Triple(
-            (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId },
+            queueModel.active,
             c.currentMediaItemIndex,
             c.currentPosition
         )
@@ -364,7 +506,27 @@ class PlayerController(private val ctx: Context, private val db: PulseDb) {
     fun restore(ids: List<String>, index: Int, pos: Long, tracks: List<Track>) {
         val c = mc ?: return
         if (tracks.isEmpty()) return
+        tracks.forEach { itemCache[it.id] = it.toItem() }
+        val startId = ids.getOrNull(index) ?: ids.firstOrNull()
+        queueModel = QueueModel(ids, startId)
         c.setMediaItems(tracks.map { it.toItem() }, index.coerceIn(0, tracks.lastIndex), pos)
         c.prepare()
+    }
+
+    fun restoreFromSnapshot(restored: Restored, tracksMap: Map<String, Track>) {
+        val c = mc ?: return
+        queueModel = restored.model
+        val activeIds = queueModel.active
+        val activeTracks = activeIds.mapNotNull { tracksMap[it] }
+        if (activeTracks.isEmpty()) return
+        activeTracks.forEach { itemCache[it.id] = it.toItem() }
+        val curIndex = activeIds.indexOf(queueModel.currentId).coerceAtLeast(0)
+        val items = activeTracks.map { it.toItem() }
+        c.setMediaItems(items, curIndex, restored.positionMs)
+        c.prepare()
+        if (restored.startPaused) {
+            c.pause()
+        }
+        _state.update { it.copy(shuffle = queueModel.shuffleEnabled) }
     }
 }
