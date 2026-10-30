@@ -44,7 +44,9 @@ enum class PlayerLayout {
     ACOUSTIC,
     COAST,
     STARRY,
-    IMMERSIVE
+    IMMERSIVE,
+    PIXEL,
+    NAMIDA
 }
 
 data class PlayerTheme(
@@ -64,7 +66,9 @@ val PlayerThemes = listOf(
     PlayerTheme("vinyl", "Vinyl", PlayerLayout.VINYL, listOf(Color(0xFF3A2A7A), Color(0xFF0E0A24)), special = true),
     PlayerTheme("coast", "Coastal Ocean", PlayerLayout.COAST, listOf(Color(0xFF0F4C75), Color(0xFF051937))),
     PlayerTheme("starry", "Starry Sky", PlayerLayout.STARRY, listOf(Color(0xFF0A1030), Color(0xFF2A3350))),
-    PlayerTheme("immersive", "Immersive Artwork Player", PlayerLayout.IMMERSIVE, listOf(Color(0xFF1B1B22), Color.Black))
+    PlayerTheme("immersive", "Immersive Artwork Player", PlayerLayout.IMMERSIVE, listOf(Color(0xFF1B1B22), Color.Black)),
+    PlayerTheme("pixel", "Pixel Expressive", PlayerLayout.PIXEL, listOf(Color(0xFF295A7E), Color(0xFF132F47), Color.Black), special = true),
+    PlayerTheme("namida", "Namida Waveform", PlayerLayout.NAMIDA, listOf(Color(0xFF463E35), Color(0xFF1E1A17), Color.Black), special = true)
 )
 
 @Composable
@@ -90,6 +94,8 @@ fun ThemePreviewCard(
                 PlayerLayout.COAST -> WavesCanvas(Modifier.fillMaxSize())
                 PlayerLayout.SHEET_QUEUE -> MountainSunset(Modifier.fillMaxSize())
                 PlayerLayout.IMMERSIVE -> ImmersiveCardBackground(Modifier.fillMaxSize())
+                PlayerLayout.PIXEL -> PixelCardBackground(Modifier.fillMaxSize())
+                PlayerLayout.NAMIDA -> NamidaCardBackground(Modifier.fillMaxSize())
                 else -> Unit
             }
 

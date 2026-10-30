@@ -49,5 +49,8 @@ val Skins = listOf(
     Skin("amoled", "Pure black", listOf(Color.Black, Color.Black)),
     Skin("neon", "Neon", listOf(Color(0xFF00C3FF), Color(0xFF9B7BFF), Color.Black)),
     Skin("candy", "Candy", listOf(Color(0xFFFF6DAA), Color(0xFFB36BFF), Color(0xFF120310))),
-    Skin("lava", "Lava", listOf(Color(0xFFFF9500), Color(0xFFFF2A6D), Color(0xFF1A0508)))
+    Skin("lava", "Lava", listOf(Color(0xFFFF9500), Color(0xFFFF2A6D), Color(0xFF1A0508))),
+    Skin("pixel_material", "Pixel Material You", listOf(Color(0xFF295A7E), Color(0xFF132F47), Color.Black)),
+    Skin("namida_amber", "Namida Amber", listOf(Color(0xFFF1D6B6), Color(0xFF463E35), Color(0xFF1E1A17))),
+    Skin("namida_neon", "Namida Cyberpunk", listOf(Color(0xFF00F0FF), Color(0xFF7B55C1), Color(0xFF0D0B14)))
 )
