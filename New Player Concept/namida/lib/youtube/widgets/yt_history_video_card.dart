@@ -1,0 +1,837 @@
+import 'package:flutter/material.dart';
+
+import 'package:playlist_manager/module/playlist_id.dart';
+import 'package:youtipie/class/stream_info_item/stream_info_item.dart';
+import 'package:youtipie/class/youtipie_feed/playlist_basic_info.dart';
+import 'package:youtipie/youtipie.dart';
+
+import 'package:namida/class/jump_highlight.dart';
+import 'package:namida/class/track.dart';
+import 'package:namida/class/video.dart';
+import 'package:namida/controller/current_color.dart';
+import 'package:namida/controller/player_controller.dart';
+import 'package:namida/controller/queue_controller.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/controller/time_ago_controller.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/icon_fonts/broken_icons.dart';
+import 'package:namida/core/namida_converter_ext.dart';
+import 'package:namida/core/ntheme.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/ui/pages/subpages/playlist_tracks_subpage.dart';
+import 'package:namida/ui/widgets/custom_widgets.dart';
+import 'package:namida/youtube/class/video_card_info_fetcher_wrapper.dart';
+import 'package:namida/youtube/class/youtube_id.dart';
+import 'package:namida/youtube/class/yt_card_like_status_mixin.dart';
+import 'package:namida/youtube/widgets/yt_thumbnail.dart';
+import 'package:namida/youtube/yt_utils.dart';
+
+class VideoTilePropertiesProvider extends StatelessWidget {
+  final VideoTilePropertiesConfigs configs;
+  final Widget Function(VideoTileProperties properties) builder;
+
+  const VideoTilePropertiesProvider({
+    super.key,
+    required this.builder,
+    required this.configs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final queueSource = configs.queueSource;
+    final comingFromQueue = queueSource == QueueSourceYoutubeID.ytPlayerQueue;
+    final canHaveDuplicates = queueSource.canHaveDuplicates;
+
+    final itemsColor7 = Colors.white.withOpacityExt(0.7);
+    final itemsColor6 = Colors.white.withOpacityExt(0.6);
+    final itemsColor5 = Colors.white.withOpacityExt(0.5);
+
+    Widget? threeLines;
+    Widget? threeLinesPlaying;
+    if (configs.draggableThumbnail) {
+      if (configs.reorderableRx != null) {
+        threeLines = ObxO(
+          rx: configs.reorderableRx!,
+          builder: (context, value) => ThreeLineSmallContainers(enabled: value, color: null),
+        );
+        threeLinesPlaying = ObxO(
+          rx: configs.reorderableRx!,
+          builder: (context, value) => ThreeLineSmallContainers(enabled: value, color: itemsColor5),
+        );
+      } else {
+        threeLines = ThreeLineSmallContainers(enabled: configs.draggingEnabled, color: null);
+        threeLinesPlaying = ThreeLineSmallContainers(enabled: configs.draggingEnabled, color: itemsColor5);
+      }
+    }
+
+    return ObxO(
+      rx: settings.onTrackSwipeLeft,
+      builder: (context, onTrackSwipeLeft) => ObxO(
+        rx: settings.onTrackSwipeRight,
+        builder: (context, onTrackSwipeRight) => ObxO(
+          rx: settings.thumbnailTapAction,
+          builder: (context, thumbnailTapAction) => ObxO(
+            rx: settings.thumbnailLongPressAction,
+            builder: (context, thumbnailLongPressAction) => ObxOSelect(
+              rx: JumpHighlight.briefTarget,
+              selector: (briefHighlight) => briefHighlight?.inQueue == comingFromQueue ? briefHighlight : null,
+              builder: (context, briefHighlight) {
+                final properties = VideoTileProperties(
+                  threeLines: threeLines,
+                  threeLinesPlaying: threeLinesPlaying,
+                  itemsColor7: itemsColor7,
+                  itemsColor6: itemsColor6,
+                  itemsColor5: itemsColor5,
+                  comingFromQueue: comingFromQueue,
+                  configs: configs,
+                  canHaveDuplicates: canHaveDuplicates,
+                  allowSwipeLeft: !comingFromQueue && onTrackSwipeLeft != TrackExecuteActions.none,
+                  allowSwipeRight: !comingFromQueue && onTrackSwipeRight != TrackExecuteActions.none,
+                  thumbnailTapAction: thumbnailTapAction,
+                  thumbnailLongPressAction: thumbnailLongPressAction,
+                  briefHighlight: briefHighlight,
+                );
+                return builder(properties);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class VideoTilePropertiesConfigs {
+  final QueueSourceYoutubeID queueSource;
+  final PlaylistID? playlistID;
+  final PlaylistBasicInfo Function()? playlistInfo;
+  final String playlistName;
+  final bool horizontalGestures;
+  final bool openMenuOnLongPress;
+  final bool displayTimeAgo;
+  final bool draggingEnabled;
+  final bool draggableThumbnail;
+  final bool showMoreIcon;
+  final Rx<bool>? reorderableRx;
+
+  const VideoTilePropertiesConfigs({
+    required this.queueSource,
+    this.playlistID,
+    this.playlistInfo,
+    this.playlistName = '',
+    this.openMenuOnLongPress = true,
+    this.displayTimeAgo = true,
+    this.draggingEnabled = false,
+    this.draggableThumbnail = false,
+    this.horizontalGestures = true,
+    this.showMoreIcon = false,
+    this.reorderableRx,
+  });
+}
+
+class VideoTileProperties {
+  final VideoTilePropertiesConfigs configs;
+  final Widget? threeLines;
+  final Widget? threeLinesPlaying;
+  final Color? itemsColor7;
+  final Color? itemsColor6;
+  final Color? itemsColor5;
+
+  final bool comingFromQueue;
+  final bool canHaveDuplicates;
+
+  final bool allowSwipeLeft;
+  final bool allowSwipeRight;
+  final TrackExecuteActions thumbnailTapAction;
+  final TrackExecuteActions thumbnailLongPressAction;
+  final JumpHighlightTarget? briefHighlight;
+
+  const VideoTileProperties({
+    required this.configs,
+    required this.threeLines,
+    required this.threeLinesPlaying,
+    required this.itemsColor7,
+    required this.itemsColor6,
+    required this.itemsColor5,
+    required this.comingFromQueue,
+    required this.canHaveDuplicates,
+    required this.allowSwipeLeft,
+    required this.allowSwipeRight,
+    required this.thumbnailTapAction,
+    required this.thumbnailLongPressAction,
+    required this.briefHighlight,
+  });
+}
+
+class YTHistoryVideoCard extends YTHistoryVideoCardBase {
+  const YTHistoryVideoCard({
+    super.key,
+    required List<Playable> videos,
+    required super.day,
+    required super.index,
+    super.overrideListens = const [],
+    super.minimalCard = false,
+    super.thumbnailHeight,
+    super.minimalCardWidth,
+    super.reversedList = false,
+    super.cardColorOpacity = 0.75,
+    super.fadeOpacity = 0,
+    super.isImportantInCache = true,
+    super.bgColor,
+    super.isJumpHighlighted,
+    super.topRightWidget,
+    super.downloadIndex,
+    super.downloadTotalLength,
+    super.preferFetchNewInfo,
+    super.deferNetworkFetch,
+    super.onTap,
+    required super.properties,
+  }) : super(
+         mainList: videos,
+         info: null,
+         itemToYTVideoId: _itemToYTVideoId,
+       );
+
+  static (String, YTWatch?) _itemToYTVideoId<T>(T e) {
+    e as YoutubeID;
+    return (e.id, e.watchNull);
+  }
+}
+
+class YTHistoryVideoCardBase<T> extends StatefulWidget {
+  final List<T> mainList;
+  final (String, YTWatch?) Function(T item) itemToYTVideoId;
+  final int? day;
+  final int index;
+  final List<int> overrideListens;
+  final bool minimalCard;
+  final double? thumbnailHeight;
+  final double? minimalCardWidth;
+  final bool reversedList;
+  final double cardColorOpacity;
+  final double fadeOpacity;
+  final bool isImportantInCache;
+  final NColors? bgColor;
+  final bool isJumpHighlighted;
+  final StreamInfoItem? Function(T item)? info;
+  final Widget? topRightWidget;
+  final int? downloadIndex;
+  final int? downloadTotalLength;
+  final bool playSingle;
+  final void Function()? onTap;
+  final double minimalCardFontMultiplier;
+  final bool preferFetchNewInfo;
+
+  /// see [VideoCardInfoFetcherWrapper.networkFetchDelay].
+  final bool deferNetworkFetch;
+
+  final VideoTileProperties properties;
+
+  const YTHistoryVideoCardBase({
+    super.key,
+    required this.mainList,
+    required this.itemToYTVideoId,
+    required this.day,
+    required this.index,
+    this.overrideListens = const [],
+    this.minimalCard = false,
+    this.thumbnailHeight,
+    this.minimalCardWidth,
+    this.reversedList = false,
+    this.cardColorOpacity = 0.75,
+    this.fadeOpacity = 0,
+    this.isImportantInCache = true,
+    this.bgColor,
+    this.isJumpHighlighted = false,
+    required this.info,
+    this.topRightWidget,
+    this.downloadIndex,
+    this.downloadTotalLength,
+    this.playSingle = false,
+    this.onTap,
+    this.minimalCardFontMultiplier = 1.0,
+    this.preferFetchNewInfo = false,
+    this.deferNetworkFetch = false,
+    required this.properties,
+  });
+
+  static const kDefaultBorderRadiusThumbnail = 8.0;
+  static const kDefaultBorderRadiusMinimalCard = kDefaultBorderRadiusThumbnail;
+  static const kDefaultBorderRadius = 10.0;
+
+  static const minimalCardExtraThumbCropHeight = 6.0;
+  static const minimalCardExtraThumbCropWidth = 8.0;
+  static EdgeInsets cardMargin(bool minimal) => EdgeInsets.symmetric(horizontal: minimal ? 2.0 : 4.0, vertical: Dimensions.youtubeCardItemVerticalPadding);
+
+  @override
+  State<YTHistoryVideoCardBase<T>> createState() => _YTHistoryVideoCardBaseState<T>();
+}
+
+class _YTHistoryVideoCardBaseState<T> extends State<YTHistoryVideoCardBase<T>> with YTCardLikeStatusMixin {
+  @override
+  bool get canFetchLikeStatus => !widget.minimalCard;
+  @override
+  String get cardVideoId => videoId;
+
+  YoutubeID itemToYTIDPlay(T item) {
+    final e = widget.itemToYTVideoId(item);
+    return YoutubeID(id: e.$1, watchNull: e.$2, playlistID: widget.properties.configs.playlistID);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _assignItemInfoFromIndex();
+  }
+
+  @override
+  void didUpdateWidget(covariant YTHistoryVideoCardBase<T> oldWidget) {
+    _assignItemInfoFromIndex();
+    super.didUpdateWidget(oldWidget);
+  }
+
+  void _assignItemInfoFromIndex() {
+    index = widget.reversedList ? widget.mainList.length - 1 - this.widget.index : this.widget.index;
+    item = widget.mainList[index];
+    final videoIdWatch = widget.itemToYTVideoId(item);
+    final newVideoId = videoIdWatch.$1;
+    videoWatch = videoIdWatch.$2;
+
+    if (newVideoId != videoId && !newVideoId.isDummyVideoId) {
+      videoId = newVideoId;
+      final info = widget.info?.call(item);
+      if (info != null) {
+        refreshState(() => _infoFetcher.assign(info));
+        tryFetchLikeStatus();
+      } else {
+        refreshState(() => _infoFetcher.reset(newVideoId));
+        _infoFetcher.fetchMissing(preferFetchNewInfo: widget.preferFetchNewInfo).whenComplete(tryFetchLikeStatus);
+      }
+    } else {
+      refreshState();
+    }
+  }
+
+  late int index;
+  late T item;
+  String videoId = '';
+  late YTWatch? videoWatch;
+
+  late final _infoFetcher = VideoCardInfoFetcherWrapper(
+    this,
+    fetchExtraDetails: false,
+    networkFetchDelay: widget.deferNetworkFetch ? const Duration(milliseconds: 500) : Duration.zero,
+  );
+
+  Iterable<YoutubeID>? _getPlayOptionsQueue() {
+    if (widget.playSingle || widget.properties.comingFromQueue) return null;
+    final finalList = widget.reversedList ? widget.mainList.reversed : widget.mainList;
+    return finalList.map(itemToYTIDPlay);
+  }
+
+  void _executeThumbnailAction(TrackExecuteActions action) => action.execute(
+    itemToYTIDPlay(item),
+    info: SwipeQueueAddTileInfo(
+      queueSource: widget.properties.configs.queueSource,
+      heroTag: null,
+      videoTitle: _infoFetcher.videoTitle,
+      queue: _getPlayOptionsQueue(),
+      index: widget.index,
+    ),
+  );
+
+  _YTHistoryCardPlayState _selectPlayState() {
+    final properties = widget.properties;
+    final queueSource = properties.configs.queueSource;
+    final isRightIndex = properties.canHaveDuplicates ? index == Player.inst.currentIndex.valueR : true;
+    var isPlaying = false;
+    if (isRightIndex) {
+      final curr = Player.inst.currentVideoR;
+      if (videoId == curr?.id && videoWatch == curr?.watchNull) isPlaying = true;
+    }
+
+    var isHighlighted = false;
+    if (queueSource.supportResuming && !widget.minimalCard) {
+      final highlighted = QueueController.latestPlayedForSourceManager.map.valueR[queueSource];
+      isHighlighted = highlighted is YoutubeID && item == highlighted;
+    }
+
+    var willSleep = false;
+    if (properties.comingFromQueue) {
+      final sleepconfig = Player.inst.sleepTimerConfig.valueR;
+      if (sleepconfig.enableSleepAfterItems) {
+        final repeatMode = settings.player.repeatMode.valueR;
+        if (repeatMode == PlayerRepeatMode.all || repeatMode == PlayerRepeatMode.none) {
+          willSleep = Player.inst.sleepingItemIndex(sleepconfig.sleepAfterItems, Player.inst.currentIndex.valueR) == index;
+        }
+      }
+    }
+    return (isPlaying: isPlaying, isHighlighted: isHighlighted, willSleep: willSleep);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxSelect(
+      selector: _selectPlayState,
+      builder: (context, playState) {
+        final properties = widget.properties;
+        final configs = properties.configs;
+
+        double thumbHeight = widget.thumbnailHeight ?? (widget.minimalCard ? 24.0 * 3.2 : Dimensions.youtubeCardItemHeight);
+        double thumbWidth = widget.minimalCardWidth ?? thumbHeight * 16 / 9;
+        if (widget.minimalCard) {
+          // this might crop the image since we enabling forceSquared.
+          thumbHeight -= YTHistoryVideoCardBase.minimalCardExtraThumbCropHeight;
+          thumbWidth -= YTHistoryVideoCardBase.minimalCardExtraThumbCropWidth;
+        }
+
+        final info = _infoFetcher.infoFinal;
+        final duration = _infoFetcher.duration;
+
+        String? dateText;
+        if (configs.displayTimeAgo) {
+          final watchMS = videoWatch?.dateMSNull;
+          if (watchMS != null) dateText = widget.minimalCard ? TimeAgoController.dateMSSEFromNow(watchMS) : watchMS.dateAndClockFormattedOriginal;
+        }
+
+        Widget? draggingThumbWidget;
+        Widget? draggingTileWidget;
+        if (configs.draggableThumbnail && configs.draggingEnabled) {
+          final listener = NamidaReordererableListener(
+            key: const ValueKey(0),
+            durationMs: 80,
+            index: index,
+            child: widget.minimalCard
+                ? Container(
+                    color: Colors.transparent,
+                    height: thumbHeight * 0.9,
+                    width: thumbWidth * 0.9, // not fully but better, to avoid accidents
+                  )
+                : const ColoredBox(color: Colors.transparent),
+          );
+          final reorderableRx = configs.reorderableRx;
+          final gatedListener = reorderableRx != null
+              ? ObxO(
+                  rx: reorderableRx,
+                  builder: (context, value) => value ? listener : const SizedBox(),
+                )
+              : listener;
+          if (widget.minimalCard) {
+            draggingThumbWidget = gatedListener;
+          } else {
+            draggingTileWidget = Positioned(
+              left: 0.0,
+              top: 0.0,
+              bottom: 0.0,
+              width: ThreeLineSmallContainers.enabledWidth + thumbWidth + 4.0,
+              child: gatedListener,
+            );
+          }
+        }
+
+        final willSleepAfterThis = playState.willSleep;
+
+        final videoTitle = _infoFetcher.videoTitle;
+        final videoChannel = _infoFetcher.videoChannel;
+
+        final displayVideoChannel = videoChannel != null && videoChannel.isNotEmpty;
+        final displayDateText = dateText != null && dateText.isNotEmpty;
+
+        final bool isCurrentlyPlaying = playState.isPlaying;
+        final bool isVideoHighlighted = playState.isHighlighted;
+
+        Widget? threeLines;
+        Color? itemsColor7;
+        Color? itemsColor6;
+        Color? itemsColor5;
+
+        if (isCurrentlyPlaying) {
+          itemsColor7 = properties.itemsColor7;
+          itemsColor6 = properties.itemsColor6;
+          itemsColor5 = properties.itemsColor5;
+          threeLines = properties.threeLinesPlaying;
+        } else {
+          threeLines = properties.threeLines;
+        }
+
+        Widget thumbnail = YoutubeThumbnail(
+          type: ThumbnailType.video,
+          key: Key(videoId),
+          borderRadius: YTHistoryVideoCardBase.kDefaultBorderRadiusThumbnail,
+          isImportantInCache: widget.isImportantInCache,
+          width: thumbWidth,
+          height: thumbHeight,
+          videoId: videoId,
+          preferLowerRes: true,
+          customUrl: _infoFetcher.infoVideoFinal?.thumbnails.pick()?.url ?? info?.liveThumbs.pick()?.url,
+          smallBoxText: duration,
+          smallBoxIcon: willSleepAfterThis
+              ? Broken.timer_1
+              : _infoFetcher.isVideoUnavailable
+              ? Broken.danger
+              : null,
+          forceSquared: true, // -- if false, low quality images with black bars would appear
+        );
+        if (!widget.minimalCard) {
+          final thumbnailTapAction = properties.thumbnailTapAction;
+          final thumbnailLongPressAction = properties.thumbnailLongPressAction;
+          final hasThumbnailTap = thumbnailTapAction != TrackExecuteActions.none;
+          final hasThumbnailLongPress = thumbnailLongPressAction != TrackExecuteActions.none;
+          if (hasThumbnailTap || hasThumbnailLongPress) {
+            thumbnail = GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: hasThumbnailTap ? () => _executeThumbnailAction(thumbnailTapAction) : null,
+              onLongPress: hasThumbnailLongPress ? () => _executeThumbnailAction(thumbnailLongPressAction) : null,
+              child: thumbnail,
+            );
+          }
+        }
+
+        final children = [
+          ?threeLines,
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Center(
+                child: Padding(
+                  padding: widget.minimalCard ? const EdgeInsets.all(1.0) : const EdgeInsets.all(2.0),
+                  child: thumbnail,
+                ),
+              ),
+              ?draggingThumbWidget,
+            ],
+          ),
+          const SizedBox(width: 8.0),
+          Expanded(
+            child: Padding(
+              padding: widget.minimalCard ? const EdgeInsets.fromLTRB(4.0, 0, 4.0, 4.0) : EdgeInsets.zero,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    videoTitle ?? videoId,
+                    maxLines: widget.minimalCard && (displayVideoChannel || displayDateText) ? 1 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: NText.medium
+                        .of(context)
+                        .copyWith(
+                          fontSize: widget.minimalCard ? 12.0 * widget.minimalCardFontMultiplier : null,
+                          color: itemsColor7,
+                        ),
+                  ),
+                  if (displayVideoChannel)
+                    Text(
+                      videoChannel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NText.small
+                          .of(context)
+                          .copyWith(
+                            fontSize: widget.minimalCard ? 11.5 * widget.minimalCardFontMultiplier : null,
+                            color: itemsColor6,
+                          ),
+                    ),
+                  if (displayDateText)
+                    Text(
+                      dateText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: NText.small
+                          .of(context)
+                          .copyWith(
+                            fontSize: widget.minimalCard ? 11.0 * widget.minimalCardFontMultiplier : null,
+                            color: itemsColor5,
+                          ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6.0 + 12.0), // right + iconWidth
+          const SizedBox(width: 8.0),
+        ];
+
+        final borderRadiusRawValue = widget.minimalCard ? YTHistoryVideoCardBase.kDefaultBorderRadiusMinimalCard : YTHistoryVideoCardBase.kDefaultBorderRadius;
+
+        final briefHighlight = properties.briefHighlight;
+        final isBriefHighlighted = briefHighlight != null && index == briefHighlight.index && item == briefHighlight.item;
+
+        final background = _YTHistoryCardBackgroundState(
+          bgColor: widget.bgColor,
+          isPlaying: isCurrentlyPlaying,
+          hasHighlightLayer: !isCurrentlyPlaying && isVideoHighlighted && configs.queueSource.supportResuming,
+          hasJumpHighlightLayer: widget.isJumpHighlighted || isBriefHighlighted,
+          comingFromQueue: properties.comingFromQueue,
+          cardColorOpacity: widget.cardColorOpacity,
+        );
+
+        Widget finalChild = NamidaPopupWrapper(
+          openOnTap: false,
+          openOnLongPress: configs.openMenuOnLongPress,
+          childrenDefault: () => YTUtils.getVideoCardMenuItems(
+            queueIndex: index,
+            queueSource: configs.queueSource,
+            downloadIndex: widget.downloadIndex,
+            totalLength: widget.downloadTotalLength,
+            playlistInfo: configs.playlistInfo,
+            streamInfoItem: info,
+            videoId: videoId,
+            channelID: _infoFetcher.channelId,
+            playlistID: configs.playlistID,
+            idsNamesLookup: {videoId: _infoFetcher.infoVideoFinal?.title},
+            playlistName: configs.playlistName,
+            videoYTID: itemToYTIDPlay(item),
+          ),
+          child: _YTHistoryCardInkWell(
+            background: background,
+            borderRadius: borderRadiusRawValue,
+            width: widget.minimalCard ? thumbWidth : null,
+            onTap:
+                widget.onTap ??
+                () {
+                  YTUtils.expandMiniplayer();
+                  if (properties.comingFromQueue) {
+                    Player.inst.playQueueItem(this.widget.index);
+                  } else {
+                    final finalList = widget.reversedList ? widget.mainList.reversed : widget.mainList;
+                    if (widget.playSingle) {
+                      Player.inst.playOrPause(
+                        0,
+                        [itemToYTIDPlay(finalList.elementAt(this.widget.index))],
+                        configs.queueSource,
+                        gentlePlay: true,
+                      );
+                    } else {
+                      final gentlePlay = finalList.hasSingleItem();
+                      Player.inst.playOrPause(
+                        this.widget.index,
+                        finalList.map(itemToYTIDPlay),
+                        configs.queueSource,
+                        gentlePlay: gentlePlay,
+                      );
+                    }
+                  }
+                },
+            height: widget.minimalCard ? null : Dimensions.youtubeCardItemExtent,
+            margin: YTHistoryVideoCardBase.cardMargin(widget.minimalCard),
+            child: Stack(
+              children: [
+                widget.minimalCard
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: children,
+                      )
+                    : Row(
+                        children: children,
+                      ),
+                ?draggingTileWidget,
+                Positioned(
+                  bottom: 4.0,
+                  right: widget.minimalCard ? 2.0 : 12.0,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: YTUtils.getVideoCacheStatusIcons(
+                      context: context,
+                      videoId: videoId,
+                      iconsColor: itemsColor5,
+                      overrideListens: widget.overrideListens,
+                      displayCacheIcons: !widget.minimalCard,
+                      fontMultiplier: widget.minimalCard ? widget.minimalCardFontMultiplier : null,
+                      likeStatusRx: canFetchLikeStatus ? likeStatusRx : null,
+                    ),
+                  ),
+                ),
+                if (configs.showMoreIcon)
+                  Positioned(
+                    top: 0.0,
+                    right: 0.0,
+                    child: NamidaPopupWrapper(
+                      childrenDefault: () => YTUtils.getVideoCardMenuItems(
+                        queueIndex: index,
+                        queueSource: configs.queueSource,
+                        downloadIndex: widget.downloadIndex,
+                        totalLength: widget.downloadTotalLength,
+                        playlistInfo: configs.playlistInfo,
+                        streamInfoItem: info,
+                        videoId: videoId,
+                        channelID: _infoFetcher.channelId,
+                        playlistID: configs.playlistID,
+                        idsNamesLookup: {videoId: videoTitle},
+                        playlistName: configs.playlistName,
+                        videoYTID: itemToYTIDPlay(item),
+                      ),
+                      child: MoreIcon(
+                        iconSize: 16.0,
+                        padding: 8.0,
+                        iconColor: itemsColor6,
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  top: 0.0,
+                  right: 0.0,
+                  child: widget.topRightWidget ?? const SizedBox(),
+                ),
+                if (widget.fadeOpacity > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: NDecoratedBox(
+                        decoration: (colors) => BoxDecoration(
+                          borderRadius: BorderRadius.circular(borderRadiusRawValue.multipliedRadius),
+                          color: colors.card.withOpacityExt(widget.fadeOpacity),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+        if (!widget.minimalCard && configs.horizontalGestures && (properties.allowSwipeLeft || properties.allowSwipeRight)) {
+          final plItem = itemToYTIDPlay(item);
+          return SwipeQueueAddTile(
+            item: plItem,
+            infoCallback: () => SwipeQueueAddTileInfo(
+              queueSource: configs.queueSource,
+              heroTag: null,
+              queue: _getPlayOptionsQueue(),
+              index: widget.index,
+            ),
+            dismissibleKey: plItem,
+            allowSwipeLeft: properties.allowSwipeLeft,
+            allowSwipeRight: properties.allowSwipeRight,
+            disabledRx: configs.reorderableRx,
+            child: finalChild,
+          );
+        }
+
+        return finalChild;
+      },
+    );
+  }
+}
+
+class _YTHistoryCardInkWell extends StatelessWidget {
+  final _YTHistoryCardBackgroundState background;
+  final double borderRadius;
+  final double? width;
+  final double? height;
+  final EdgeInsetsGeometry? margin;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  const _YTHistoryCardInkWell({
+    required this.background,
+    required this.borderRadius,
+    required this.width,
+    required this.height,
+    required this.margin,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final needsAccent = background.isPlaying || background.hasHighlightLayer;
+    // -- always an Obx so the tree keeps its shape when the card starts playing
+    return Obx(
+      (context) {
+        final colors = NColorsData.targetOf(context);
+        final pageColorScheme = needsAccent ? CurrentColor.inst.currentColorScheme : null;
+        Border? border;
+        var bgColor = background.bgColor?.resolve(colors);
+        if (bgColor == null) {
+          if (background.isPlaying && pageColorScheme != null) {
+            final backgroundColorPlaying = background.comingFromQueue || settings.autoColor.valueR
+                ? CurrentColor.inst.miniplayerColor
+                : pageColorScheme; // always follow track color
+            bgColor = backgroundColorPlaying.withOpacityExt(0.55);
+          } else {
+            bgColor = colors.cardTheme.withOpacityExt(background.cardColorOpacity);
+          }
+        }
+
+        if (background.hasHighlightLayer && pageColorScheme != null) {
+          border = Border(
+            right: BorderSide(
+              width: 3.0,
+              color: pageColorScheme,
+            ),
+          );
+          bgColor = Color.alphaBlend(
+            colors.focus.withOpacityExt(0.2),
+            bgColor,
+          );
+        }
+
+        final jumpHighlight = background.comingFromQueue ? JumpHighlight.queueColor : JumpHighlight.color;
+        final jumpHighlightColor = background.hasJumpHighlightLayer ? jumpHighlight.resolve(colors) : null;
+        if (jumpHighlightColor != null) bgColor = Color.alphaBlend(jumpHighlightColor, bgColor);
+
+        BoxDecoration decoration;
+        if (settings.gradientTiles.value) {
+          Color? bgColorAlt;
+          if (background.isPlaying) {
+            final palette = CurrentColor.inst.miniplayerColorM.palette;
+            if (palette.isNotEmpty) {
+              bgColorAlt = palette[0].withOpacityExt(0.4);
+            }
+          }
+          if (jumpHighlightColor != null && bgColorAlt != null) bgColorAlt = Color.alphaBlend(jumpHighlightColor, bgColorAlt);
+          // -- has to be always gradient to animate properly
+          decoration = BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                bgColor,
+                bgColorAlt ?? bgColor,
+              ],
+              stops: const [0.6, 1.0],
+            ),
+            border: border,
+          );
+        } else {
+          decoration = BoxDecoration(
+            color: bgColor,
+            border: border,
+          );
+        }
+        return NamidaInkWell(
+          animationDurationMS: 300,
+          borderRadius: borderRadius,
+          width: width,
+          onTap: onTap,
+          height: height,
+          margin: margin,
+          decoration: decoration,
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class _YTHistoryCardBackgroundState {
+  final NColors? bgColor;
+  final bool isPlaying;
+  final bool hasHighlightLayer;
+  final bool hasJumpHighlightLayer;
+  final bool comingFromQueue;
+  final double cardColorOpacity;
+
+  const _YTHistoryCardBackgroundState({
+    required this.bgColor,
+    required this.isPlaying,
+    required this.hasHighlightLayer,
+    required this.hasJumpHighlightLayer,
+    required this.comingFromQueue,
+    required this.cardColorOpacity,
+  });
+}
+
+typedef _YTHistoryCardPlayState = ({bool isPlaying, bool isHighlighted, bool willSleep});

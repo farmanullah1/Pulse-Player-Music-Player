@@ -1,0 +1,174 @@
+// ignore_for_file: non_constant_identifier_names
+
+import 'dart:collection';
+import 'dart:io';
+
+import 'package:history_manager/history_manager.dart';
+
+import 'package:namida/class/track.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/core/constants.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/functions.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/ui/widgets/library/track_tile.dart';
+
+class HistoryController with HistoryManager<TrackWithDate, Track> {
+  static HistoryController get inst => _instance;
+  static final HistoryController _instance = HistoryController._internal();
+  HistoryController._internal() {
+    onTopItemsMapModified = TrackTileManager.onTrackItemPropChange;
+    latestUpdatedMostPlayedItem.addListener(() => TrackTileManager.rebuildTrackInfo(latestUpdatedMostPlayedItem.value! /* not null bet */));
+  }
+
+  @override
+  double daysToSectionExtent(List<int> days) {
+    final trackTileExtent = Dimensions.inst.trackTileItemExtent;
+    const dayHeaderExtent = kHistoryDayHeaderHeightWithPadding;
+    double total = 0;
+    for (var day in days) {
+      total += dayToSectionExtent(day, trackTileExtent, dayHeaderExtent);
+    }
+    return total;
+  }
+
+  Future<void> replaceTracksDirectoryInHistory(
+    String normalizedOldDir,
+    String normalizedNewDir, {
+    Iterable<String>? forThesePathsOnly,
+    bool ensureNewFileExists = false,
+  }) async {
+    final pathsOnlySet = forThesePathsOnly?.toSet();
+    final existenceCache = <String, bool>{};
+    final normalizedPathCache = <String, String>{};
+
+    await replaceTheseTracksInHistory(
+      (e) {
+        final tr = e.track;
+        normalizedPathCache[tr.path] ??= replaceFunctionNormalizePath(tr.path);
+        return replaceFunctionForUpdatedPaths(
+          tr.path,
+          normalizedOldDir,
+          normalizedNewDir,
+          pathsOnlySet,
+          ensureNewFileExists,
+          existenceCache,
+        );
+      },
+      (old) {
+        final normalized = normalizedPathCache[old.track.path] ?? replaceFunctionNormalizePath(old.track.path);
+        return TrackWithDate(
+          dateAdded: old.dateAdded,
+          track: Track.fromTypeParameter(
+            old.track.runtimeType,
+            replaceFunctionGetNewPath(normalized, normalizedOldDir, normalizedNewDir),
+          ),
+          source: old.source,
+        );
+      },
+    );
+  }
+
+  Future<void> replaceAllTracksInsideHistory(Selectable oldTrack, Track newTrack) async {
+    await replaceTheseTracksInHistory(
+      (e) => e.track == oldTrack.track,
+      (old) => TrackWithDate(
+        dateAdded: old.dateAdded,
+        track: newTrack,
+        source: old.source,
+      ),
+    );
+  }
+
+  Future<void> replaceTheseTracksInHistoryBulk(Map<Track, Track> oldNewTrack) async {
+    await replaceTheseTracksInHistory(
+      (e) => oldNewTrack.containsKey(e.track),
+      (old) => TrackWithDate(
+        dateAdded: old.dateAdded,
+        track: oldNewTrack[old.track]!,
+        source: old.source,
+      ),
+    );
+  }
+
+  @override
+  String get HISTORY_DIRECTORY => AppDirs.HISTORY_PLAYLIST;
+
+  @override
+  Map<String, dynamic> itemToJson(TrackWithDate item) => item.toJson();
+
+  @override
+  Track mainItemToSubItem(TrackWithDate item) => item.track;
+
+  @override
+  Future<HistoryPrepareInfo<TrackWithDate, Track>> prepareAllHistoryFilesFunction(String directoryPath, {bool repairDays = false}) async {
+    return await _readHistoryFilesCompute.thready((path: directoryPath, repairDays: repairDays));
+  }
+
+  static HistoryPrepareInfo<TrackWithDate, Track> _readHistoryFilesCompute(({String path, bool repairDays}) params) {
+    final path = params.path;
+    final map = SplayTreeMap<int, List<TrackWithDate>>((date1, date2) => date2.compareTo(date1));
+    final tempMapTopItems = <Track, List<int>>{};
+    final daysRepair = params.repairDays ? HistoryDaysRepair<TrackWithDate>() : null;
+    int totalCount = 0;
+    final files = Directory(path).listSyncSafe();
+    for (final f in files) {
+      if (f is File) {
+        try {
+          final responseList = f.readAsJsonSync(ensureExists: false) as List?;
+          final dayOfTrack = int.parse(f.path.getFilenameWOExt);
+          final listTracks = <TrackWithDate>[];
+          TrackWithDate? previous;
+          bool isNewestFirst = true;
+          if (responseList != null) {
+            for (final map in responseList) {
+              var twd = TrackWithDate.fromJson(map);
+              if (previous != null && twd.dateAdded > previous.dateAdded) isNewestFirst = false;
+              previous = twd;
+              listTracks.add(twd);
+              tempMapTopItems.addForce(twd.track, twd.dateAdded);
+            }
+          }
+          if (!isNewestFirst) listTracks.sortByReverse((e) => e.dateAdded);
+          daysRepair?.checkDay(dayOfTrack, listTracks);
+
+          map[dayOfTrack] = listTracks;
+          totalCount += listTracks.length;
+        } catch (_) {}
+      }
+    }
+
+    if (daysRepair != null) {
+      final droppedDuplicates = daysRepair.repair(map, path, (twd) => twd.toJson());
+      for (final twd in droppedDuplicates) {
+        tempMapTopItems[twd.track]?.remove(twd.dateAdded);
+      }
+      totalCount -= droppedDuplicates.length;
+    }
+
+    final topItems = ListensSortedMap<Track>();
+    topItems.assignAll(tempMapTopItems);
+
+    return HistoryPrepareInfo(
+      historyMap: map,
+      topItems: topItems,
+      totalItemsCount: totalCount,
+    );
+  }
+
+  @override
+  Rx<MostPlayedTimeRange> get currentMostPlayedTimeRange => settings.mostPlayedTimeRange;
+
+  @override
+  Rx<DateRange> get mostPlayedCustomDateRange => settings.mostPlayedCustomDateRange;
+
+  @override
+  Rx<bool> get mostPlayedCustomIsStartOfDay => settings.mostPlayedCustomisStartOfDay;
+
+  @override
+  bool get didRepairHistoryDays => settings.didRepairHistoryDays.value;
+
+  @override
+  void onHistoryDaysRepaired() => settings.didRepairHistoryDays.save(true);
+}

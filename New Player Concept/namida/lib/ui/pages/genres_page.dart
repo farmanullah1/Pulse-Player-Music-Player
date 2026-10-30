@@ -1,0 +1,192 @@
+import 'package:flutter/material.dart';
+
+import 'package:flutter_scrollbar_modified/flutter_scrollbar_modified.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+
+import 'package:namida/class/count_per_row.dart';
+import 'package:namida/class/route.dart';
+import 'package:namida/controller/history_controller.dart';
+import 'package:namida/controller/indexer_controller.dart';
+import 'package:namida/controller/scroll_search_controller.dart';
+import 'package:namida/controller/search_sort_controller.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/functions.dart';
+import 'package:namida/core/namida_converter_ext.dart';
+import 'package:namida/core/translations/language.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/ui/dialogs/common_dialogs.dart';
+import 'package:namida/ui/widgets/custom_widgets.dart';
+import 'package:namida/ui/widgets/expandable_box.dart';
+import 'package:namida/ui/widgets/library/multi_artwork_card.dart';
+import 'package:namida/ui/widgets/sliver_cross_axis_extent_builder.dart';
+import 'package:namida/ui/widgets/sort_by_button.dart';
+
+class GenresPage extends StatelessWidget with NamidaRouteWidget {
+  @override
+  RouteType get route => RouteType.PAGE_genres;
+
+  final CountPerRow countPerRow;
+  final bool animateTiles;
+  final bool enableHero;
+
+  const GenresPage({
+    super.key,
+    required this.countPerRow,
+    this.animateTiles = true,
+    required this.enableHero,
+  });
+
+  bool get _shouldAnimate => animateTiles && LibraryTab.genres.shouldAnimateTiles;
+
+  List<NamidaPopupItem> _getTypeChooserChildren() {
+    void onTap(MediaType type) {
+      settings.activeGenreType.save(type);
+      SearchSortController.inst.sortMedia(type, reverse: null);
+    }
+
+    return [
+      NamidaPopupItem(
+        icon: MediaType.genre.toIcon(),
+        title: lang.genre,
+        selected: MediaType.genre == settings.activeGenreType.value,
+        onTap: () => onTap(MediaType.genre),
+      ),
+      NamidaPopupItem(
+        icon: MediaType.style.toIcon(),
+        title: lang.style,
+        selected: MediaType.style == settings.activeGenreType.value,
+        onTap: () => onTap(MediaType.style),
+      ),
+    ];
+  }
+
+  ScrollbarThumbLabelResolver? _createThumbLabel() {
+    final genreType = settings.activeGenreType.value;
+    final genres = SearchSortController.inst.genreSearchList.value;
+    final labelOf = SearchSortController.inst.getGenresSortLabelResolver(genreType);
+    return NamidaScrollbar.createListThumbLabel(genres, labelOf);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const libraryTab = LibraryTab.genres;
+    final scrollController = libraryTab.scrollController;
+    final countPerRowResolved = countPerRow.resolve(context);
+
+    const listHeader = ExpandableBoxEmptyAnimatedPadding(tab: libraryTab);
+
+    return BackgroundWrapper(
+      child: AnimationLimiter(
+        child: Obx(
+          (context) {
+            final genreType = settings.activeGenreType.valueR;
+            final sorting = settings.groupSortingOfR(genreType);
+            final sort = sorting.entries.first.type;
+            final sortReverse = sorting.reverse;
+
+            final sortTextIsUseless = sort == GroupSortType.genresList || sort == GroupSortType.numberOfTracks || sort == GroupSortType.duration;
+            final extraTextResolver = sortTextIsUseless ? null : SearchSortController.inst.getGenresExtraTextResolver(genreType, sort);
+
+            final String Function({required int count}) countToText = switch (genreType) {
+              MediaType.style => lang.countStyles,
+              _ => lang.countGenres,
+            };
+            final finalGenresLength = SearchSortController.inst.genreSearchList.valueR.length;
+            final totalGenresLength = Indexer.inst.getGenreMapFor(genreType).valueR.length;
+            String leftText = finalGenresLength != totalGenresLength ? '$finalGenresLength/${countToText(count: totalGenresLength)}' : countToText(count: finalGenresLength);
+
+            return ExpandableBoxColumn(
+              tab: libraryTab,
+              header: ExpandableBox(
+                enableHero: enableHero,
+                gridWidget: const ChangeGridCountWidget(
+                  tab: libraryTab,
+                ),
+                isBarVisible: libraryTab.isBarVisible.valueR,
+                leftText: '',
+                leftWidgets: [
+                  NamidaPopupWrapper(
+                    childrenDefault: _getTypeChooserChildren,
+                    childBuilder: (openMenu) => ExpandableBoxChip(
+                      icon: genreType.toIcon(),
+                      label: leftText,
+                      showArrow: true,
+                      onTap: openMenu,
+                    ),
+                  ),
+                ],
+                onSearchBoxVisibilityChange: (newShow) => ScrollSearchController.inst.onSearchBoxVisibiltyChange(libraryTab, newShow),
+                onCloseButtonPressed: () => ScrollSearchController.inst.clearSearchTextField(libraryTab),
+                sortByMenuWidget: SortByMenu(
+                  title: sort.toText(),
+                  popupMenuChild: const SortByMenuGenres(),
+                  isCurrentlyReversed: sortReverse,
+                  onReverseIconTap: () => SearchSortController.inst.sortMedia(settings.activeGenreType.value, reverse: !sortReverse),
+                ),
+                textField: CustomTextField(
+                  textFieldController: libraryTab.textSearchControllerR,
+                  textFieldHintText: lang.filterGenres,
+                  onTextFieldValueChanged: (value) => SearchSortController.inst.searchMedia(value, settings.activeGenreType.value),
+                ),
+              ),
+              page: NamidaScrollbar(
+                controller: scrollController,
+                thumbLabel: _createThumbLabel,
+                child: SmoothCustomScrollView(
+                  controller: scrollController,
+                  slivers: [
+                    const SliverToBoxAdapter(child: listHeader),
+                    ObxPrefer(
+                      enabled: sort.requiresHistory,
+                      rx: HistoryController.inst.topTracksMapListens,
+                      builder: (context, _) => SliverCrossAxisExtentBuilder(
+                        builder: (context, crossAxisExtent) {
+                          const childAspectRatio = 0.8;
+                          final cardWidth = crossAxisExtent / countPerRowResolved;
+                          final cardHeight = cardWidth / childAspectRatio;
+                          return SliverGrid.builder(
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: countPerRowResolved,
+                              childAspectRatio: childAspectRatio,
+                              mainAxisSpacing: 8.0,
+                            ),
+                            itemCount: SearchSortController.inst.genreSearchList.length,
+                            itemBuilder: (context, i) {
+                              final genre = SearchSortController.inst.genreSearchList[i];
+                              final tracks = genre.getGenresTracksFor(genreType);
+                              final topRightText = extraTextResolver?.call(genre, tracks);
+                              return AnimatingGrid(
+                                countPerRowResolved: countPerRowResolved,
+                                columnCount: SearchSortController.inst.genreSearchList.length,
+                                position: i,
+                                shouldAnimate: _shouldAnimate,
+                                child: MultiArtworkCard(
+                                  heroTag: genreType == MediaType.style ? 'style_$genre' : 'genre_$genre',
+                                  tracks: tracks,
+                                  name: genre,
+                                  countPerRow: countPerRow,
+                                  width: cardWidth,
+                                  height: cardHeight,
+                                  showMenuFunction: () => NamidaDialogs.inst.showGenreDialog(genre, genreType),
+                                  onTap: () => NamidaOnTaps.inst.onGenreTap(genre, genreType),
+                                  topRightText: topRightText,
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    kBottomPaddingWidgetSliver,
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

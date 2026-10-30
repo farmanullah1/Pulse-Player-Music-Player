@@ -1,0 +1,602 @@
+// ignore_for_file: unused_element_parameter
+
+part of 'shortcuts_manager.dart';
+
+class _ShortcutsManagerDesktop extends ShortcutsManager {
+  @override
+  List<ShortcutKeyActivator> get _keysToRegister => __keysToRegister;
+
+  late final __keysToRegister = <ShortcutKeyActivator>[
+    // ------------------- playback -------------------
+    ShortcutKeyActivator(
+      action: HotkeyAction.play_pause,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.space,
+      callback: Player.inst.togglePlayPause,
+      title: () => "${lang.play}/${lang.pause}",
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.seek_backwards,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowLeft,
+      callback: Player.inst.seekSecondsBackward,
+      title: () => "<- ${lang.seekbar}",
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.seek_forwards,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowRight,
+      callback: Player.inst.seekSecondsForward,
+      title: () => "${lang.seekbar} ->",
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.volume_up,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowUp,
+      control: true,
+      includeRepeats: true,
+      callback: () {
+        final newVol = Player.inst.volumeUp();
+        _showSnack(message: "${lang.volume} ↑: ${newVol.roundDecimals(2)}");
+      },
+      title: () => "${lang.volume} ↑",
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.volume_down,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowDown,
+      control: true,
+      includeRepeats: true,
+      callback: () {
+        final newVol = Player.inst.volumeDown();
+        _showSnack(message: "${lang.volume} ↓: ${newVol.roundDecimals(2)}");
+      },
+      title: () => "${lang.volume} ↓",
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.previous,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowLeft,
+      control: true,
+      callback: Player.inst.previous,
+      title: () => lang.previous,
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.next,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowRight,
+      control: true,
+      callback: Player.inst.next,
+      title: () => lang.next,
+    ),
+    ShortcutKeyActivator(
+      action: HotkeyAction.stop_after_current,
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.space,
+      control: true,
+      isControlLiteral: true,
+      callback: () {
+        final isStopping = Player.inst.toggleStopAfterCurrent();
+        _showSnack(message: "${lang.stopAfterThisTrack}: ${isStopping ? '✓' : '✗'}");
+      },
+      title: () => lang.stopAfterThisTrack,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowLeft,
+      shift: true,
+      callback: () => ChaptersController.inst.seekToAdjacent(forward: false),
+      title: () => lang.previousChapter,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.arrowRight,
+      shift: true,
+      callback: () => ChaptersController.inst.seekToAdjacent(forward: true),
+      title: () => lang.nextChapter,
+    ),
+
+    // -------------------
+    ShortcutKeyActivator(
+      category: ShortcutCategory.track,
+      key: LogicalKeyboardKey.keyH,
+      control: true,
+      isControlLiteral: true,
+      callback: () async {
+        final currentItem = Player.inst.currentItem.value;
+        if (currentItem is YoutubeID && Player.inst.displayFavouriteButtonAsLike) {
+          final newIsLiked = await YtVideoLikeManager.current.toggleLikeWithoutConfirmation(currentItem.id);
+          if (newIsLiked != null) {
+            newIsLiked
+                ? snackyy(
+                    message: lang.liked,
+                    icon: Broken.like_filled,
+                    leftBarIndicatorColor: Colors.green,
+                  )
+                : snackyy(
+                    message: "${lang.like}: ${lang.removed}",
+                    icon: Broken.like_1,
+                    leftBarIndicatorColor: Colors.red,
+                  );
+          }
+          return;
+        }
+        final bool? newIsFav = currentItem?.execute(
+          selectable: (finalItem) => PlaylistController.inst.favouriteButtonOnPressed(
+            finalItem.track,
+            refreshNotification: false,
+          ),
+          youtubeID: (finalItem) => YoutubePlaylistController.inst.favouriteButtonOnPressed(
+            finalItem.id,
+            refreshNotification: false,
+          ),
+        );
+        if (newIsFav != null) {
+          Player.inst.refreshNotification();
+          newIsFav == true
+              ? snackyy(
+                  message: "${lang.favourites}: ${lang.added}",
+                  icon: Broken.heart_filled,
+                  leftBarIndicatorColor: Colors.green,
+                )
+              : snackyy(
+                  message: "${lang.favourites}: ${lang.removed}",
+                  icon: Broken.heart_slash,
+                  leftBarIndicatorColor: Colors.red,
+                );
+        }
+      },
+      title: () => "${lang.favourites}/${lang.like}: ${lang.add}/${lang.remove}",
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.track,
+      key: LogicalKeyboardKey.keyB,
+      control: true,
+      callback: BookmarksController.inst.addAtCurrentPosition,
+      title: () => lang.addBookmark,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.keyF,
+      control: true,
+      callback: () {
+        if (_isInSettingsPage()) {
+          NamidaSettingSearchBar.toggle();
+        } else {
+          ScrollSearchController.inst.toggleSearch(
+            forceOpen: ScrollSearchController.inst.searchBarKey.currentState?.focusNode.hasPrimaryFocus != true,
+            instant: true,
+          );
+        }
+      },
+      title: () => lang.search,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.keyR,
+      control: true,
+      callback: Indexer.inst.refreshLibraryAndCheckForDiff,
+      title: () => lang.refreshLibrary,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.keyE,
+      control: true,
+      callback: () {
+        _executeMiniPlayers(
+          (localPlayer, ytPlayer, ytQueueChip) {
+            if (ytPlayer != null) {
+              if (ytPlayer.isExpanded) {
+                ytPlayer.animateToState(false);
+              } else {
+                ytPlayer.animateToState(true);
+              }
+            } else {
+              if (localPlayer.isMinimized) {
+                localPlayer.snapToExpanded();
+              } else {
+                localPlayer.snapToMini();
+              }
+            }
+          },
+        );
+      },
+      title: () => lang.openMiniplayer,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.keyQ,
+      control: true,
+      isControlLiteral: true,
+      callback: openPlayerQueue,
+      title: () => lang.openQueue,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.lyrics,
+      key: LogicalKeyboardKey.keyL,
+      control: true,
+      callback: () {
+        settings.enableLyrics.save(!settings.enableLyrics.value);
+        final currentItem = Player.inst.currentItem.value;
+        if (currentItem != null) {
+          Lyrics.inst.updateLyrics(currentItem);
+        }
+      },
+      title: () => lang.lyrics,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.lyrics,
+      key: LogicalKeyboardKey.keyL,
+      control: true,
+      shift: true,
+      callback: () {
+        final fullscreenState = Lyrics.inst.lrcViewKeyFullscreen.currentState;
+        if (fullscreenState != null) {
+          fullscreenState.exitFullScreen();
+        } else {
+          Lyrics.inst.lrcViewKey.currentState?.enterFullScreen();
+        }
+      },
+      title: () => "${lang.lyrics} (${lang.fullscreen})",
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.keyP,
+      control: true,
+      shift: true,
+      callback: () {
+        if (!_isInSettingsPage()) {
+          const SettingsPage().navigate();
+        }
+
+        Timer(
+          const Duration(milliseconds: 100),
+          NamidaSettingSearchBar.open,
+        );
+      },
+      title: () => lang.settings,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.keyS,
+      control: true,
+      shift: true,
+      callback: () async {
+        final mode = settings.player.shuffleButtonMode.value ?? ShuffleButtonMode.toggle;
+        await Player.inst.shuffleByMode(mode);
+        final message = switch (mode) {
+          ShuffleButtonMode.toggle => "${lang.shuffle}: ${settings.player.shuffleQueue.value ? '✓' : '✗'}",
+          ShuffleButtonMode.next || ShuffleButtonMode.all => "${mode.toText()}: ${lang.done}",
+        };
+        _showSnack(
+          message: message,
+        );
+      },
+      title: () => lang.shuffle,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.playback,
+      key: LogicalKeyboardKey.tab,
+      control: true,
+      isControlLiteral: true,
+      callback: () {
+        final e = Player.inst.cycleRepeatMode();
+        _showSnack(
+          message: "${lang.repeatMode}: ${e.buildText()}",
+        );
+      },
+      title: () => lang.repeatMode,
+    ),
+    // -----------------
+    for (final key in const [LogicalKeyboardKey.equal, LogicalKeyboardKey.add, LogicalKeyboardKey.numpadAdd])
+      ShortcutKeyActivator(
+        category: ShortcutCategory.others,
+        key: key,
+        control: true,
+        includeRepeats: true,
+        callback: () => ScaleDetectorState.topmost?.scaleBy(1.1),
+        title: () => lang.zoom,
+      ),
+    for (final key in const [LogicalKeyboardKey.minus, LogicalKeyboardKey.numpadSubtract])
+      ShortcutKeyActivator(
+        category: ShortcutCategory.others,
+        key: key,
+        control: true,
+        includeRepeats: true,
+        callback: () => ScaleDetectorState.topmost?.scaleBy(1 / 1.1),
+        title: () => lang.zoom,
+      ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.digit0,
+      control: true,
+      callback: () => ScaleDetectorState.topmost?.reset(),
+      title: () => lang.zoom,
+    ),
+    // -----------------
+    for (int i = 1; i <= 9; i++)
+      ShortcutKeyActivator(
+        category: ShortcutCategory.track,
+        key: LogicalKeyboardKey(0x00000000030 + i),
+        control: true,
+        alt: true,
+        callback: () async {
+          final currentItem = Player.inst.currentItem.value;
+          if (currentItem is Selectable) {
+            final newRating = i * 10;
+            snackyy(title: lang.rating, message: '$newRating%');
+
+            try {
+              final track = currentItem.track;
+              await NamidaTaggerController.inst.updateTracksMetadata(
+                tracks: [track],
+                editedTags: {
+                  TagField.rating: newRating.toString(),
+                },
+                onStatsEdit: null,
+                onEdit: (didUpdate, error, _) {
+                  if (!didUpdate) {
+                    var msg = lang.metadataEditFailed;
+                    if (error != null) msg += '\n$error';
+                    snackyy(title: lang.warning, message: msg, isError: true);
+                  }
+                },
+                keepFileDates: true,
+                displayFFmpegFallbackWarning: false,
+              );
+            } catch (e) {
+              snackyy(title: lang.warning, message: e.toString(), isError: true);
+            }
+          }
+        },
+        title: () => lang.setRating,
+      ),
+    // -----------------
+    for (int i = 1; i <= 9; i++)
+      ShortcutKeyActivator(
+        category: ShortcutCategory.others,
+        key: LogicalKeyboardKey(0x00000000030 + i),
+        control: true,
+        callback: () {
+          try {
+            final tab = settings.libraryTabs.value[i - 1].activeVariant();
+            ScrollSearchController.inst.animatePageController(tab);
+          } catch (_) {
+            // -- index larger than tabs length
+          }
+        },
+        title: () => lang.libraryTabs,
+      ),
+
+    // ================
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.f11,
+      callback: () async {
+        final isFullscreen = await windowManager.isFullScreen();
+        windowManager.setFullScreen(!isFullscreen);
+      },
+      title: () => lang.fullscreen,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.lyrics,
+      key: LogicalKeyboardKey.keyL,
+      control: true,
+      alt: true,
+      callback: () => WindowController.instance?.toggleMiniLyricsMode(),
+      title: () => lang.miniLyricsWindow,
+    ),
+    ShortcutKeyActivator(
+      category: ShortcutCategory.others,
+      key: LogicalKeyboardKey.escape,
+      callback: () {
+        if (NamidaWindowManager.isMiniLyricsMode.value) {
+          WindowController.instance?.exitMiniLyricsMode();
+          return;
+        }
+        final focusedItem = _getFocusedItem();
+        if (focusedItem != null && !ShortcutsManager.isTextFieldFocused()) {
+          focusedItem.unfocus();
+          return;
+        }
+        NamidaNavigator.inst.back();
+      },
+      title: () => lang.exit,
+    ),
+  ];
+
+  FocusAttachment? _attachment;
+
+  /// ctrl+arrows are mapped to [ScrollIntent] by [WidgetsApp.defaultShortcuts], and since those are dispatched
+  /// from the focused node upwards, they get consumed before ever reaching our root scope handler.
+  /// plain arrows are gated by [_FocusedItemDirectionalAction] instead.
+  /// text fields are unaffected, they consume arrows earlier through [DefaultTextEditingShortcuts].
+  static bool _isStrippedDefault(ShortcutActivator activator, Intent intent) {
+    if (activator is! SingleActivator) return false;
+
+    final trigger = activator.trigger;
+    final isArrow =
+        trigger == LogicalKeyboardKey.arrowLeft || //
+        trigger == LogicalKeyboardKey.arrowRight ||
+        trigger == LogicalKeyboardKey.arrowUp ||
+        trigger == LogicalKeyboardKey.arrowDown;
+    if (!isArrow) return false;
+
+    return intent is ScrollIntent && (activator.control || activator.meta);
+  }
+
+  @override
+  late final Map<ShortcutActivator, Intent> appShortcuts = Map<ShortcutActivator, Intent>.fromEntries(
+    WidgetsApp.defaultShortcuts.entries.where(
+      (e) => !_isStrippedDefault(e.key, e.value),
+    ),
+  );
+
+  @override
+  late final Map<Type, Action<Intent>> appActions = <Type, Action<Intent>>{
+    ...WidgetsApp.defaultActions,
+    DirectionalFocusIntent: _FocusedItemDirectionalAction(),
+  };
+
+  /// scopes and nodes that skip traversal (ex: the navigator's own node) mean nothing is focused.
+  static FocusNode? _getFocusedItem() {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null || focus is FocusScopeNode || focus.skipTraversal) return null;
+    return focus;
+  }
+
+  @override
+  void init() {
+    _attachment = FocusManager.instance.rootScope.attach(
+      null,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+
+        final candidates = triggersIndex[event.logicalKey];
+        if (candidates == null) return KeyEventResult.ignored;
+
+        final keyboard = HardwareKeyboard.instance;
+        for (int i = 0; i < candidates.length; i++) {
+          final activator = candidates[i];
+          if (activator.acceptsMatchedTrigger(event, keyboard)) {
+            if (activator.yieldsToTyping(event)) return KeyEventResult.ignored;
+            activator.callback();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+    );
+  }
+
+  final _globalHotkeys = <HotkeyAction, HotKey>{};
+
+  Future<HotKey> _createGlobalHotkey(HotkeyAction action, LogicalKeyboardKey key, ShortcutKeyData data) async {
+    final definition = HotKeyDefinition(
+      key: key,
+      control: data.ctrl,
+      shift: data.shift,
+      meta: data.meta,
+      alt: data.alt,
+    );
+    final hotkey = await HotKey.create(
+      definition: definition,
+      onPressed: action.toSimpleCallback(),
+    );
+    if (hotkey == null) throw UnsupportedError('${key.keyLabel} is not on the current keyboard layout');
+    return hotkey;
+  }
+
+  @override
+  Future<void> initUserShortcutsFromSettings() async {
+    for (final MapEntry(key: action, value: data) in settings.shortcuts.shortcuts.value.entries) {
+      final key = data?.key;
+      if (data == null || key == null) continue;
+      try {
+        _globalHotkeys[action] = await _createGlobalHotkey(action, key, data);
+      } catch (e, st) {
+        logger.report(e, st);
+      }
+    }
+  }
+
+  @override
+  Future<void> setUserShortcut({required HotkeyAction action, required ShortcutKeyData? data}) async {
+    final oldHotkey = _globalHotkeys[action];
+    final oldData = settings.shortcuts.shortcuts.value[action];
+    if (oldHotkey != null && data == oldData) return;
+
+    // -- registered before disposing the old one, so a refused hotkey keeps the old one
+    final key = data?.key;
+    final newHotkey = data == null || key == null ? null : await _createGlobalHotkey(action, key, data);
+    if (newHotkey == null) {
+      _globalHotkeys.remove(action);
+    } else {
+      _globalHotkeys[action] = newHotkey;
+    }
+    settings.shortcuts.shortcuts.update((shortcuts) => shortcuts[action] = data);
+    await oldHotkey?.dispose();
+  }
+
+  @override
+  Future<void> dispose() async {
+    _attachment?.detach();
+    await Future.wait(_globalHotkeys.values.map((e) => e.dispose()));
+    _globalHotkeys.clear();
+  }
+
+  @override
+  void openPlayerQueue() {
+    _executeMiniPlayers(
+      (localPlayer, ytPlayer, ytQueueChip) {
+        if (ytPlayer != null) {
+          if (!ytPlayer.isExpanded) ytPlayer.animateToState(true);
+          _executeYtQueueSheet(ytQueueChip, (chip) => chip.toggleSheet());
+        } else {
+          if (localPlayer.isInQueue) {
+            localPlayer.snapToExpanded();
+          } else {
+            localPlayer.snapToQueue();
+          }
+        }
+      },
+    );
+  }
+
+  void _executeMiniPlayers(
+    void Function(
+      MiniPlayerController localPlayer,
+      NamidaYTMiniplayerState? ytPlayer,
+      YTMiniplayerQueueChipState? ytQueueChip,
+    )
+    callback,
+  ) {
+    callback(
+      MiniPlayerController.inst,
+      MiniPlayerController.inst.ytMiniplayerKey.currentState,
+      NamidaNavigator.inst.ytQueueSheetKey.currentState,
+    );
+  }
+
+  void _executeYtQueueSheet(YTMiniplayerQueueChipState? ytQueueChip, void Function(YTMiniplayerQueueChipState ytQueueChip) callback) {
+    final ytQueue = NamidaNavigator.inst.ytQueueSheetKey.currentState;
+    if (ytQueue != null) {
+      callback(ytQueue);
+      return;
+    }
+
+    Timer(
+      const Duration(milliseconds: 100),
+      () {
+        final ytQueue = NamidaNavigator.inst.ytQueueSheetKey.currentState;
+        if (ytQueue != null) callback(ytQueue);
+      },
+    );
+  }
+
+  void _showSnack({required String message}) {
+    snackyy(
+      icon: Broken.flash_1,
+      title: lang.shortcuts,
+      message: message,
+      borderColor: Colors.green.withOpacityExt(0.6),
+      top: false,
+      type: SnackbarType.playerInfo,
+    );
+  }
+
+  bool _isInSettingsPage() {
+    final currentRouteType = NamidaNavigator.inst.currentRoute?.route;
+    final isInSettings = currentRouteType == RouteType.SETTINGS_page || currentRouteType == RouteType.SETTINGS_subpage;
+    return isInSettings;
+  }
+}
+
+// by claude
+/// arrows move focus only while an item is focused (ex: after tab), otherwise they reach our root handler (seek).
+class _FocusedItemDirectionalAction extends DirectionalFocusAction {
+  @override
+  bool isEnabled(DirectionalFocusIntent intent) {
+    return _ShortcutsManagerDesktop._getFocusedItem() != null;
+  }
+}

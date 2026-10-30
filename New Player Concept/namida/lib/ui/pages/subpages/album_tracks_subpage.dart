@@ -1,0 +1,328 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:namico_db_wrapper/namico_db_wrapper.dart';
+
+import 'package:namida/base/tracks_search_wrapper.dart';
+import 'package:namida/base/tracks_search_widget_mixin.dart';
+import 'package:namida/class/route.dart';
+import 'package:namida/class/track.dart';
+import 'package:namida/controller/edit_delete_controller.dart';
+import 'package:namida/controller/indexer_controller.dart';
+import 'package:namida/controller/selected_tracks_controller.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/icon_fonts/broken_icons.dart';
+import 'package:namida/core/ntheme.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/ui/dialogs/common_dialogs.dart';
+import 'package:namida/ui/widgets/custom_widgets.dart';
+import 'package:namida/ui/widgets/library/multi_artwork_container.dart';
+import 'package:namida/ui/widgets/library/track_tile.dart';
+import 'package:namida/ui/widgets/network_artwork.dart';
+
+class AlbumTracksPage extends StatefulWidget with NamidaRouteWidget {
+  @override
+  String? get name => albumIdentifier.resolved();
+  @override
+  AlbumIdentifierWrapper? get routeData => albumIdentifier.modifiedOnly();
+
+  @override
+  RouteType get route => RouteType.SUBPAGE_albumTracks;
+
+  final AlbumIdentifierWrapper albumIdentifier;
+  final List<Track> tracks;
+
+  const AlbumTracksPage({
+    super.key,
+    required this.albumIdentifier,
+    required this.tracks,
+  });
+
+  @override
+  State<AlbumTracksPage> createState() => _AlbumTracksPageState();
+}
+
+class _AlbumTracksPageState extends State<AlbumTracksPage> with PortsProvider<TracksSearchParams>, TracksSearchWidgetMixin<AlbumTracksPage> {
+  @override
+  List<Selectable> getSearchableTracks() {
+    return widget.tracks;
+  }
+
+  @override
+  RxBaseCore listChangesListenerRx() => Indexer.inst.mainMapAlbums.rx;
+
+  @override
+  Widget build(BuildContext context) {
+    final tracks = widget.tracks;
+    final name = widget.albumIdentifier.displayAlbumName;
+    final displayTrackNumberinAlbumPage = settings.displayTrackNumberinAlbumPage.value;
+    final queueSource = QueueSource.album(widget.albumIdentifier, name);
+    final heroTag = 'album_${widget.albumIdentifier}';
+    final searchResults = this.searchResults;
+    final rangeOrder = searchResults == null ? null : FilteredRangeOrder(searchResults);
+
+    return BackgroundWrapper(
+      child: AnimationLimiter(
+        child: TrackTilePropertiesProvider(
+          configs: TrackTilePropertiesConfigs(
+            queueSource: queueSource,
+            displayTrackNumber: displayTrackNumberinAlbumPage,
+            fallbackToAlbumCover: false,
+          ),
+          builder: (properties) {
+            return ObxO(
+              rx: settings.mediaItemsTrackSorting,
+              builder: (context, sortingModes) {
+                final sorting = sortingModes[MediaType.album];
+                final sortIsReverse = sorting?.reverse == true;
+                final firstSort = sorting?.firstType;
+                final shouldSplitToDiscSections = firstSort == SortType.discNo && searchResults == null;
+                Map<int, List<Track>>? tracksMappedWithDisc;
+                Map<int, int>? tracksIndicesIncrement;
+                if (shouldSplitToDiscSections) {
+                  tracksMappedWithDisc = <int, List<Track>>{};
+                  tracksIndicesIncrement = <int, int>{};
+                  for (final tr in tracks) {
+                    tracksMappedWithDisc.addForce(tr.discNo, tr);
+                  }
+                  if (sortIsReverse) {
+                    tracksMappedWithDisc.sortByReverse((e) => e.key);
+                  } else {
+                    tracksMappedWithDisc.sortBy((e) => e.key);
+                  }
+                  int countTillNow = 0;
+                  for (final e in tracksMappedWithDisc.entries) {
+                    tracksIndicesIncrement[e.key] = countTillNow;
+                    countTillNow += e.value.length;
+                  }
+                }
+                return Obx(
+                  (context) {
+                    Indexer.inst.mainMapAlbums.valueR; // to update after sorting
+                    return NamidaListViewRaw(
+                      infoBox: (maxWidth) => SubpageInfoContainer(
+                        maxWidth: maxWidth,
+                        type: MediaType.album,
+                        onOpenMenu: () => NamidaDialogs.inst.showAlbumDialog(widget.albumIdentifier),
+                        customArtworkManager: NetworkArtworkInfo.albumAutoArtist(widget.albumIdentifier).toManager(),
+                        title: name,
+                        source: queueSource,
+                        subtitle: tracks.albumArtist,
+                        thirdLineText: tracks.yearOldest.yearFormatted,
+                        heroTag: 'album_${widget.albumIdentifier}',
+                        imageBuilder: (size) {
+                          final squared = Dimensions.inst.shouldAlbumBeSquared(context);
+                          final info = NetworkArtworkInfo.albumAutoArtist(widget.albumIdentifier);
+                          final tracksPathToImage = tracks.pathToImage;
+                          final artworkPre = NetworkArtwork.orLocal(
+                            key: Key(tracksPathToImage),
+                            path: tracksPathToImage,
+                            track: tracks.trackOfImage,
+                            info: info,
+                            thumbnailSize: size,
+                            forceSquared: squared,
+                            compressed: false,
+                            borderRadius: 12.0,
+                            staggered: false, // -- keep false
+                          );
+                          final artwork = NamidaArtworkExpandableToFullscreen(
+                            artwork: artworkPre,
+                            heroTag: heroTag,
+                            imageFile: () => info.toArtworkIfExistsAndValidAndEnabled() ?? File(tracksPathToImage),
+                            fetchImage: () => null,
+                            onSave: (imgFile, _) => imgFile == null ? null : EditDeleteController.inst.saveImageToStorage(imgFile),
+                            themeColor: null,
+                          );
+                          return squared
+                              ? MultiArtworkContainer(
+                                  size: size,
+                                  heroTag: heroTag,
+                                  child: artwork,
+                                )
+                              : Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 12.0),
+                                  padding: const EdgeInsets.all(3.0),
+                                  child: NamidaHero(
+                                    tag: heroTag,
+                                    child: artwork,
+                                  ),
+                                );
+                        },
+                        tracksFn: () => tracks,
+                        bannerBuilder: (width, height) {
+                          final info = NetworkArtworkInfo.albumAutoArtist(widget.albumIdentifier);
+                          final tracksPathToImage = tracks.pathToImage;
+                          final banner = NetworkArtwork.orLocal(
+                            key: Key(tracksPathToImage),
+                            path: tracksPathToImage,
+                            track: tracks.trackOfImage,
+                            info: info,
+                            thumbnailSize: height,
+                            width: width,
+                            height: height,
+                            forceSquared: true,
+                            compressed: true,
+                            borderRadius: 0.0,
+                            blur: 0.0,
+                          );
+                          return NamidaArtworkExpandableToFullscreen(
+                            artwork: banner,
+                            heroTag: null,
+                            imageFile: () => info.toArtworkIfExistsAndValidAndEnabled() ?? File(tracksPathToImage),
+                            fetchImage: () => null,
+                            onSave: (imgFile, _) => imgFile == null ? null : EditDeleteController.inst.saveImageToStorage(imgFile),
+                            themeColor: null,
+                          );
+                        },
+                      ),
+                      stickyHeader: TracksSearchWidgetBox(
+                        state: this,
+                        leftText: [
+                          tracks.displayTrackKeyword,
+                          tracks.totalDurationFormatted,
+                        ].join(' - '),
+                        type: MediaType.album,
+                        pageTitle: widget.albumIdentifier.album,
+                      ),
+                      slivers: [
+                        if (tracksMappedWithDisc != null && tracksMappedWithDisc.keys.any((n) => n > 1))
+                          ...tracksMappedWithDisc.entries
+                              .map(
+                                (discEntry) {
+                                  final indicesToIncrement = tracksIndicesIncrement?[discEntry.key] ?? 0;
+                                  return SliverMainAxisGroup(
+                                    slivers: [
+                                      PinnedHeaderSliver(
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(bottom: 4.0),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              NDecoratedBox(
+                                                decoration: (colors) => BoxDecoration(
+                                                  color: Color.alphaBlend(colors.secondaryContainer.withOpacityExt(0.5), colors.scaffold),
+                                                  borderRadius: BorderRadius.horizontal(
+                                                    right: Radius.circular(6.0.multipliedRadius),
+                                                  ),
+                                                ),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.symmetric(vertical: 6.0),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const SizedBox(width: 8.0),
+                                                      const Icon(
+                                                        Broken.cd,
+                                                        size: 20.0,
+                                                      ),
+                                                      const SizedBox(width: 4.0),
+                                                      Flexible(
+                                                        child: NamidaText(
+                                                          " ${discEntry.key}",
+                                                          style: NText.medium,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 12.0),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              Flexible(
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  child: NDecoratedBox(
+                                                    decoration: (colors) => BoxDecoration(
+                                                      color: colors.scaffold,
+                                                      borderRadius: BorderRadius.only(
+                                                        bottomLeft: Radius.circular(6.0.multipliedRadius),
+                                                      ),
+                                                    ),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(vertical: 6.0),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const SizedBox(width: 8.0),
+                                                          NamidaText(
+                                                            [
+                                                              discEntry.value.displayTrackKeyword,
+                                                              discEntry.value.totalDurationFormatted,
+                                                            ].join(' • '),
+                                                            style: const NText(.small, weight: FontWeight.w500),
+                                                          ),
+                                                          const SizedBox(width: 12.0),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      SliverFixedExtentList.builder(
+                                        itemCount: discEntry.value.length,
+                                        itemExtent: Dimensions.inst.trackTileItemExtent,
+                                        itemBuilder: (context, i) {
+                                          final track = discEntry.value[i];
+                                          final trackEffectiveIndex = i + indicesToIncrement;
+                                          return AnimatingTile(
+                                            key: ValueKey(i),
+                                            position: trackEffectiveIndex,
+                                            child: TrackTile(
+                                              properties: properties,
+                                              index: trackEffectiveIndex,
+                                              trackOrTwd: track,
+                                              tracks: tracks, // all tracks not just disc section
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              )
+                              .addSeparators(
+                                separator: const SliverPadding(
+                                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                                ),
+                              )
+                        else
+                          SliverFixedExtentList.builder(
+                            itemCount: searchResults?.length ?? tracks.length,
+                            itemExtent: Dimensions.inst.trackTileItemExtent,
+                            itemBuilder: (context, i) {
+                              final index = searchResults == null ? i : searchResults[i];
+                              final track = tracks[index];
+                              return AnimatingTile(
+                                key: ValueKey(index),
+                                position: i,
+                                child: TrackTile(
+                                  properties: properties,
+                                  index: index,
+                                  trackOrTwd: track,
+                                  tracks: tracks, // all tracks even if in disc section
+                                  rangeOrder: rangeOrder,
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

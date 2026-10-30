@@ -1,0 +1,623 @@
+import 'dart:async';
+import 'dart:isolate';
+
+import 'package:flutter/material.dart';
+
+import 'package:namida/base/pull_to_refresh.dart';
+import 'package:namida/class/file_matcher.dart';
+import 'package:namida/class/route.dart';
+import 'package:namida/class/track.dart';
+import 'package:namida/class/video.dart';
+import 'package:namida/controller/edit_delete_controller.dart';
+import 'package:namida/controller/file_browser.dart';
+import 'package:namida/controller/history_controller.dart';
+import 'package:namida/controller/indexer_controller.dart';
+import 'package:namida/controller/navigator_controller.dart';
+import 'package:namida/controller/playlist_controller.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/icon_fonts/broken_icons.dart';
+import 'package:namida/core/ntheme.dart';
+import 'package:namida/core/translations/language.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/packages/three_arched_circle.dart';
+import 'package:namida/ui/widgets/custom_widgets.dart';
+
+enum _LoadingProgress {
+  initializing('Initializing'),
+  preparingFiles('Preparing files'),
+  collectingPlaylistTracks('Collecting playlist tracks'),
+  findingHistoryTracks('Finding history tracks'),
+  findingLibraryTracks('Finding library tracks'),
+  findingPlaylistTracks('Finding playlist tracks');
+
+  final String value;
+  const _LoadingProgress(this.value);
+}
+
+class IndexerMissingTracksSubpage extends StatefulWidget with NamidaRouteWidget {
+  @override
+  RouteType get route => RouteType.SUBPAGE_INDEXER_UPDATE_MISSING_TRACKS;
+
+  const IndexerMissingTracksSubpage({super.key});
+
+  @override
+  State<IndexerMissingTracksSubpage> createState() => _IndexerMissingTracksSubpageState();
+}
+
+class _IndexerMissingTracksSubpageState extends State<IndexerMissingTracksSubpage> with TickerProviderStateMixin, PullToRefreshMixin {
+  var _missingTracksPaths = <String>[];
+  final _missingTracksSuggestions = <String, String?>{}.obs;
+  final _selectedTracksToUpdate = <String, bool>{}.obs;
+
+  bool _isLoading = false;
+  final _loadingProgressOnGoing = <_LoadingProgress, bool>{_LoadingProgress.initializing: true}.obs;
+  final _loadingProgressActualTracksCount = <_LoadingProgress, int>{}.obs;
+  final _subLoadingProgress = 0.0.obs;
+  final _loadingCountTotalSteps = _LoadingProgress.values.length;
+
+  bool _isUpdatingPaths = false;
+
+  late final ScrollController _scrollController;
+
+  Isolate? _isolate;
+  ReceivePort? _resultPort;
+  ReceivePort? _portLoadingProgress;
+  ReceivePort? _portSublistsLoadingProgress;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = NamidaScrollController.create();
+    Timer(Duration.zero, _fetchMissingTracks);
+  }
+
+  @override
+  void dispose() {
+    _missingTracksSuggestions.close();
+    _selectedTracksToUpdate.close();
+    _scrollController.dispose();
+    _loadingProgressOnGoing.close();
+    _subLoadingProgress.close();
+    _stopPreviousIsolates();
+    super.dispose();
+  }
+
+  void _stopPreviousIsolates() {
+    try {
+      _isolate?.kill(priority: Isolate.immediate);
+      _resultPort?.close();
+      _portLoadingProgress?.close();
+      _portSublistsLoadingProgress?.close();
+      _isolate = null;
+      _resultPort = null;
+      _portLoadingProgress = null;
+      _portSublistsLoadingProgress = null;
+    } catch (_) {}
+  }
+
+  void _resetMaps() {
+    _missingTracksPaths = [];
+    _missingTracksSuggestions.value = {};
+    _selectedTracksToUpdate.value = {};
+  }
+
+  Future<void> _fetchMissingTracks() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    _stopPreviousIsolates();
+
+    _loadingProgressOnGoing[_LoadingProgress.preparingFiles] = true;
+
+    late final Set<String> audioFiles;
+    await Future.wait([
+      Indexer.inst.getAudioFiles().then((value) => audioFiles = value),
+      HistoryController.inst.waitForHistoryAndMostPlayedLoad,
+      PlaylistController.inst.waitForPlaylistsLoad,
+      PlaylistController.inst.waitForFavouritePlaylistLoad,
+      PlaylistController.inst.waitForM3UPlaylistsLoad,
+    ]);
+
+    _loadingProgressOnGoing[_LoadingProgress.collectingPlaylistTracks] = true;
+
+    _resultPort = ReceivePort();
+    _portLoadingProgress = ReceivePort();
+    _portSublistsLoadingProgress = ReceivePort();
+
+    try {
+      StreamSubscription? portLoadingProgressSub;
+      portLoadingProgressSub = _portLoadingProgress!.listen((stepProgress) {
+        _loadingProgressOnGoing[stepProgress] = true;
+      });
+
+      StreamSubscription? portSublistsLoadingProgressSub;
+      portSublistsLoadingProgressSub = _portSublistsLoadingProgress!.listen((subProgress) {
+        _subLoadingProgress.value = subProgress as double;
+      });
+
+      final indicesProgressMap = <int, _LoadingProgress>{};
+      final allTracksSet = <String>{};
+      indicesProgressMap[allTracksSet.length] = _LoadingProgress.findingHistoryTracks;
+      void addTracksCountToStep(_LoadingProgress step) {
+        final alreadyExistedCount = _loadingProgressActualTracksCount.value.values.fold(0, (previousValue, element) => previousValue + element);
+        _loadingProgressActualTracksCount[step] = allTracksSet.length - alreadyExistedCount;
+      }
+
+      // -- history first to be sorted & has no duplicates
+      for (final track in HistoryController.inst.topTracksMapListens.value.keysSortedByValue) {
+        allTracksSet.add(track.path);
+      }
+      addTracksCountToStep(_LoadingProgress.findingHistoryTracks);
+
+      indicesProgressMap[allTracksSet.length] = _LoadingProgress.findingLibraryTracks;
+      for (final path in Indexer.inst.allTracksMappedByPath.keys) {
+        allTracksSet.add(path);
+      }
+      addTracksCountToStep(_LoadingProgress.findingLibraryTracks);
+
+      indicesProgressMap[allTracksSet.length - 1] = _LoadingProgress.findingPlaylistTracks;
+      for (final p in PlaylistController.inst.playlistsMap.value.values) {
+        for (final e in p.tracks) {
+          allTracksSet.add(e.track.path);
+        }
+      }
+      addTracksCountToStep(_LoadingProgress.findingPlaylistTracks);
+
+      final params = _FetchMissingTracksParams(
+        allAudioFiles: audioFiles,
+        allTracksSet: allTracksSet,
+        indicesProgressMap: indicesProgressMap,
+        progressPort: _portLoadingProgress!.sendPort,
+        resultsPort: _resultPort!.sendPort,
+        subProgressPort: _portSublistsLoadingProgress!.sendPort,
+      );
+      _isolate = await Isolate.spawn(_fetchMissingTracksIsolate, params);
+
+      final res = await _resultPort!.first as (List<String>, Map<String, String?>);
+
+      _missingTracksPaths = res.$1;
+      _missingTracksSuggestions.value = res.$2;
+
+      _resultPort?.close();
+      _portLoadingProgress?.close();
+      portLoadingProgressSub.cancel();
+      portSublistsLoadingProgressSub.cancel();
+    } catch (_) {}
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  static void _fetchMissingTracksIsolate(_FetchMissingTracksParams params) {
+    final allAudioFiles = params.allAudioFiles;
+    final allTracksSet = params.allTracksSet;
+    final indicesProgressMap = params.indicesProgressMap;
+    final progressPort = params.progressPort;
+    final resultsPort = params.resultsPort;
+    final subProgressPort = params.subProgressPort;
+
+    final fileMatcher = FileMatcher.init(allAudioFiles: allAudioFiles);
+
+    final missingTracksPaths = <String>[];
+    final missingTracksSuggestions = <String, String?>{};
+
+    void checkAndAdd(String rawPath) {
+      final tr = Track.explicit(rawPath);
+      if (tr.isNetwork) return;
+      final exists = tr.existsSync();
+      if (!exists) {
+        missingTracksPaths.add(rawPath);
+        missingTracksSuggestions[rawPath] = fileMatcher.getSuggestion(rawPath);
+      }
+    }
+
+    final int totalIndices = allTracksSet.length - 1;
+    int index = 0;
+    for (final rawPath in allTracksSet) {
+      if (index % 20 == 0) subProgressPort.send(index / totalIndices);
+
+      checkAndAdd(rawPath);
+      final progress = indicesProgressMap[index];
+      if (progress != null) progressPort.send(progress);
+      index++;
+    }
+
+    resultsPort.send((missingTracksPaths, missingTracksSuggestions));
+
+    fileMatcher.dispose();
+  }
+
+  void _pickNewPathFor(String path) async {
+    final file = await NamidaFileBrowser.pickFile(note: lang.update);
+    final newPath = file?.path;
+    _missingTracksSuggestions[path] = newPath;
+    if (newPath != null) _selectedTracksToUpdate[path] = true;
+  }
+
+  Future<void> _onUpdating() async {
+    if (_selectedTracksToUpdate.isEmpty) return;
+    setState(() => _isUpdatingPaths = true);
+
+    final newPaths = <String, String>{};
+    for (final e in _selectedTracksToUpdate.entries) {
+      if (e.value) {
+        final sugg = _missingTracksSuggestions[e.key];
+        if (sugg != null) newPaths[e.key] = sugg;
+      }
+    }
+
+    bool didUpdate = false;
+    try {
+      await EditDeleteController.inst.updateTrackPathInEveryPartOfNamidaBulk(newPaths, removeOldTracksFromLibrary: true);
+      didUpdate = true;
+      snackyy(title: lang.note, message: "${lang.done}: ${newPaths.length.displayTrackKeyword}", top: false);
+    } catch (e) {
+      snackyy(title: lang.error, message: '$e', top: false, isError: true);
+    }
+
+    if (didUpdate) {
+      // -- only clearing what was actually updated
+      for (final k in newPaths.keys) {
+        _missingTracksPaths.remove(k);
+        _missingTracksSuggestions.remove(k);
+        _selectedTracksToUpdate.remove(k);
+      }
+    }
+    setState(() => _isUpdatingPaths = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BackgroundWrapper(
+      child: Stack(
+        children: [
+          _isLoading
+              ? Center(
+                  child: ObxO(
+                    rx: _loadingProgressOnGoing,
+                    builder: (context, loadingProgressDone) => ObxO(
+                      rx: _loadingProgressActualTracksCount,
+                      builder: (context, stepTracksCountMap) => Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              NBuilder(
+                                builder: (context, colors) => ThreeArchedCircle(
+                                  size: 56.0,
+                                  color: colors.secondary,
+                                ),
+                              ),
+                              ObxO(
+                                rx: _subLoadingProgress,
+                                builder: (context, subProgress) => NamidaText(
+                                  "${(subProgress * 100).toStringAsFixed(2)}%",
+                                  style: NText.small,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12.0),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ..._LoadingProgress.values.map(
+                                (e) {
+                                  String val = '${e.index + 1}. ${e.value}';
+                                  final isDone =
+                                      loadingProgressDone[e] == true && (loadingProgressDone.length == _loadingCountTotalSteps || loadingProgressDone.keys.lastOrNull != e);
+                                  val += isDone ? ' ✓' : '...';
+                                  final opacity = isDone ? 0.8 : 0.5;
+                                  final trsCount = stepTracksCountMap[e];
+                                  if (trsCount != null) val += ' (${trsCount.formatDecimal()})';
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                                    child: NamidaText(
+                                      val,
+                                      style: NText.small,
+                                      color: NColors(.textSmall, opacity: opacity),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : Listener(
+                  onPointerMove: (event) {
+                    onPointerMove(_scrollController, event);
+                  },
+                  onPointerUp: (event) {
+                    onRefresh(() async {
+                      _resetMaps();
+                      return await _fetchMissingTracks();
+                    });
+                  },
+                  onPointerCancel: (event) => onVerticalDragFinish(),
+                  child: _missingTracksPaths.isEmpty
+                      ? Center(
+                          child: Column(
+                            crossAxisAlignment: .center,
+                            mainAxisAlignment: .center,
+                            children: [
+                              const Icon(
+                                Broken.emoji_happy,
+                                size: 48.0,
+                              ),
+                              const SizedBox(height: 8.0),
+                              NamidaText(
+                                lang.noTracksFound,
+                                style: NText.large,
+                              ),
+                            ],
+                          ),
+                        )
+                      : NamidaScrollbar(
+                          controller: _scrollController,
+                          child: AnimatedEnabled(
+                            enabled: !_isUpdatingPaths,
+                            child: SuperSmoothListView.builder(
+                              controller: _scrollController,
+                              padding: EdgeInsets.only(bottom: Dimensions.inst.globalBottomPaddingEffectiveR + kFABSize + 8.0),
+                              itemCount: _missingTracksPaths.length,
+                              itemBuilder: (context, index) {
+                                final path = _missingTracksPaths[index];
+                                return Padding(
+                                  padding: const EdgeInsets.all(3.0),
+                                  child: Obx(
+                                    (context) {
+                                      final suggestion = _missingTracksSuggestions[path];
+                                      final isSelected = _selectedTracksToUpdate[path] == true;
+                                      final itemContent = Stack(
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 6.0),
+                                            child: Row(
+                                              children: [
+                                                const SizedBox(width: 12.0),
+                                                NDecoratedBox(
+                                                  decoration: (colors) => BoxDecoration(
+                                                    color: colors.secondary.withOpacityExt(0.3),
+                                                    borderRadius: BorderRadius.circular(6.0.multipliedRadius),
+                                                  ),
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 3.0, vertical: 2.0),
+                                                    child: ObxO(
+                                                      rx: HistoryController.inst.topTracksMapListens,
+                                                      builder: (context, topTracksMapListens) {
+                                                        final listens = topTracksMapListens[Track.explicit(path)] ?? topTracksMapListens[Video.explicit(path)];
+                                                        final listensCount = listens?.length ?? 0;
+                                                        return NamidaText(
+                                                          '$listensCount',
+                                                          style: NText.small,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12.0),
+                                                Expanded(
+                                                  child: Column(
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      NamidaText(
+                                                        path,
+                                                        style: NText.medium,
+                                                      ),
+                                                      if (suggestion != null)
+                                                        NamidaText(
+                                                          " --> $suggestion",
+                                                          style: NText.small,
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12.0),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.end,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    _missingTracksSuggestions[path] == null
+                                                        ? const SizedBox()
+                                                        : NamidaCheckMark(
+                                                            size: 18.0,
+                                                            active: isSelected,
+                                                          ),
+                                                    const SizedBox(width: 4.0),
+                                                    NamidaIconButton(
+                                                      verticalPadding: 6.0,
+                                                      horizontalPadding: 4.0,
+                                                      icon: Broken.repeat_circle,
+                                                      onPressed: () => _pickNewPathFor(path),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(width: 8.0),
+                                              ],
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 0,
+                                            right: 0,
+                                            child: NamidaBlurryContainer(
+                                              borderRadius: BorderRadius.only(
+                                                bottomLeft: Radius.circular(6.0.multipliedRadius),
+                                                topRight: Radius.circular(6.0.multipliedRadius),
+                                              ),
+                                              padding: const EdgeInsets.only(top: 2.0, right: 8.0, left: 6.0, bottom: 2.0),
+                                              child: NamidaText(
+                                                "${index + 1}",
+                                                style: NText.small,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                      return NBuilder(
+                                        selfAnimated: true,
+                                        builder: (context, colors) {
+                                          final borderColor = colors.secondary.withOpacityExt(0.6);
+                                          return NamidaInkWell(
+                                            animationDurationMS: 300,
+                                            borderRadius: 12.0,
+                                            bgColor: NColors.card,
+                                            decoration: BoxDecoration(
+                                              border: isSelected
+                                                  ? Border.all(
+                                                      width: 1.5,
+                                                      color: borderColor,
+                                                    )
+                                                  : null,
+                                            ),
+                                            onTap: () {
+                                              if (_missingTracksSuggestions[path] == null) return;
+                                              final wasUpadting = (_selectedTracksToUpdate[path] ?? false);
+                                              if (wasUpadting) {
+                                                _selectedTracksToUpdate.remove(path);
+                                              } else {
+                                                _selectedTracksToUpdate[path] = true;
+                                              }
+                                            },
+                                            child: itemContent,
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                ),
+          pullToRefreshWidget,
+          Obx(
+            (context) => Positioned(
+              bottom: Dimensions.inst.globalBottomPaddingTotalR,
+              right: 12.0,
+              child: _isUpdatingPaths
+                  ? NDecoratedBox(
+                      decoration: (colors) => BoxDecoration(
+                        borderRadius: BorderRadius.circular(12.0.multipliedRadius),
+                        color: colors.card,
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.shadow,
+                            blurRadius: 6.0,
+                            offset: const Offset(0, 4.0),
+                          ),
+                        ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: NBuilder(
+                          builder: (context, colors) => ThreeArchedCircle(
+                            size: 36.0,
+                            color: colors.secondary,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Row(
+                      children: [
+                        Obx(
+                          (context) {
+                            final allSelected =
+                                _selectedTracksToUpdate.isNotEmpty && _missingTracksPaths.every((e) => _missingTracksSuggestions[e] == null || _selectedTracksToUpdate[e] == true);
+                            return NamidaFABButton(
+                              tooltip: () => lang.selectAll,
+                              icon: allSelected ? Broken.tick_square : Broken.task_square,
+                              dim: !allSelected,
+                              onTap: () {
+                                final allSelected =
+                                    _selectedTracksToUpdate.isNotEmpty &&
+                                    _missingTracksPaths.every((e) => _missingTracksSuggestions[e] == null || _selectedTracksToUpdate[e] == true);
+                                if (allSelected) {
+                                  _selectedTracksToUpdate.clear();
+                                } else {
+                                  for (var e in _missingTracksPaths) {
+                                    if (_missingTracksSuggestions[e] != null) _selectedTracksToUpdate[e] = true;
+                                  }
+                                }
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8.0),
+                        Obx(
+                          (context) {
+                            final totalLength = _selectedTracksToUpdate.length;
+                            return NamidaFABButton(
+                              enabled: totalLength > 0,
+                              icon: Broken.pen_add,
+                              text: "${lang.update} ($totalLength)",
+                              onTap: () async {
+                                final isUpdating = false.obs;
+                                NamidaNavigator.inst.navigateDialog(
+                                  onDisposing: () {
+                                    isUpdating.close();
+                                  },
+                                  tapToDismiss: () => !isUpdating.value,
+                                  dialog: CustomBlurryDialog(
+                                    isWarning: true,
+                                    normalTitleStyle: true,
+                                    bodyText: "${lang.update}: ${_selectedTracksToUpdate.length.displayTrackKeyword}?",
+                                    actions: [
+                                      const CancelButton(),
+                                      ObxO(
+                                        rx: isUpdating,
+                                        builder: (context, updating) => NamidaButton(
+                                          enabled: !updating,
+                                          isLoading: updating,
+                                          text: lang.update.toUpperCase(),
+                                          onTap: () async {
+                                            isUpdating.value = true;
+                                            await _onUpdating();
+                                            isUpdating.value = false;
+                                            NamidaNavigator.inst.closeDialog();
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FetchMissingTracksParams {
+  final Set<String> allAudioFiles;
+  final Set<String> allTracksSet;
+  final Map<int, _LoadingProgress> indicesProgressMap;
+  final SendPort progressPort;
+  final SendPort resultsPort;
+  final SendPort subProgressPort;
+
+  const _FetchMissingTracksParams({
+    required this.allAudioFiles,
+    required this.allTracksSet,
+    required this.indicesProgressMap,
+    required this.progressPort,
+    required this.resultsPort,
+    required this.subProgressPort,
+  });
+}

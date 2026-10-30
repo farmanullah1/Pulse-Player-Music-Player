@@ -1,0 +1,2812 @@
+// ignore_for_file: use_build_context_synchronously
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'package:history_manager/history_manager.dart';
+import 'package:playlist_manager/module/playlist_id.dart';
+import 'package:playlist_manager/playlist_manager.dart';
+import 'package:youtipie/class/execute_details.dart';
+import 'package:youtipie/core/extensions.dart' show ThumbnailPickerExt;
+
+import 'package:namida/class/eggs_data.dart';
+import 'package:namida/class/folder.dart';
+import 'package:namida/class/named_presets.dart';
+import 'package:namida/class/queue.dart';
+import 'package:namida/class/route.dart';
+import 'package:namida/class/sort_chain.dart';
+import 'package:namida/class/track.dart';
+import 'package:namida/controller/current_color.dart';
+import 'package:namida/controller/eggs_controller.dart';
+import 'package:namida/controller/folders_controller.dart';
+import 'package:namida/controller/generators_controller.dart';
+import 'package:namida/controller/history_controller.dart';
+import 'package:namida/controller/indexer_controller.dart';
+import 'package:namida/controller/navigator_controller.dart';
+import 'package:namida/controller/platform/namida_channel/namida_channel.dart';
+import 'package:namida/controller/player_controller.dart';
+import 'package:namida/controller/playlist_controller.dart';
+import 'package:namida/controller/queue_controller.dart';
+import 'package:namida/controller/scroll_search_controller.dart';
+import 'package:namida/controller/search_sort_controller.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/core/constants.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/icon_fonts/broken_icons.dart';
+import 'package:namida/core/namida_converter_ext.dart';
+import 'package:namida/core/ntheme.dart';
+import 'package:namida/core/translations/language.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/ui/dialogs/edit_tags_dialog.dart';
+import 'package:namida/ui/dialogs/queue_insertion_dialogs.dart';
+import 'package:namida/ui/pages/sound_control_page.dart';
+import 'package:namida/ui/pages/subpages/album_tracks_subpage.dart';
+import 'package:namida/ui/pages/subpages/artist_tracks_subpage.dart';
+import 'package:namida/ui/pages/subpages/genre_tracks_subpage.dart';
+import 'package:namida/ui/pages/subpages/playlist_tracks_subpage.dart';
+import 'package:namida/ui/pages/subpages/queue_tracks_subpage.dart';
+import 'package:namida/ui/widgets/custom_widgets.dart';
+import 'package:namida/ui/widgets/eggs/eggs.dart';
+import 'package:namida/ui/widgets/history_listens_navigation.dart';
+import 'package:namida/ui/widgets/reorderable_active_items_list.dart';
+import 'package:namida/ui/widgets/settings/extra_settings.dart';
+import 'package:namida/ui/widgets/sort_by_button.dart';
+import 'package:namida/youtube/class/youtube_id.dart';
+import 'package:namida/youtube/controller/youtube_account_controller.dart';
+import 'package:namida/youtube/controller/youtube_history_controller.dart';
+import 'package:namida/youtube/controller/youtube_info_controller.dart';
+import 'package:namida/youtube/controller/yt_generators_controller.dart';
+import 'package:namida/youtube/widgets/yt_thumbnail.dart';
+
+class NamidaOnTaps {
+  static NamidaOnTaps get inst => _instance;
+  static final NamidaOnTaps _instance = NamidaOnTaps._internal();
+  NamidaOnTaps._internal();
+
+  static final historyListensNavigation = Rxn<HistoryListensNavigation>();
+
+  Future<void> onArtistTap(String name, MediaType type, [List<Track>? tracksPre]) async {
+    final tracks = tracksPre ?? name.getArtistTracksFor(type);
+
+    final albumIdsMap = <AlbumIdentifierWrapper, List<Track>>{};
+    for (final tr in tracks) {
+      for (var album in tr.albumsIdentifiersModified) {
+        albumIdsMap[album] ??= album.getAlbumTracks();
+      }
+    }
+
+    final albums = <MapEntry<AlbumIdentifierWrapper, List<Track>>>[];
+    final eps = <MapEntry<AlbumIdentifierWrapper, List<Track>>>[];
+    final singles = <MapEntry<AlbumIdentifierWrapper, List<Track>>>[];
+    final extras = <MapEntry<AlbumIdentifierWrapper, List<Track>>>[];
+    for (final a in albumIdsMap.entries) {
+      if (a.value.albumArtist.contains(name)) {
+        final listOfType = switch (a.key.getAlbumType()) {
+          AlbumType.single => singles,
+          AlbumType.ep => eps,
+          AlbumType.normal => albums,
+        };
+        listOfType.add(a);
+      } else {
+        extras.add(a);
+      }
+    }
+
+    ArtistTracksPage(
+      name: name,
+      tracks: tracks,
+      albums: albums,
+      eps: eps,
+      singles: singles,
+      extras: extras,
+      type: type,
+    ).navigate();
+  }
+
+  void onArtistsTap(List<String> artists) {
+    if (artists.length <= 1) {
+      final artist = artists.firstOrNull;
+      if (artist != null) onArtistTap(artist, MediaType.artist);
+      return;
+    }
+    NamidaNavigator.inst.navigateDialog(
+      dialog: CustomBlurryDialog(
+        title: lang.goToArtist,
+        normalTitleStyle: true,
+        icon: Broken.profile_2user,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: artists
+              .map(
+                (e) => CustomListTile(
+                  icon: Broken.microphone,
+                  title: e,
+                  onTap: () {
+                    NamidaNavigator.inst.closeDialog();
+                    onArtistTap(e, MediaType.artist);
+                  },
+                ),
+              )
+              .toFixedList(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> onAlbumTap(AlbumIdentifierWrapper? albumIdentifier) async {
+    if (albumIdentifier == null) return;
+    final tracks = albumIdentifier.getAlbumTracks();
+
+    AlbumTracksPage(
+      albumIdentifier: albumIdentifier,
+      tracks: tracks,
+    ).navigate();
+  }
+
+  Future<void> onGenreTap(String name, [MediaType type = MediaType.genre]) async {
+    GenreTracksPage(
+      name: name,
+      tracks: name.getGenresTracksFor(type),
+      type: type,
+    ).navigate();
+  }
+
+  Future<void> onNormalPlaylistTap(
+    String playlistName, {
+    bool disableAnimation = false,
+    List<Track>? focusTracks,
+  }) async {
+    return NormalPlaylistTracksPage(
+      playlistName: playlistName,
+      disableAnimation: disableAnimation,
+      focusTracks: focusTracks,
+    ).navigate();
+  }
+
+  Future<void> onHistoryPlaylistTap({int? initialListen, List<int>? listensToNavigate}) async {
+    historyListensNavigation.value = HistoryListensNavigation.of(listensToNavigate, initialListen);
+    bool shouldNavigate = true;
+    if (initialListen != null) {
+      shouldNavigate = jumpToListen(
+        HistoryController.inst,
+        initialListen,
+        Dimensions.inst.trackTileItemExtent,
+        kHistoryDayHeaderHeightWithPadding,
+        RouteType.SUBPAGE_historyTracks,
+      );
+    }
+    if (!shouldNavigate) return;
+    const historyTab = LibraryTab.history;
+    if (settings.libraryTabs.value.contains(historyTab)) {
+      ScrollSearchController.inst.animatePageController(historyTab, jumpToTopIfSamePage: false, restoreScrollPosition: initialListen == null);
+    } else {
+      await const HistoryTracksPage().navigate();
+    }
+  }
+
+  /// returns wether the page is most likely not rendered and thus should be navigated to.
+  static bool jumpToListen(HistoryManager historyManager, int listen, double itemHeight, double headerHeight, RouteType routeType) {
+    final scrollInfo = historyManager.getListenScrollPosition(
+      listenMS: listen,
+      extraItemsOffset: 2,
+    );
+
+    historyManager.highlightedItem.value = scrollInfo;
+
+    bool isInHistoryPage() => NamidaNavigator.inst.currentRoute?.route == routeType && historyManager.scrollController.hasClients;
+
+    void jump() {
+      if (isInHistoryPage()) {
+        final p = historyManager.scrollController.positions.firstOrNull;
+        if (p != null && p.hasContentDimensions) {
+          historyManager.scrollController.jumpTo(scrollInfo.toScrollOffset(itemHeight, headerHeight));
+        }
+      }
+    }
+
+    NamidaNavigator.inst.hideStuff();
+
+    if (isInHistoryPage()) {
+      jump();
+      return false;
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
+      return true;
+    }
+  }
+
+  Future<void> onMostPlayedPlaylistTap({MostPlayedTimeRange? mptr, DateRange? dateCustom}) async {
+    if (mptr != null) {
+      settings.transaction(() {
+        settings.mostPlayedTimeRange.save(mptr);
+        settings.mostPlayedCustomDateRange.save(dateCustom);
+      });
+      HistoryController.inst.updateTempMostPlayedPlaylist(
+        mptr: mptr,
+        customDateRange: dateCustom,
+      );
+    }
+
+    return const MostPlayedTracksPage().navigate();
+  }
+
+  Future<void> onFolderTapNavigate(Folder folder, FoldersController? controller, {Track? trackToScrollTo}) async {
+    controller ??= FoldersController.tracksAndVideos;
+    ScrollSearchController.inst.animatePageController(controller.libraryTab);
+    controller.stepIn(folder, trackToScrollTo: trackToScrollTo);
+  }
+
+  Future<void> onQueueTap(Queue queue) async {
+    QueueTracksPage(queue: queue).navigate();
+  }
+
+  Future<void> onQueueDelete(Queue queue) async {
+    final oldQueue = queue;
+    QueueController.inst.removeQueue(oldQueue);
+    snackyy(
+      title: lang.undoChanges,
+      message: lang.undoChangesDeletedQueue,
+      displayDuration: SnackDisplayDuration.long,
+      button: SnackbarButton(
+        text: lang.undo,
+        function: () async => await QueueController.inst.reAddQueue(oldQueue),
+      ),
+    );
+  }
+
+  Future<void> onRemoveTracksFromPlaylist(String name, List<TrackWithDate> tracksWithDates) async {
+    void showSnacky({required void Function() whatDoYouWant}) {
+      snackyy(
+        title: lang.undoChanges,
+        message: lang.undoChangesDeletedTrack,
+        displayDuration: SnackDisplayDuration.long,
+        button: SnackbarButton(
+          text: lang.undo,
+          function: whatDoYouWant,
+        ),
+      );
+    }
+
+    final bool isHistory = name == k_PLAYLIST_NAME_HISTORY;
+
+    if (isHistory) {
+      final tempList = List<TrackWithDate>.from(tracksWithDates);
+      await HistoryController.inst.removeTracksFromHistory(tempList);
+      showSnacky(
+        whatDoYouWant: () async {
+          final daysToSave = HistoryController.inst.addTracksToHistoryOnly(tempList, preventDuplicate: true);
+          HistoryController.inst.updateMostPlayedPlaylist(tempList);
+          HistoryController.inst.historyMap.refresh();
+          await HistoryController.inst.saveHistoryToStorage(daysToSave);
+        },
+      );
+    } else {
+      final playlist = PlaylistController.inst.getPlaylist(name);
+      if (playlist == null) return;
+
+      final twdAndIndexes = <TrackWithDate, int>{};
+      final tracksToFind = tracksWithDates.toSet();
+      final playlistTracks = playlist.tracks;
+      for (int i = 0; i < playlistTracks.length && tracksToFind.isNotEmpty; i++) {
+        final twd = playlistTracks[i];
+        if (tracksToFind.remove(twd)) twdAndIndexes[twd] = i;
+      }
+
+      await PlaylistController.inst.removeTracksFromPlaylist(playlist, twdAndIndexes.values.toList());
+      showSnacky(
+        whatDoYouWant: () async {
+          PlaylistController.inst.insertTracksInPlaylistWithEachIndex(
+            playlist,
+            twdAndIndexes,
+          );
+        },
+      );
+    }
+  }
+
+  void onSubPageTracksSortIconTap(MediaType media, {Widget? header}) {
+    const defaultSorts = <MediaType, List<SortType>>{
+      MediaType.track: [SortType.title, SortType.year, SortType.album],
+      MediaType.album: [SortType.trackNo, SortType.year, SortType.title],
+      MediaType.artist: [SortType.year, SortType.title],
+      MediaType.genre: [SortType.year, SortType.title],
+      MediaType.style: [SortType.year, SortType.title],
+      MediaType.language: [SortType.year, SortType.title],
+      MediaType.mood: [SortType.title],
+      MediaType.tag: [SortType.title],
+      MediaType.rating: [SortType.title],
+      MediaType.folder: [SortType.filename],
+      MediaType.folderMusic: [SortType.filename],
+      MediaType.folderVideo: [SortType.filename],
+    };
+    SortChain<SortType> activeSorting() => settings.mediaItemsTrackSorting.value[media] ?? const SortChain<SortType>([]);
+    final initialSorting = activeSorting();
+    return _onSubPageSortIconTap<SortType>(
+      header: header,
+      minimumItems: 1,
+      allSortsList: List<SortType>.from(SortType.values),
+      sortToText: (sort) => sort.toText(),
+      sortToIcon: (sort) => sort.toIcon(),
+      defaultSorts: defaultSorts[media] ?? [SortType.year],
+      currentSorting: initialSorting,
+      allowCustom: false,
+      withSortKeyOptions: true,
+      prefixFiltersOf: SortOptionsCards.prefixFiltersOfTracks,
+      onSortChange: (activeSorters) {
+        final currentSorting = activeSorting();
+        final sorting = currentSorting.copyWith(entries: activeSorters);
+        if (sorting == currentSorting) return;
+        settings.updateMediaItemsTrackSorting(media, sorting);
+      },
+      onSortReverseChange: (reverse) {
+        final sorting = activeSorting().copyWith(reverse: reverse);
+        settings.updateMediaItemsTrackSorting(media, sorting);
+      },
+      onDone: () {
+        final didChange = activeSorting() != initialSorting;
+        if (didChange) Indexer.inst.sortMediaTracksSubLists([media]);
+      },
+      leftActionBuilder: (onBeforeChange, onChanged) => _TrackSortPresetsButton(
+        media: media,
+        onBeforeChange: onBeforeChange,
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  void onTrackSearchFilterTap() {
+    final originalFilters = settings.trackSearchFilter.value;
+
+    void refreshIfChanged() {
+      final didChange = settings.trackSearchFilter.value.didChangeFrom(originalFilters);
+      if (didChange) SearchSortController.inst.onTrackSearchFilterChanged();
+    }
+
+    NamidaNavigator.inst.navigateDialog(
+      onDismissing: refreshIfChanged,
+      dialog: CustomBlurryDialog(
+        title: lang.filterTracksBy,
+        leftAction: const _TrackSearchFilterPresetsButton(),
+        actions: [
+          IconButton(
+            icon: const Icon(Broken.refresh),
+            tooltip: lang.restoreDefaults,
+            onPressed: () => settings.updateTrackSearchFilter(settings.trackSearchFilterDefault.fallback),
+          ),
+          DoneButton(
+            additional: refreshIfChanged,
+          ),
+        ],
+        child: SizedBox(
+          width: namida.width,
+          height: namida.height * 0.6,
+          child: Column(
+            children: [
+              const _TrackSearchFilterPresetHint(),
+              Expanded(
+                child: SmoothSingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ...TrackSearchFilter.values.map(
+                        (e) => _TrackSearchFilterTile(
+                          filter: e,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void onGroupSortIconTap(MediaType media) {
+    final sorting = settings.groupSortingOf(media);
+    final availableSorts = switch (media) {
+      MediaType.album => GroupSortType.forAlbums(),
+      MediaType.artist || MediaType.albumArtist || MediaType.composer => GroupSortType.forArtists(media),
+      MediaType.genre || MediaType.style => GroupSortType.forGenres(),
+      MediaType.language => GroupSortType.forLanguages(),
+      MediaType.playlist => GroupSortType.forPlaylists(),
+      MediaType.mood || MediaType.tag => GroupSortType.forMoodsTags(),
+      MediaType.track || MediaType.folder || MediaType.folderMusic || MediaType.folderVideo || MediaType.rating => null,
+    };
+    if (availableSorts == null) return;
+    final allSorts = availableSorts.where((e) => e != GroupSortType.shuffle && e != GroupSortType.custom).toList();
+    final defaultSorts = [allSorts.first];
+    final currentEntriesValid = sorting.entries.where((e) => allSorts.contains(e.type)).toList();
+    final currentEntries = currentEntriesValid.isEmpty ? [SortEntry(allSorts.first)] : currentEntriesValid;
+    final currentSorting = sorting.copyWith(entries: currentEntries);
+    final isPlaylists = media == MediaType.playlist;
+
+    SortChain<GroupSortType> newSorting = currentSorting;
+
+    return _onSubPageSortIconTap<GroupSortType>(
+      minimumItems: 1,
+      defaultSorts: defaultSorts,
+      allSortsList: allSorts,
+      sortToText: (sort) => sort.toText(),
+      sortToIcon: (sort) => sort.toIcon(),
+      currentSorting: currentSorting,
+      allowCustom: false,
+      withSortKeyOptions: true,
+      prefixFiltersOf: isPlaylists ? null : SortOptionsCards.prefixFiltersOfGroups,
+      onSortChange: (activeSorters) => newSorting = newSorting.copyWith(entries: activeSorters),
+      onSortReverseChange: (reverse) => newSorting = newSorting.copyWith(reverse: reverse),
+      onDone: () {
+        if (newSorting != sorting) SearchSortController.inst.sortMedia(media, groupSorting: newSorting);
+      },
+    );
+  }
+
+  void onPlaylistSubPageTracksSortIconTap<T extends PlaylistItemWithDate, E, S extends Enum>(
+    String playlistName,
+    PlaylistManager<T, E, SortEntry<S>> playlistManager,
+    List<S> allSorts,
+    String Function(S sort) sortToText,
+    IconData Function(S sort) sortToIcon,
+  ) {
+    final initialpl = playlistManager.getPlaylist(playlistName);
+    final initialSorts = initialpl?.sortsType ?? <SortEntry<S>>[];
+    final initialReverse = initialpl?.sortReverse ?? false;
+    List<SortEntry<S>>? newSorts;
+    bool? newSortReverse;
+
+    void onFinalUpdatePropertySort(List<SortEntry<S>> sorts, bool? reverse, {bool restoreCustomOrder = false}) {
+      playlistManager.updatePropertyInPlaylist(playlistName, itemsSortType: sorts, itemsSortReverse: reverse, restoreCustomOrder: restoreCustomOrder);
+      playlistManager.resetCanReorder();
+    }
+
+    return _onSubPageSortIconTap<S>(
+      minimumItems: 0,
+      defaultSorts: [],
+      allSortsList: List<S>.from(allSorts),
+      sortToText: sortToText,
+      sortToIcon: sortToIcon,
+      currentSorting: SortChain(initialSorts, reverse: initialReverse),
+      allowCustom: false,
+      onSortChange: (activeSorters) {
+        newSorts = activeSorters;
+      },
+      onSortReverseChange: (reverse) {
+        newSortReverse = reverse;
+        final pl = playlistManager.getPlaylist(playlistName);
+        if (pl != null && pl.sortReverse != reverse) {
+          playlistManager.updatePropertyInPlaylist(playlistName, itemsSortReverse: reverse);
+        }
+      },
+      onDone: () {
+        final pl = playlistManager.getPlaylist(playlistName);
+        final sorts = newSorts;
+        if (pl != null && sorts != null) {
+          if (!listEquals(pl.sortsType, sorts)) {
+            final canRestoreCustomOrder = sorts.isEmpty && pl.customOrder != null;
+            if (!canRestoreCustomOrder) {
+              onFinalUpdatePropertySort(sorts, newSortReverse);
+            } else if (pl.isReadOnly) {
+              onFinalUpdatePropertySort(sorts, newSortReverse, restoreCustomOrder: true); // -- the source order is back on next refresh anyways
+            } else {
+              NamidaNavigator.inst.navigateDialog(
+                dialog: CustomBlurryDialog(
+                  normalTitleStyle: true,
+                  icon: Broken.rotate_left,
+                  title: '${lang.restoreCustomOrder}?',
+                  actions: [
+                    NamidaButton(
+                      text: lang.keepCurrentOrder,
+                      onTap: () {
+                        onFinalUpdatePropertySort(sorts, newSortReverse);
+                        NamidaNavigator.inst.closeDialog();
+                      },
+                    ),
+                    NamidaButton(
+                      text: lang.confirm,
+                      onTap: () {
+                        onFinalUpdatePropertySort(sorts, newSortReverse, restoreCustomOrder: true);
+                        NamidaNavigator.inst.closeDialog();
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+        }
+      },
+    );
+  }
+
+  void onTracksSortIconTap({
+    required SortChain<SortType> currentSorting,
+    List<SortType>? allSorts,
+    required void Function(SortChain<SortType> sorting) onChanged,
+  }) {
+    SortChain<SortType> newSorting = currentSorting;
+
+    return _onSubPageSortIconTap<SortType>(
+      minimumItems: 0,
+      defaultSorts: const [],
+      allSortsList: List<SortType>.from(allSorts ?? SortType.values),
+      sortToText: (sort) => sort.toText(),
+      sortToIcon: (sort) => sort.toIcon(),
+      currentSorting: currentSorting,
+      allowCustom: false,
+      onSortChange: (activeSorters) => newSorting = newSorting.copyWith(entries: activeSorters),
+      onSortReverseChange: (reverse) => newSorting = newSorting.copyWith(reverse: reverse),
+      onDone: () {
+        if (newSorting != currentSorting) onChanged(newSorting);
+      },
+    );
+  }
+
+  void _onSubPageSortIconTap<S extends Enum>({
+    Widget? header,
+    required SortChain<S> currentSorting,
+    required List<S> allSortsList,
+    required List<S> defaultSorts,
+    required int minimumItems,
+    required String Function(S sort) sortToText,
+    required IconData Function(S sort) sortToIcon,
+    required bool allowCustom,
+    bool withSortKeyOptions = false,
+    Set<TrackSearchFilter> Function(Iterable<S> sorts)? prefixFiltersOf,
+    required void Function(List<SortEntry<S>> activeSorters) onSortChange,
+    required void Function(bool reverse) onSortReverseChange,
+    required void Function() onDone,
+    Widget Function(VoidCallback onBeforeChange, void Function(SortChain<S> sorting) onChanged)? leftActionBuilder,
+  }) {
+    final sorters = currentSorting.entries.toList().obs;
+    final isReverse = currentSorting.reverse.obs;
+
+    void saveSorts() {
+      final activeSorts = sorters.value.toList();
+      onSortChange(activeSorts);
+    }
+
+    void resortMedia() {
+      saveSorts();
+      onDone();
+    }
+
+    void loadSorting(SortChain<S> sorting) {
+      sorters.value = sorting.entries.toList();
+      isReverse.value = sorting.reverse;
+    }
+
+    void onActiveSortsChanged(List<S> activeSorts) {
+      final oldSorters = sorters.value;
+      sorters.value = activeSorts.map((sort) => oldSorters.firstWhereEff((e) => e.type == sort) ?? SortEntry(sort)).toList();
+    }
+
+    final leftAction = leftActionBuilder?.call(saveSorts, loadSorting);
+
+    NamidaNavigator.inst.navigateDialog(
+      scale: 1.0,
+      onDisposing: () {
+        sorters.close();
+        isReverse.close();
+      },
+      onDismissing: resortMedia,
+      dialog: CustomBlurryDialog(
+        title: "${lang.sortBy} (${lang.reorderable})",
+        leftAction: leftAction,
+        actions: [
+          IconButton(
+            icon: const Icon(Broken.refresh),
+            tooltip: lang.restoreDefaults,
+            onPressed: () {
+              final defaultEntries = defaultSorts.map((e) => SortEntry(e)).toList();
+              sorters.value = defaultEntries;
+              onSortChange(defaultEntries);
+            },
+          ),
+          DoneButton(additional: resortMedia),
+        ],
+        child: SizedBox(
+          width: namida.width,
+          height: namida.height * 0.55,
+          child: Column(
+            children: [
+              ?header,
+              Obx(
+                (context) {
+                  final reverse = isReverse.valueR;
+                  final activeTypes = sorters.valueR.map((e) => e.type);
+                  final prefixFilters = prefixFiltersOf?.call(activeTypes);
+                  return SortOptionsCards(
+                    isReversed: reverse,
+                    onReverseTap: () {
+                      onSortReverseChange(!reverse);
+                      isReverse.value = !reverse;
+                    },
+                    withSortKeyOptions: withSortKeyOptions,
+                    prefixFilters: prefixFilters,
+                    showTitles: true,
+                    dense: header != null,
+                  );
+                },
+              ),
+              const SizedBox(height: 8.0),
+              Expanded(
+                child: ObxO(
+                  rx: sorters,
+                  builder: (context, sortersList) => NamidaReorderableActiveItemsList<S>(
+                    items: allSortsList,
+                    activeItems: sortersList.map((e) => e.type).toFixedList(),
+                    minimumItems: minimumItems,
+                    toText: sortToText,
+                    toIcon: sortToIcon,
+                    onChanged: onActiveSortsChanged,
+                    trailingBuilder: (sort, isActive) {
+                      final entry = sortersList.firstWhereEff((e) => e.type == sort);
+                      final isReversed = entry?.reverse ?? false;
+                      return AnimatedShow(
+                        show: isActive,
+                        isHorizontal: true,
+                        child: _SortEntryReverseButton(
+                          isReversed: isReversed,
+                          onTap: () => sorters.replaceSingleWhere((e) => e.type == sort, (e) => e.toggled()),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void openSoundControl() async {
+    NamidaNavigator.inst.isInSoundControlSubpage = true;
+    await NamidaNavigator.inst.navigateToRoot(const SoundControlPage());
+    NamidaNavigator.inst.isInSoundControlSubpage = false;
+  }
+
+  void openAudioPath() => SoundControlPage.showAudioPath();
+
+  static Map<int, int> _getQueuesSize(String dir) {
+    final map = <int, int>{};
+    final files = Directory(dir).listSync();
+    for (var e in files) {
+      try {
+        if (e is File) map[int.parse(e.path.getFilenameWOExt)] = e.lengthSync();
+      } catch (_) {}
+    }
+    return map;
+  }
+
+  void onQueuesClearIconTap() async {
+    await QueueController.inst.loadAllQueues();
+
+    final sizesLookupMap = <int, int>{}.obs;
+    _getQueuesSize.thready(AppDirs.QUEUES).then((value) => sizesLookupMap.value = value);
+    String getSubtitle(Map<int, int> lookup, List<int> datesList) {
+      int total = 0;
+      String? suffix;
+      for (var e in datesList) {
+        final size = lookup[e];
+        if (size != null) {
+          total += size;
+        } else {
+          suffix ??= '?';
+        }
+      }
+      return "${total.fileSizeFormatted}${suffix ?? ''}";
+    }
+
+    final selectedToClear = <QueueSourceEnum>[].obs;
+    final selectedHomepageItemToClear = <HomePageItems>[].obs;
+    final values = List<QueueSourceEnum>.from(QueueSourceEnum.values);
+    values.remove(QueueSourceEnum.homePageItem);
+
+    final lookup = <Enum, List<int>>{};
+    final lookupHomepageItem = <HomePageItems, List<int>>{};
+    final lookupNonFavourites = <int, bool>{};
+    final map = QueueController.inst.queuesMap.value;
+    for (final e in map.entries) {
+      final queue = e.value;
+      final date = queue.date;
+      lookupNonFavourites[date] = !queue.isFav;
+      final hpi = queue.homePageItem;
+      if (hpi != null) {
+        lookupHomepageItem.addForce(hpi, date);
+      } else {
+        lookup.addForce(queue.source.s, date);
+      }
+    }
+    final nonFavourites = false.obs;
+
+    final totalToRemove = 0.obs;
+    void updateTotalToRemove() {
+      int total = 0;
+      if (nonFavourites.value) {
+        total += lookupNonFavourites.values.where((v) => v).length;
+        for (var e in selectedToClear.value) {
+          total += lookup[e]?.where((element) => lookupNonFavourites[element] != true).length ?? 0;
+        }
+        for (var e in selectedHomepageItemToClear.value) {
+          total += lookupHomepageItem[e]?.where((element) => lookupNonFavourites[element] != true).length ?? 0;
+        }
+      } else {
+        for (var e in selectedToClear.value) {
+          total += lookup[e]?.length ?? 0;
+        }
+        for (var e in selectedHomepageItemToClear.value) {
+          total += lookupHomepageItem[e]?.length ?? 0;
+        }
+      }
+
+      totalToRemove.value = total;
+    }
+
+    final isRemoving = false.obs;
+
+    final nonFavouritesList = lookupNonFavourites.keys.where((v) => lookupNonFavourites[v] == true).toList();
+
+    NamidaNavigator.inst.navigateDialog(
+      onDisposing: () {
+        selectedToClear.close();
+        selectedHomepageItemToClear.close();
+        nonFavourites.close();
+        totalToRemove.close();
+        isRemoving.close();
+      },
+      dialog: CustomBlurryDialog(
+        title: lang.clear,
+        actions: [
+          CancelButtonDisabled(
+            disabledRx: isRemoving,
+          ),
+          Obx(
+            (context) => NamidaButton(
+              enabled: !isRemoving.valueR && totalToRemove.valueR > 0,
+              text: "${lang.delete} (${totalToRemove.valueR})",
+              isLoading: isRemoving.valueR,
+              onTap: () async {
+                NamidaNavigator.inst.navigateDialog(
+                  dialog: CustomBlurryDialog(
+                    isWarning: true,
+                    normalTitleStyle: true,
+                    bodyText: "${lang.delete} ${totalToRemove.value}?",
+                    actions: [
+                      const CancelButton(),
+                      NamidaButton(
+                        colorScheme: Colors.red,
+                        text: lang.delete.toUpperCase(),
+                        onTap: () async {
+                          NamidaNavigator.inst.closeDialog();
+                          isRemoving.value = true;
+                          if (nonFavourites.value) {
+                            await QueueController.inst.removeQueues(nonFavouritesList);
+                          }
+                          for (final s in selectedToClear.value) {
+                            final queues = lookup[s];
+                            if (queues != null) await QueueController.inst.removeQueues(queues);
+                          }
+                          for (final s in selectedHomepageItemToClear.value) {
+                            final queues = lookupHomepageItem[s];
+                            if (queues != null) await QueueController.inst.removeQueues(queues);
+                          }
+                          isRemoving.value = false;
+                          NamidaNavigator.inst.closeDialog();
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+        child: SizedBox(
+          height: namida.height * 0.6,
+          width: namida.width,
+          child: Obx(
+            (context) {
+              final sizesLookup = sizesLookupMap.valueR;
+              return SuperSmoothListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(3.0),
+                    child: ListTileWithCheckMark(
+                      dense: true,
+                      icon: Broken.heart_slash,
+                      title: '${lang.nonFavourites} (${nonFavouritesList.length})',
+                      subtitle: getSubtitle(sizesLookup, nonFavouritesList),
+                      active: nonFavourites.valueR,
+                      onTap: () {
+                        nonFavourites.toggle();
+                        updateTotalToRemove();
+                      },
+                    ),
+                  ),
+                  const NamidaContainerDivider(margin: EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0)),
+                  ...values.map(
+                    (e) {
+                      final list = lookup[e];
+                      return list != null && list.isNotEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(3.0),
+                              child: ListTileWithCheckMark(
+                                dense: true,
+                                title: "${e.toText()} (${list.length})",
+                                subtitle: getSubtitle(sizesLookup, list),
+                                active: selectedToClear.contains(e),
+                                onTap: () {
+                                  selectedToClear.addOrRemove(e);
+                                  updateTotalToRemove();
+                                },
+                              ),
+                            )
+                          : const SizedBox();
+                    },
+                  ),
+                  const NamidaContainerDivider(margin: EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0)),
+                  ...HomePageItems.values.map(
+                    (e) {
+                      final list = lookupHomepageItem[e];
+                      return list != null && list.isNotEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(3.0),
+                              child: ListTileWithCheckMark(
+                                dense: true,
+                                title: "${e.toText()} (${list.length})",
+                                subtitle: getSubtitle(sizesLookup, list),
+                                active: selectedHomepageItemToClear.contains(e),
+                                onTap: () {
+                                  selectedHomepageItemToClear.addOrRemove(e);
+                                  updateTotalToRemove();
+                                },
+                              ),
+                            )
+                          : const SizedBox();
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<PlaylistAddDuplicateAction?> showDuplicatedDialogAction(
+    List<PlaylistAddDuplicateAction> duplicationActions, {
+    bool displayTitle = true,
+    PlaylistAddDuplicateAction? initiallySelected,
+  }) async {
+    final actionRx = Rxn<PlaylistAddDuplicateAction>(initiallySelected);
+    PlaylistAddDuplicateAction? actionToUse;
+    await NamidaNavigator.inst.navigateDialog(
+      onDismissing: () {
+        actionRx.close();
+      },
+      dialog: CustomBlurryDialog(
+        normalTitleStyle: true,
+        title: lang.confirm,
+        actions: [
+          NamidaTextButton(
+            onTap: NamidaNavigator.inst.closeDialog,
+            text: lang.cancel,
+          ),
+          ObxO(
+            rx: actionRx,
+            builder: (context, action) => NamidaButton(
+              enabled: action != null,
+              text: lang.confirm,
+              onTap: () {
+                actionToUse = actionRx.value;
+                NamidaNavigator.inst.closeDialog();
+              },
+            ),
+          ),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (displayTitle)
+                NamidaText(
+                  lang.duplicatedItemsAdding,
+                  style: NText.medium,
+                ),
+              if (displayTitle) const SizedBox(height: 12.0),
+              Column(
+                children: duplicationActions
+                    .map(
+                      (e) => Padding(
+                        padding: const EdgeInsets.all(3.0),
+                        child: ObxO(
+                          rx: actionRx,
+                          builder: (context, act) => ListTileWithCheckMark(
+                            active: act == e,
+                            title: e.toText(),
+                            onTap: () => actionRx.value = e,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toFixedList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return actionToUse;
+  }
+
+  void showSavedImageInSnack(String? path, Color? themeColor) {
+    String title;
+    String subtitle;
+    Color snackColor;
+    SnackbarButton? button;
+
+    if (path == null) {
+      title = lang.error;
+      subtitle = lang.couldntSaveImage;
+      snackColor = Colors.red;
+    } else {
+      final parentPath = File(path).parent.path;
+      title = lang.copiedArtwork;
+      subtitle = '${lang.savedIn}: $parentPath';
+      snackColor = themeColor ?? CurrentColor.inst.color;
+      if (NamidaChannel.inst.canOpenFileInExplorer) {
+        button = SnackbarButton(
+          text: lang.openInFileExplorer,
+          icon: Broken.export_1,
+          function: () => NamidaChannel.inst.openFileInExplorer(path),
+        );
+      }
+    }
+    snackyy(
+      title: title,
+      message: subtitle,
+      leftBarIndicatorColor: snackColor,
+      altDesign: true,
+      top: false,
+      button: button,
+    );
+  }
+}
+
+enum NamidaCalendarDatePickerType {
+  single,
+  multi,
+  range,
+}
+
+Future<void> showCalendarDialog<T extends ItemWithDate, E>({
+  required String title,
+  required String buttonText,
+  NamidaCalendarDatePickerType calendarType = NamidaCalendarDatePickerType.range,
+  DateTime? firstDate,
+  DateTime? lastDate,
+  required bool useHistoryDates,
+  HistoryManager<T, E>? historyController,
+  void Function(List<DateTime> dates)? onChanged,
+  required void Function(List<DateTime> dates) onGenerate,
+  DateTime? initialDate,
+  List<DateTime> initialSelection = const [],
+  Widget? bottomWidget,
+  VoidCallback? onDisposing,
+}) async {
+  historyController ??= HistoryController.inst as HistoryManager<T, E>;
+
+  final dates = <DateTime>[...initialSelection];
+
+  final daysNumber = 0.obs;
+  final canGenerate = false.obs;
+
+  void calculateDaysNumber() {
+    if (canGenerate.value) {
+      if (dates.length == 2) {
+        daysNumber.value = dates[0].difference(dates[1]).inDays.abs() + 1;
+      }
+    } else {
+      daysNumber.value = 0;
+    }
+  }
+
+  void reEvaluateCanGenerate() {
+    switch (calendarType) {
+      case NamidaCalendarDatePickerType.range:
+        canGenerate.value = dates.length == 2;
+      case NamidaCalendarDatePickerType.single:
+        canGenerate.value = dates.length == 1;
+      case NamidaCalendarDatePickerType.multi:
+        canGenerate.value = dates.isNotEmpty;
+    }
+  }
+
+  reEvaluateCanGenerate();
+  calculateDaysNumber();
+
+  final context = namida.context!;
+  final locale = Localizations.localeOf(context);
+  final localizations = MaterialLocalizations.of(context);
+  String formatMonth(DateTime monthDate, {bool short = true}) {
+    return short ? getLocaleShortMonthFormat(locale).format(monthDate) : getLocaleFullMonthFormat(locale).format(monthDate);
+  }
+
+  await NamidaNavigator.inst.navigateDialog(
+    onDisposing: () {
+      daysNumber.close();
+      canGenerate.close();
+      onDisposing?.call();
+    },
+    scale: 0.90,
+    dialog: CustomBlurryDialog(
+      titleWidgetInPadding: Obx(
+        (context) => NamidaText(
+          '$title ${daysNumber.valueR == 0 ? '' : "(${daysNumber.valueR.displayDayKeyword})"}',
+          style: NText.large,
+        ),
+      ),
+      normalTitleStyle: true,
+      horizontalInset: 28.0,
+      actions: [
+        const CancelButton(),
+        Obx(
+          (context) => NamidaButton(
+            enabled: canGenerate.valueR,
+            onTap: () => onGenerate(dates),
+            text: buttonText,
+          ),
+        ),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CalendarDatePicker2(
+            displayedMonthDate: initialDate,
+            onValueChanged: (value) {
+              final dts = value.whereType<DateTime>().toList();
+              dates.assignAll(dts);
+
+              if (onChanged != null) onChanged(dts);
+
+              reEvaluateCanGenerate();
+              calculateDaysNumber();
+            },
+            config: CalendarDatePicker2Config(
+              hideYearPickerDividers: true,
+              hideMonthPickerDividers: true,
+              disableVibration: true,
+              dayModeScrollDirection: .horizontal,
+              calendarViewMode: CalendarDatePicker2Mode.day,
+              dayBorderRadius: BorderRadius.circular(8.0.multipliedRadius),
+              modePickerBuilder:
+                  ({
+                    required CalendarDatePicker2Mode viewMode,
+                    required DateTime monthDate,
+                    required VoidCallback? onTap,
+                    bool? isMonthPicker,
+                  }) {
+                    String text;
+                    IconData icon;
+                    if (isMonthPicker == true) {
+                      text = "${formatMonth(monthDate)} • ${monthDate.month}";
+                      icon = Broken.calendar_1;
+                    } else {
+                      text = localizations.formatYear(monthDate);
+                      icon = Broken.calendar;
+                    }
+                    return NamidaInkWell(
+                      alignment: AlignmentGeometry.center,
+                      onTap: onTap,
+                      padding: const EdgeInsetsGeometry.symmetric(horizontal: 16.0, vertical: 12.0),
+                      child: Row(
+                        mainAxisSize: .min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 2.0),
+                            child: Icon(
+                              icon,
+                              size: 20.0,
+                            ),
+                          ),
+                          const SizedBox(width: 6.0),
+                          Flexible(
+                            child: NamidaText(
+                              text,
+                              style: NText.medium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+              dayBuilder:
+                  ({
+                    required DateTime date,
+                    TextStyle? textStyle,
+                    BoxDecoration? decoration,
+                    bool? isSelected,
+                    bool? isDisabled,
+                    bool? isToday,
+                  }) => _buildCalendarDayWidget(
+                    date: date,
+                    textStyle: textStyle,
+                    decoration: decoration,
+                    isSelected: isSelected,
+                    isDisabled: isDisabled,
+                    isToday: isToday,
+                    extraText: useHistoryDates ? historyController?.historyMap.value[date.toDaysSince1970()]?.length.toString() ?? '' : null,
+                    localizations: localizations,
+                  ),
+              monthBuilder:
+                  ({
+                    required int month,
+                    required DateTime date,
+                    TextStyle? textStyle,
+                    BoxDecoration? decoration,
+                    bool? isSelected,
+                    bool? isDisabled,
+                    bool? isCurrentMonth,
+                  }) => Center(
+                    child: SizedBox(
+                      height: 36.0,
+                      width: 72.0,
+                      child: DecoratedBox(
+                        decoration: decoration ?? const BoxDecoration(),
+                        child: Center(
+                          child: Semantics(
+                            selected: isSelected,
+                            button: true,
+                            child: Text(
+                              "${formatMonth(date)} • $month",
+                              style: textStyle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              calendarType: switch (calendarType) {
+                NamidaCalendarDatePickerType.single => CalendarDatePicker2Type.single,
+                NamidaCalendarDatePickerType.multi => CalendarDatePicker2Type.multi,
+                NamidaCalendarDatePickerType.range => CalendarDatePicker2Type.range,
+              },
+              currentDate: initialDate,
+              firstDate: firstDate ?? (useHistoryDates ? historyController.oldestTrack?.dateAddedMS.milliSecondsSinceEpoch : null),
+              lastDate: lastDate ?? (useHistoryDates ? historyController.newestTrack?.dateAddedMS.milliSecondsSinceEpoch : null),
+            ),
+            value: initialSelection,
+          ),
+          ?bottomWidget,
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildCalendarDayWidget({
+  required DateTime date,
+  TextStyle? textStyle,
+  BoxDecoration? decoration,
+  bool? isSelected,
+  bool? isDisabled,
+  bool? isToday,
+  String? extraText,
+  required MaterialLocalizations localizations,
+}) {
+  return Center(
+    child: AspectRatio(
+      aspectRatio: 0.95,
+      child: DecoratedBox(
+        decoration: decoration ?? const BoxDecoration(),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Text(
+              localizations.formatDecimal(date.day),
+              style: textStyle,
+            ),
+            if (extraText != null)
+              Positioned(
+                top: 5.0,
+                right: 6.0,
+                child: Text(
+                  extraText,
+                  style: textStyle?.copyWith(
+                    fontSize: (textStyle.fontSize ?? 20.0) * 0.65,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class BottomSheetTextFieldConfig {
+  final String? initalControllerText;
+  final String hintText;
+  final String labelText;
+  final int? maxLength;
+  final String? Function(String? value)? validator;
+  final Widget? trailing;
+
+  const BottomSheetTextFieldConfig({
+    this.initalControllerText,
+    required this.hintText,
+    required this.labelText,
+    this.maxLength,
+    required this.validator,
+    this.trailing,
+  });
+}
+
+class BottomSheetTextFieldConfigWC extends BottomSheetTextFieldConfig {
+  final TextEditingController controller;
+
+  const BottomSheetTextFieldConfigWC({
+    required this.controller,
+    required super.hintText,
+    required super.labelText,
+    super.maxLength,
+    required super.validator,
+    super.trailing,
+  }) : super(initalControllerText: null);
+}
+
+Future<String?> showNamidaBottomSheetWithTextField({
+  bool isScrollControlled = true,
+  bool showDragHandle = true,
+  required String title,
+  String? subtitle,
+  required BottomSheetTextFieldConfig textfieldConfig,
+  List<BottomSheetTextFieldConfigWC>? extraTextfieldsConfig,
+  required String buttonText,
+  TextStyle? buttonTextStyle,
+  Color? buttonColor,
+  required FutureOr<bool> Function(String text) onButtonTap,
+  Widget Function(FormState formState)? extraItemsBuilder,
+  Widget Function(FormState formState)? extraPreItemsBuilder,
+  Rx<bool>? isInitiallyLoading,
+  bool displayAccountThumbnail = false,
+  bool confirmDiscardingEdits = false,
+}) async {
+  final localController = textfieldConfig is BottomSheetTextFieldConfigWC ? textfieldConfig.controller : TextEditingController(text: textfieldConfig.initalControllerText);
+  final textfieldTrailing = textfieldConfig.trailing;
+  final initialText = localController.text;
+  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+
+  final focusNode = FocusNode();
+  focusNode.requestFocus();
+
+  String? finalText;
+
+  await NamidaNavigator.inst.showSheet(
+    showDragHandle: showDragHandle,
+    isScrollControlled: isScrollControlled,
+    hasUnsavedChanges: confirmDiscardingEdits ? () => finalText == null && localController.text != initialText : null,
+    builder: (context, bottomPadding, maxWidth, maxHeight) {
+      final child = Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28.0).add(const EdgeInsets.only(bottom: 18.0)),
+        child: Form(
+          key: formKey,
+          child: NamidaLoadingSwitcher(
+            builder: (loadingController) => SmoothSingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  NamidaText(
+                    title,
+                    style: NText.large,
+                  ),
+                  if (subtitle != null)
+                    NamidaText(
+                      subtitle,
+                      style: NText.small,
+                    ),
+                  if (subtitle != null) const SizedBox(height: 6.0),
+                  const SizedBox(height: 18.0),
+                  if (extraPreItemsBuilder != null) extraPreItemsBuilder(formKey.currentState!),
+                  Row(
+                    children: [
+                      if (displayAccountThumbnail)
+                        ObxO(
+                          rx: YoutubeAccountController.current.activeAccountChannel,
+                          builder: (context, acc) => acc == null
+                              ? const SizedBox()
+                              : YoutubeThumbnail(
+                                  type: ThumbnailType.channel,
+                                  key: ValueKey(acc),
+                                  width: 32.0,
+                                  forceSquared: false,
+                                  isImportantInCache: true,
+                                  customUrl: acc.thumbnails.pick()?.url,
+                                  isCircle: true,
+                                ),
+                        ),
+                      if (displayAccountThumbnail) const SizedBox(width: 12.0),
+                      Expanded(
+                        child: CustomTagTextField(
+                          focusNode: focusNode,
+                          controller: localController,
+                          hintText: textfieldConfig.hintText,
+                          labelText: textfieldConfig.labelText,
+                          validator: textfieldConfig.validator,
+                          maxLength: textfieldConfig.maxLength,
+                        ),
+                      ),
+                      if (textfieldTrailing != null) ...[
+                        const SizedBox(width: 6.0),
+                        textfieldTrailing,
+                      ],
+                    ],
+                  ),
+                  ...?extraTextfieldsConfig?.map(
+                    (e) {
+                      final textfield = CustomTagTextField(
+                        controller: e.controller,
+                        hintText: e.hintText,
+                        labelText: e.labelText,
+                        validator: e.validator,
+                        maxLength: e.maxLength,
+                      );
+                      final trailing = e.trailing;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: trailing == null
+                            ? textfield
+                            : Row(
+                                children: [
+                                  Expanded(
+                                    child: textfield,
+                                  ),
+                                  const SizedBox(width: 6.0),
+                                  trailing,
+                                ],
+                              ),
+                      );
+                    },
+                  ),
+                  if (extraItemsBuilder != null) extraItemsBuilder(formKey.currentState!),
+                  const SizedBox(height: 18.0),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 1,
+                        child: CancelButton(onPressed: context.safePop),
+                      ),
+                      const SizedBox(width: 12.0),
+                      Expanded(
+                        flex: 2,
+                        child: NamidaButton(
+                          borderRadius: 12.0,
+                          text: buttonText,
+                          minHeight: NamidaButton.kDefaultMinHeight * 1.25,
+                          colors: .saturated,
+                          onTap: () async {
+                            if (formKey.currentState!.validate()) {
+                              loadingController.startLoading();
+                              final didAgree = await onButtonTap(localController.text);
+                              loadingController.stopLoading();
+                              if (didAgree) {
+                                finalText = localController.text;
+                                if (context.mounted) context.safePop();
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      return isInitiallyLoading != null
+          ? ObxO(
+              rx: isInitiallyLoading,
+              builder: (context, initiallyLoading) {
+                return Stack(
+                  children: [
+                    AnimatedEnabled(
+                      enabled: !initiallyLoading,
+                      child: child,
+                    ),
+                    if (initiallyLoading)
+                      const Positioned(
+                        top: 0,
+                        right: 32.0,
+                        child: SizedBox(
+                          width: 32.0,
+                          height: 32.0,
+                          child: CircularProgressIndicator(strokeWidth: 4.0),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            )
+          : child;
+    },
+  );
+  Future.delayed(const Duration(milliseconds: 2000), () {
+    if (textfieldConfig is! BottomSheetTextFieldConfigWC) localController.dispose();
+    focusNode.dispose();
+  });
+  return finalText;
+}
+
+// Returns a [0-1] scale representing how much similar both are.
+double checkIfListsSimilar<E>(List<E> q1, List<E> q2, {bool fullyFunctional = false}) {
+  if (fullyFunctional) {
+    if (q1.isEmpty && q2.isEmpty) {
+      return 1.0;
+    }
+    final finallength = q1.length > q2.length ? q2.length : q1.length;
+    int trueconditions = 0;
+    int index = 0;
+    for (final item in q1) {
+      if (index >= finallength) break;
+      if (item == q2[index]) trueconditions++;
+      index++;
+    }
+    return trueconditions / finallength;
+  } else {
+    return q1.isEqualTo(q2) ? 1.0 : 0.0;
+  }
+}
+
+class TracksAddOnTap {
+  void onAddTracksTap(BuildContext context) {
+    final currentTrackS = Player.inst.currentItem.value;
+    if (currentTrackS is! Selectable) return;
+    final currentTrack = currentTrackS.track;
+    showAddItemsToQueueDialog(
+      onDisposing: null,
+      context: context,
+      tiles: (getAddTracksTile) {
+        return [
+          getAddTracksTile(
+            title: lang.newTracksRandom,
+            subtitle: lang.newTracksRandomSubtitle,
+            icon: Broken.format_circle,
+            insertionType: QueueInsertionType.random,
+            onTap: (insertionType) {
+              final config = insertionType.toQueueInsertion();
+              final count = config.numberOfTracks;
+              final rt = NamidaGenerator.inst.getRandomTracks(exclude: currentTrack, min: count, max: count + 1);
+              Player.inst.addToQueue(rt, insertionType: insertionType, emptyTracksMessage: lang.noEnoughTracks).closeDialog();
+            },
+          ),
+          getAddTracksTile(
+            title: lang.generateFromDates,
+            subtitle: lang.generateFromDatesSubtitle,
+            icon: Broken.calendar,
+            insertionType: QueueInsertionType.listenTimeRange,
+            onTap: (insertionType) {
+              NamidaNavigator.inst.closeDialog();
+              final historyTracks = HistoryController.inst.historyTracks;
+              if (historyTracks.isEmpty) {
+                snackyy(title: lang.note, message: lang.noTracksInHistory);
+                return;
+              }
+              showCalendarDialog(
+                title: lang.generateFromDates,
+                buttonText: lang.generate,
+                useHistoryDates: true,
+                onGenerate: (dates) {
+                  final range = DateRange.wholeDays(oldest: dates.first, newest: dates.last);
+                  final tracks = NamidaGenerator.inst.generateItemsFromHistoryDates(range.oldest, range.newest);
+                  Player.inst
+                      .addToQueue(
+                        tracks,
+                        insertionType: insertionType,
+                        emptyTracksMessage: lang.noTracksFoundBetweenDates,
+                      )
+                      .closeDialog();
+                },
+              );
+            },
+          ),
+          getAddTracksTile(
+            title: lang.newTracksMoods,
+            subtitle: lang.newTracksMoodsSubtitle,
+            icon: MediaType.mood.toIcon(),
+            insertionType: QueueInsertionType.mood,
+            onTap: (insertionType) async {
+              NamidaNavigator.inst.closeDialog();
+
+              // -- moods from playlists.
+              final allAvailableMoodsPlaylists = <String, List<Track>>{};
+              final tempPlaylistTracksSet = <Track>{};
+              for (final pl in PlaylistController.inst.playlistsMap.value.entries) {
+                for (var mood in pl.value.moods) {
+                  final list = allAvailableMoodsPlaylists[mood] ??= <Track>[];
+                  for (final tr in pl.value.tracks.tracks) {
+                    if (tempPlaylistTracksSet.add(tr)) {
+                      list.add(tr);
+                    }
+                  }
+                }
+              }
+
+              final allAvailableMoodsTracks = Indexer.inst.getTracksGroupedByMoods();
+
+              if (allAvailableMoodsPlaylists.isEmpty && allAvailableMoodsTracks.isEmpty) {
+                snackyy(title: lang.error, message: lang.noMoodsAvailable);
+                return;
+              }
+
+              final playlistsAllMoods = allAvailableMoodsPlaylists.keys.toList();
+              final tracksAllMoods = allAvailableMoodsTracks.keys.toList();
+
+              final selectedmoodsPlaylists = <String>[].obs;
+              final selectedmoodsTracks = <String>[].obs;
+
+              List<Widget> getListy({
+                required String title,
+                required List<String> moodsList,
+                required Map<String, List<Track>> allAvailableMoods,
+                required RxList<String> selectedList,
+              }) {
+                return [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        children: [
+                          NamidaText(
+                            title,
+                            style: NText.medium,
+                          ),
+                          const SizedBox(width: 8.0),
+                          NDecoratedBox(
+                            decoration: (colors) => BoxDecoration(
+                              borderRadius: BorderRadius.circular(6.0.multipliedRadius),
+                              color: colors.secondaryContainer.withOpacityExt(0.25),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.0),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minWidth: 12.0),
+                                child: Text(
+                                  '${moodsList.length}',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Wrap(
+                      runSpacing: 4.0,
+                      children: [
+                        ...moodsList.map(
+                          (m) {
+                            final tracksCount = allAvailableMoods[m]?.length ?? 0;
+                            return Obx(
+                              (context) {
+                                final isSelected = selectedList.valueR.contains(m);
+                                final extraOpacity = isSelected ? 0.25 : 0.0;
+                                final countWidget = NDecoratedBox(
+                                  decoration: (colors) => BoxDecoration(
+                                    borderRadius: BorderRadius.circular(99.0),
+                                    color: colors.secondaryContainer.withOpacityExt(0.3 + extraOpacity),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.0),
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(minWidth: 8.0),
+                                      child: Text(
+                                        '$tracksCount',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                                final checkMarkWidget =
+                                    const Padding(
+                                      padding: EdgeInsetsGeometry.only(left: 2.0),
+                                      child: NamidaCheckMark(
+                                        size: 12.0,
+                                        active: true,
+                                      ),
+                                    ).animateEntrance(
+                                      showWhen: isSelected,
+                                    );
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                                  child: NBuilder(
+                                    selfAnimated: true,
+                                    builder: (context, colors) => NamidaInkWellButton(
+                                      borderRadius: 99.0,
+                                      paddingMultiplier: 0.8,
+                                      icon: null,
+                                      text: m,
+                                      bgColor: colors.secondaryContainer.withOpacityExt(0.2 + extraOpacity),
+                                      onTap: () => selectedList.addOrRemove(m),
+                                      leading: countWidget,
+                                      trailing: checkMarkWidget,
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ];
+              }
+
+              await NamidaNavigator.inst.navigateDialog(
+                onDisposing: () {
+                  selectedmoodsPlaylists.close();
+                  selectedmoodsTracks.close();
+                },
+                dialog: CustomBlurryDialog(
+                  normalTitleStyle: true,
+                  horizontalInset: 48.0,
+                  title: lang.moods,
+                  actions: [
+                    const CancelButton(),
+                    Obx(
+                      (context) => NamidaButton(
+                        enabled: selectedmoodsTracks.valueR.isNotEmpty || selectedmoodsPlaylists.valueR.isNotEmpty,
+                        text: lang.generate,
+                        onTap: () {
+                          final finalTracks = <Track>[];
+                          for (var m in selectedmoodsPlaylists.value) {
+                            finalTracks.addAll(allAvailableMoodsPlaylists[m] ?? []);
+                          }
+                          for (var m in selectedmoodsTracks.value) {
+                            finalTracks.addAll(allAvailableMoodsTracks[m] ?? []);
+                          }
+                          Player.inst.addToQueue(
+                            finalTracks.uniqued(),
+                            insertionType: insertionType,
+                          );
+                          NamidaNavigator.inst.closeDialog();
+                        },
+                      ),
+                    ),
+                  ],
+                  child: SizedBox(
+                    height: context.height * 0.4,
+                    width: context.width,
+                    child: SmoothCustomScrollView(
+                      slivers: [
+                        // -- Tracks moods (embedded & custom)
+                        ...getListy(
+                          title: lang.tracks,
+                          moodsList: tracksAllMoods,
+                          allAvailableMoods: allAvailableMoodsTracks,
+                          selectedList: selectedmoodsTracks,
+                        ),
+
+                        const SliverToBoxAdapter(
+                          child: NamidaContainerDivider(
+                            margin: EdgeInsets.symmetric(vertical: 8.0),
+                          ),
+                        ),
+
+                        // -- Playlist moods
+                        ...getListy(
+                          title: lang.playlists,
+                          moodsList: playlistsAllMoods,
+                          allAvailableMoods: allAvailableMoodsPlaylists,
+                          selectedList: selectedmoodsPlaylists,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          getAddTracksTile(
+            title: lang.newTracksRatings,
+            subtitle: lang.newTracksRatingsSubtitle,
+            icon: Broken.happyemoji,
+            insertionType: QueueInsertionType.rating,
+            onTap: (insertionType) async {
+              NamidaNavigator.inst.closeDialog();
+
+              final minRating = 80.obs;
+              final maxRating = 100.obs;
+              await NamidaNavigator.inst.navigateDialog(
+                onDisposing: () {
+                  minRating.close();
+                  maxRating.close();
+                },
+                dialog: CustomBlurryDialog(
+                  normalTitleStyle: true,
+                  title: lang.newTracksRatings,
+                  actions: [
+                    const CancelButton(),
+                    NamidaButton(
+                      text: lang.generate,
+                      onTap: () {
+                        if (minRating.value > maxRating.value) {
+                          snackyy(title: lang.error, message: lang.minValueCantBeMoreThanMax);
+                          return;
+                        }
+                        final tracks = NamidaGenerator.inst.generateTracksFromRatings(
+                          minRating.value,
+                          maxRating.value,
+                        );
+                        Player.inst.addToQueue(tracks, insertionType: insertionType);
+                        NamidaNavigator.inst.closeDialog();
+                      },
+                    ),
+                  ],
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Column(
+                            children: [
+                              Text(lang.minimum),
+                              const SizedBox(height: 24.0),
+                              NamidaWheelSlider(
+                                max: 100,
+                                initValue: minRating.value,
+                                onValueChanged: (val) => minRating.value = val,
+                              ),
+                              const SizedBox(height: 2.0),
+                              Obx(
+                                (context) => NamidaText(
+                                  '${minRating.valueR}%',
+                                  style: NText.small,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              Text(lang.maximum),
+                              const SizedBox(height: 24.0),
+                              NamidaWheelSlider(
+                                max: 100,
+                                initValue: maxRating.value,
+                                onValueChanged: (val) => maxRating.value = val,
+                              ),
+                              const SizedBox(height: 2.0),
+                              Obx(
+                                (context) => NamidaText(
+                                  '${maxRating.valueR}%',
+                                  style: NText.small,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+          const NamidaContainerDivider(margin: EdgeInsets.symmetric(vertical: 4.0)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              Expanded(
+                child: getAddTracksTile(
+                  chip: true,
+                  title: lang.newTracksSimilarrReleaseDate,
+                  subtitle: lang.newTracksSimilarrReleaseDateSubtitle(currentTrack: currentTrack.title.addDQuotation()),
+                  icon: Broken.calendar_1,
+                  insertionType: QueueInsertionType.sameReleaseDate,
+                  onTap: (insertionType) {
+                    final year = currentTrack.year;
+                    if (year == 0) {
+                      snackyy(title: lang.error, message: lang.newTracksUnknownYear);
+                      return;
+                    }
+                    final tracks = NamidaGenerator.inst.generateTracksFromSameEra(year, currentTrack: currentTrack);
+                    Player.inst
+                        .addToQueue(
+                          tracks,
+                          insertionType: insertionType,
+                          emptyTracksMessage: lang.noTracksFoundBetweenDates,
+                        )
+                        .closeDialog();
+                  },
+                ),
+              ),
+              const _VerticalDivider(),
+              Expanded(
+                child: getAddTracksTile(
+                  chip: true,
+                  title: lang.similarDiscoverDate,
+                  subtitle: lang.similarDiscoverDateSubtitle(currentTrack: currentTrack.title.addDQuotation()),
+                  icon: Broken.calendar_search,
+                  insertionType: QueueInsertionType.algorithmDiscoverDate,
+                  onTap: (insertionType) {
+                    final gentracks = NamidaGenerator.inst.generateRecommendedSimilarDiscoverDate(currentTrack);
+
+                    Player.inst
+                        .addToQueue(
+                          gentracks,
+                          insertionType: insertionType,
+                          insertNext: true,
+                          emptyTracksMessage: lang.noTracksInHistory,
+                        )
+                        .closeDialog();
+                  },
+                ),
+              ),
+              const _VerticalDivider(),
+              Expanded(
+                child: getAddTracksTile(
+                  chip: true,
+                  title: lang.similarTimeRange,
+                  subtitle: lang.similarTimeRangeSubtitle(currentTrack: currentTrack.title.addDQuotation()),
+                  icon: Broken.calendar_tick,
+                  insertionType: QueueInsertionType.algorithmTimeRange,
+                  onTap: (insertionType) {
+                    final gentracks = NamidaGenerator.inst.generateRecommendedSimilarTimeRange(currentTrack);
+
+                    Player.inst
+                        .addToQueue(
+                          gentracks,
+                          insertionType: insertionType,
+                          insertNext: true,
+                          emptyTracksMessage: lang.noTracksInHistory,
+                        )
+                        .closeDialog();
+                  },
+                ),
+              ),
+            ],
+          ),
+          getAddTracksTile(
+            title: lang.newTracksSimilar,
+            subtitle: lang.newTracksSimilarSubtitle(currentTrack: currentTrack.title.addDQuotation()),
+            icon: Broken.blend,
+            insertionType: QueueInsertionType.similar,
+            extraTrailing: const _SimilarTracksSourcesChip(),
+            onTap: (insertionType) async {
+              final insertion = insertionType.toQueueInsertion();
+              final gentracks = await NamidaGenerator.inst.generateSimilarTracks(currentTrack, insertion);
+
+              Player.inst
+                  .addToQueue(
+                    gentracks,
+                    insertionType: insertionType,
+                    insertNext: true,
+                    emptyTracksMessage: lang.noEnoughTracks,
+                  )
+                  .closeDialog();
+            },
+          ),
+          getAddTracksTile(
+            title: lang.newTracksRecommended,
+            subtitle: lang.newTracksRecommendedSubtitle(currentTrack: currentTrack.title.addDQuotation()),
+            icon: Broken.bezier,
+            insertionType: QueueInsertionType.algorithm,
+            onTap: (insertionType) {
+              final gentracks = NamidaGenerator.inst.generateRecommendedTrack(currentTrack);
+
+              Player.inst
+                  .addToQueue(
+                    gentracks,
+                    insertionType: insertionType,
+                    insertNext: true,
+                    emptyTracksMessage: lang.noTracksInHistory,
+                  )
+                  .closeDialog();
+            },
+          ),
+        ];
+      },
+    );
+  }
+
+  void onAddVideosTap(BuildContext context) async {
+    final currentVideo = Player.inst.currentVideo;
+    if (currentVideo == null) return;
+    final currentVideoId = currentVideo.id;
+    final currentVideoName = await YoutubeInfoController.utils.getVideoName(currentVideoId) ?? currentVideoId;
+
+    final isLoadingVideoDate = false.obs;
+    final isLoadingMixPlaylist = false.obs;
+
+    NamidaYTGenerator.inst.initialize();
+    showAddItemsToQueueDialog(
+      onDisposing: () {
+        isLoadingVideoDate.close();
+        isLoadingMixPlaylist.close();
+      },
+      forYoutube: true,
+      context: context,
+      tiles: (getAddTracksTile) {
+        return [
+          Obx(
+            (context) {
+              final isLoading = NamidaYTGenerator.inst.didPrepareResources.valueR == false;
+              return AnimatedEnabled(
+                enabled: !isLoading,
+                child: getAddTracksTile(
+                  title: lang.newTracksRandom,
+                  subtitle: lang.newTracksRandomSubtitle,
+                  icon: Broken.format_circle,
+                  insertionType: QueueInsertionType.random,
+                  onTap: (insertionType) async {
+                    final config = insertionType.toQueueInsertion();
+                    final count = config.numberOfTracks;
+                    final rt = await NamidaYTGenerator.inst.getRandomVideos(exclude: currentVideoId, min: count, max: count + 1);
+                    Player.inst.addToQueue(rt, insertionType: insertionType, emptyTracksMessage: lang.noEnoughTracks).closeDialog();
+                  },
+                  trailingRaw: isLoading ? const LoadingIndicator() : null,
+                ),
+              );
+            },
+          ),
+          getAddTracksTile(
+            title: lang.generateFromDates,
+            subtitle: lang.generateFromDatesSubtitle,
+            icon: Broken.calendar,
+            insertionType: QueueInsertionType.listenTimeRange,
+            onTap: (insertionType) {
+              NamidaNavigator.inst.closeDialog();
+              final historyTracks = YoutubeHistoryController.inst.historyTracks;
+              if (historyTracks.isEmpty) {
+                snackyy(title: lang.note, message: lang.noTracksInHistory);
+                return;
+              }
+              showCalendarDialog(
+                title: lang.generateFromDates,
+                buttonText: lang.generate,
+                useHistoryDates: true,
+                historyController: YoutubeHistoryController.inst,
+                onGenerate: (dates) {
+                  final range = DateRange.wholeDays(oldest: dates.first, newest: dates.last);
+                  final videos = NamidaYTGenerator.inst.generateItemsFromHistoryDates(range.oldest, range.newest);
+                  Player.inst
+                      .addToQueue(
+                        videos,
+                        insertionType: insertionType,
+                        emptyTracksMessage: lang.noTracksFoundBetweenDates,
+                      )
+                      .closeDialog();
+                },
+              );
+            },
+          ),
+          ObxO(
+            rx: isLoadingMixPlaylist,
+            builder: (context, isLoading) => AnimatedEnabled(
+              enabled: !isLoading,
+              child: getAddTracksTile(
+                title: lang.mix,
+                subtitle: lang.mixPlaylistGeneratedByYoutube,
+                icon: Broken.radar_1,
+                insertionType: QueueInsertionType.mix,
+                onTap: (insertionType) async {
+                  isLoadingMixPlaylist.value = true;
+                  final mixPlaylist = await YoutubeInfoController.playlist.getMixPlaylist(
+                    videoId: currentVideoId,
+                    includeFirstVideo: false,
+                    userPersonalized: settings.youtube.personalizedMixPlaylists.value,
+                    details: ExecuteDetails.kForceRequest,
+                  );
+                  isLoadingMixPlaylist.value = false;
+
+                  if (Player.inst.currentVideo?.id != currentVideoId) return;
+
+                  final playlistId = mixPlaylist?.mixId;
+                  final items = mixPlaylist?.items;
+                  if (items != null && items.isNotEmpty) {
+                    final videos = (items.firstOrNull?.id == currentVideoId ? items.skip(1) : items).map(
+                      (e) => YoutubeID(
+                        id: e.id,
+                        playlistID: playlistId == null ? null : PlaylistID(id: playlistId),
+                      ),
+                    );
+                    Player.inst
+                        .addToQueue(
+                          videos,
+                          insertNext: true,
+                          insertionType: insertionType,
+                          emptyTracksMessage: lang.failed,
+                        )
+                        .closeDialog();
+                  }
+                },
+                trailingRaw: isLoading ? const LoadingIndicator() : null,
+              ),
+            ),
+          ),
+          const NamidaContainerDivider(margin: EdgeInsets.symmetric(vertical: 4.0)),
+          Row(
+            children: [
+              Expanded(
+                child: Obx(
+                  (context) {
+                    final isLoading = isLoadingVideoDate.valueR || NamidaYTGenerator.inst.didPrepareResources.valueR == false;
+                    return AnimatedEnabled(
+                      enabled: !isLoading,
+                      child: getAddTracksTile(
+                        chip: true,
+                        title: lang.newTracksSimilarrReleaseDate,
+                        subtitle: lang.newTracksSimilarrReleaseDateSubtitle(currentTrack: currentVideoName.addDQuotation()),
+                        icon: Broken.calendar_1,
+                        insertionType: QueueInsertionType.sameReleaseDate,
+                        onTap: (insertionType) async {
+                          DateTime? date = await YoutubeInfoController.utils.getVideoReleaseDate(currentVideoId);
+                          if (date == null) {
+                            isLoadingVideoDate.value = true;
+                            final info = await YoutubeInfoController.video.fetchVideoStreams(currentVideoId, forceRequest: false);
+                            date = info?.info?.publishedAt.accurateDate ?? info?.info?.publishDate.accurateDate;
+                            date ??= info?.info?.publishedAt.date ?? info?.info?.publishDate.date;
+                            isLoadingVideoDate.value = false;
+                          }
+                          if (date == null) {
+                            snackyy(message: 'failed to fetch video date', isError: true, title: lang.error);
+                            return;
+                          }
+                          final videos = await NamidaYTGenerator.inst.generateVideoFromSameEra(currentVideoId, date, videoToRemove: currentVideoId);
+                          Player.inst
+                              .addToQueue(
+                                videos,
+                                insertionType: insertionType,
+                                emptyTracksMessage: lang.noTracksFoundBetweenDates,
+                              )
+                              .closeDialog();
+                        },
+                        trailingRaw: isLoading ? const LoadingIndicator() : null,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // const _VerticalDivider(),
+              // Expanded(
+              //   child: getAddTracksTile(
+              //     chip: true,
+              //     title: lang.similarDiscoverDate,
+              //     subtitle: lang.similarDiscoverDateSubtitle(
+              //       currentVideoName.addDQuotation(),
+              //     ),
+              //     icon: Broken.calendar_search,
+              //     insertionType: QueueInsertionType.algorithmDiscoverDate,
+              //     onTap: (insertionType) {
+              //       final gentracks = NamidaYTGenerator.inst.generateRecommendedSimilarDiscoverDate(currentVideo);
+
+              //       Player.inst
+              //           .addToQueue(
+              //             gentracks,
+              //             insertionType: insertionType,
+              //             insertNext: true,
+              //             emptyTracksMessage: lang.noTracksInHistory,
+              //           )
+              //           .closeDialog();
+              //     },
+              //   ),
+              // ),
+              const _VerticalDivider(),
+              Expanded(
+                child: getAddTracksTile(
+                  chip: true,
+                  title: lang.similarTimeRange,
+                  subtitle: lang.similarTimeRangeSubtitle(currentTrack: currentVideoName.addDQuotation()),
+                  icon: Broken.calendar_tick,
+                  insertionType: QueueInsertionType.algorithmTimeRange,
+                  onTap: (insertionType) {
+                    final gentracks = NamidaYTGenerator.inst.generateRecommendedSimilarTimeRange(currentVideo);
+
+                    Player.inst
+                        .addToQueue(
+                          gentracks,
+                          insertionType: insertionType,
+                          insertNext: true,
+                          emptyTracksMessage: lang.noTracksInHistory,
+                        )
+                        .closeDialog();
+                  },
+                ),
+              ),
+            ],
+          ),
+          getAddTracksTile(
+            title: lang.similarDiscoverDate,
+            subtitle: lang.similarDiscoverDateSubtitle(currentTrack: currentVideoName.addDQuotation()),
+            icon: Broken.calendar_search,
+            insertionType: QueueInsertionType.algorithmDiscoverDate,
+            onTap: (insertionType) {
+              final gentracks = NamidaYTGenerator.inst.generateRecommendedSimilarDiscoverDate(currentVideo);
+
+              Player.inst
+                  .addToQueue(
+                    gentracks,
+                    insertionType: insertionType,
+                    insertNext: true,
+                    emptyTracksMessage: lang.noTracksInHistory,
+                  )
+                  .closeDialog();
+            },
+          ),
+          getAddTracksTile(
+            title: lang.newTracksRecommended,
+            subtitle: lang.newTracksRecommendedSubtitle(currentTrack: currentVideoName.addDQuotation()),
+            icon: Broken.bezier,
+            insertionType: QueueInsertionType.algorithm,
+            onTap: (insertionType) {
+              final genvideos = NamidaYTGenerator.inst.generateRecommendedVideos(currentVideo);
+
+              Player.inst
+                  .addToQueue(
+                    genvideos,
+                    insertionType: insertionType,
+                    insertNext: true,
+                    emptyTracksMessage: lang.noTracksInHistory,
+                  )
+                  .closeDialog();
+            },
+          ),
+        ];
+      },
+    );
+  }
+
+  Future<void> showAddItemsToQueueDialog({
+    required BuildContext context,
+    required void Function()? onDisposing,
+    bool forYoutube = false,
+    required List<Widget> Function(
+      Widget Function({
+        required String title,
+        required String subtitle,
+        required IconData icon,
+        required QueueInsertionType insertionType,
+        required void Function(QueueInsertionType insertionType) onTap,
+        Widget? trailingRaw,
+        Widget? extraTrailing,
+        bool? chip,
+      })
+      addTracksTile,
+    )
+    tiles,
+  }) async {
+    final shouldShowConfigureIcon = false.obs;
+
+    Widget getAddTracksTile({
+      required String title,
+      required String subtitle,
+      required IconData icon,
+      required QueueInsertionType insertionType,
+      required void Function(QueueInsertionType insertionType) onTap,
+      Widget? trailingRaw,
+      Widget? extraTrailing,
+      bool? chip,
+    }) {
+      final trailingMargin = chip == true ? const EdgeInsets.only(top: 4.0) : EdgeInsets.zero;
+      final trailingFinal = trailingRaw != null
+          ? Padding(
+              padding: trailingMargin,
+              child: trailingRaw,
+            )
+          : Obx(
+              (context) => Padding(
+                padding: trailingMargin,
+                child:
+                    NamidaIconButton(
+                      icon: Broken.setting_4,
+                      iconSize: chip == true ? 20.0 : 24.0,
+                      onPressed: () => showQueueInsertionConfigDialog(insertionType, title: title, forYoutube: forYoutube),
+                    ).animateEntrance(
+                      showWhen: shouldShowConfigureIcon.valueR,
+                    ),
+              ),
+            );
+      final listTileTrailing = extraTrailing == null
+          ? trailingFinal
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                extraTrailing,
+                trailingFinal,
+              ],
+            );
+      return chip == true
+          ? NamidaInkWell(
+              onTap: () => onTap(insertionType),
+              borderRadius: 10.0,
+              child: NamidaTooltip(
+                message: () => '$title\n$subtitle',
+                preferBelow: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      NamidaIconButton(
+                        icon: icon,
+                        iconColor: NColors.defaultIcon(),
+                        padding: EdgeInsets.zero,
+                        onPressed: () => onTap(insertionType),
+                      ),
+                      trailingFinal,
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : CustomListTile(
+              title: title,
+              subtitle: subtitle,
+              icon: icon,
+              maxSubtitleLines: 22,
+              dense: false,
+              onTap: () => onTap(insertionType),
+              trailingRaw: listTileTrailing,
+            );
+    }
+
+    await NamidaNavigator.inst.navigateDialog(
+      onDisposing: () {
+        onDisposing?.call();
+        shouldShowConfigureIcon.close();
+      },
+      dialog: CustomBlurryDialog(
+        normalTitleStyle: true,
+        title: lang.newTracksAdd,
+        trailingWidgets: [
+          NamidaIconButton(
+            icon: Broken.setting_3,
+            tooltip: () => lang.configure,
+            onPressed: shouldShowConfigureIcon.toggle,
+          ),
+        ],
+        child: Column(children: tiles(getAddTracksTile)),
+      ),
+    );
+  }
+}
+
+class SussyBaka {
+  static void monetize({required EggUnlockable unlockable, required void Function() onEnable}) {
+    final eggs = EggsController.inst;
+    if (eggs.isSupporter()) return onEnable();
+    final isUnlocked = settings.eggs.value.isUnlocked(unlockable);
+    if (isUnlocked) return onEnable();
+    final newEggs = eggs.collectPending();
+    EggHunt.announceFound(newEggs);
+    NamidaNavigator.inst.navigateDialog(
+      onDismissing: EggHunt.countDismissal,
+      dialog: UwuDialog(
+        unlockable: unlockable,
+        newEggs: newEggs,
+        onEnable: onEnable,
+      ),
+    );
+  }
+}
+
+class _VerticalDivider extends StatelessWidget {
+  const _VerticalDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const NamidaContainerDivider(
+      height: 26.0,
+      width: 1.5,
+      margin: EdgeInsets.symmetric(horizontal: 2.0),
+    );
+  }
+}
+
+String replaceFunctionNormalizePath(String path) => path.replaceAll('\\', '/');
+String replaceFunctionGetNewPath(String old, String normalizedOldDir, String normalizedNewDir) => replaceFunctionNormalizePath(old)
+    .replaceFirst(
+      normalizedOldDir,
+      normalizedNewDir,
+    )
+    .replaceAll(
+      '/',
+      Platform.pathSeparator,
+    );
+bool replaceFunctionForUpdatedPaths(
+  String trackPathPre,
+  String normalizedOldDir,
+  String normalizedNewDir,
+  Set<String>? pathsOnlySet,
+  bool ensureNewFileExists,
+  Map<String, bool> existenceCache,
+) {
+  final trackPath = replaceFunctionNormalizePath(trackPathPre);
+
+  if (!trackPath.startsWith(normalizedOldDir)) return false;
+
+  if (pathsOnlySet != null && !pathsOnlySet.contains(trackPathPre)) return false;
+
+  if (ensureNewFileExists) {
+    final newPath = replaceFunctionGetNewPath(trackPath, normalizedOldDir, normalizedNewDir);
+    final exists = existenceCache[newPath] ??= Track.explicit(newPath).existsSync();
+    if (!exists) return false;
+  }
+
+  return true;
+}
+
+// by claude
+class _TrackSortPresetsButton extends StatelessWidget {
+  final MediaType media;
+  final VoidCallback onBeforeChange;
+  final void Function(SortChain<SortType> sorting) onChanged;
+
+  const _TrackSortPresetsButton({
+    required this.media,
+    required this.onBeforeChange,
+    required this.onChanged,
+  });
+
+  void _reloadSorts() {
+    final sorting = settings.mediaItemsTrackSorting.value[media] ?? const SortChain<SortType>([]);
+    onChanged(sorting);
+  }
+
+  void _select(int? index) {
+    final activeIndex = settings.mediaItemsTrackSortingPresets.value[media]?.activeIndex;
+    if (index == activeIndex) return;
+    onBeforeChange();
+    settings.selectTrackSortPreset(media, index);
+    _reloadSorts();
+  }
+
+  void _add() {
+    onBeforeChange();
+    final sorting = settings.mediaItemsTrackSorting.value[media] ?? const SortChain<SortType>([]);
+    final initialName = sorting.types().map((e) => e.toText()).joinText(separator: ', ');
+    _PresetNameDialog.show(
+      title: lang.saveAsPreset,
+      initialName: initialName,
+      onName: (name) => settings.addTrackSortPreset(media, name),
+    );
+  }
+
+  void _rename(int index, String name) => settings.renameTrackSortPreset(media, index, name);
+
+  void _remove(int index) {
+    onBeforeChange();
+    settings.removeTrackSortPreset(media, index);
+    _reloadSorts();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: settings.mediaItemsTrackSortingPresets,
+      builder: (context, presetsMap) => _NamedPresetsButton(
+        presets: presetsMap[media] ?? const TrackSortPresets.empty(),
+        defaultIcon: Broken.sort,
+        onSelect: _select,
+        onAdd: _add,
+        onRename: _rename,
+        onRemove: _remove,
+      ),
+    );
+  }
+}
+
+class _TrackSearchFilterPresetsButton extends StatelessWidget {
+  const _TrackSearchFilterPresetsButton();
+
+  void _add() {
+    final filters = settings.trackSearchFilter.value;
+    final initialName = filters.map((e) => e.toText()).joinText(separator: ', ');
+    _PresetNameDialog.show(
+      title: lang.saveAsPreset,
+      initialName: initialName,
+      onName: settings.addTrackSearchFilterPreset,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: settings.trackSearchFilterPresets,
+      builder: (context, presets) => _NamedPresetsButton(
+        presets: presets,
+        defaultIcon: Broken.filter_search,
+        onSelect: settings.selectTrackSearchFilterPreset,
+        onAdd: _add,
+        onRename: settings.renameTrackSearchFilterPreset,
+        onRemove: settings.removeTrackSearchFilterPreset,
+      ),
+    );
+  }
+}
+
+class _NamedPresetsButton<T> extends StatelessWidget {
+  final NamedPresets<T> presets;
+  final IconData defaultIcon;
+  final void Function(int? index) onSelect;
+  final VoidCallback onAdd;
+  final void Function(int index, String name) onRename;
+  final void Function(int index) onRemove;
+
+  const _NamedPresetsButton({
+    required this.presets,
+    required this.defaultIcon,
+    required this.onSelect,
+    required this.onAdd,
+    required this.onRename,
+    required this.onRemove,
+  });
+
+  void _edit(int index, NamedPreset<T> preset) {
+    NamidaNavigator.inst.popMenu();
+    _PresetNameDialog.show(
+      title: lang.rename,
+      initialName: preset.name,
+      onName: (name) => onRename(index, name),
+      onDelete: () => onRemove(index),
+    );
+  }
+
+  List<NamidaPopupItem> _menuItems() {
+    final activeIndex = presets.activeIndex;
+    return [
+      NamidaPopupItem(
+        icon: defaultIcon,
+        title: lang.defaultLabel,
+        selected: activeIndex == null,
+        onTap: () => onSelect(null),
+      ),
+      ...presets.presets.mapIndexed(
+        (preset, i) => NamidaPopupItem(
+          icon: Broken.layer,
+          title: preset.name,
+          selected: activeIndex == i,
+          onTap: () => onSelect(i),
+          trailing: NamidaIconButton(
+            horizontalPadding: 0.0,
+            icon: Broken.edit_2,
+            iconSize: 18.0,
+            disableColor: true,
+            onPressed: () => _edit(i, preset),
+          ),
+        ),
+      ),
+      if (presets.canAdd)
+        NamidaPopupItem(
+          icon: Broken.add,
+          title: lang.add,
+          onTap: onAdd,
+        ),
+    ];
+  }
+
+  void _showMenu(BuildContext context) {
+    final popup = NamidaPopupWrapper(childrenDefault: _menuItems);
+    popup.showPopupMenu(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = presets.activePreset?.name ?? lang.defaultLabel;
+    return NamidaInkWell(
+      borderRadius: 6.0,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      bgColor: const NColors(.secondary, opacity: 0.15),
+      onTap: () => _showMenu(context),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Broken.layer,
+            size: 16.0,
+          ),
+          const SizedBox(width: 4.0),
+          Flexible(
+            child: NamidaText(
+              title,
+              style: const NText(.small, weight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrackSearchFilterPresetHint extends StatelessWidget {
+  const _TrackSearchFilterPresetHint();
+
+  static bool _isPresetActive() => settings.trackSearchFilterPresets.valueR.activeIndex != null;
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxSelect(
+      selector: _isPresetActive,
+      builder: (context, isPresetActive) => AnimatedShow(
+        show: isPresetActive,
+        duration: const Duration(milliseconds: 250),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: .center,
+            children: [
+              const Icon(
+                Broken.info_circle,
+                size: 16.0,
+              ),
+              const SizedBox(
+                width: 6.0,
+              ),
+              Flexible(
+                child: NamidaText(
+                  lang.presetOnlyAppliesToSearchPage,
+                  style: NText.small,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackSearchFilterTile extends StatelessWidget {
+  final TrackSearchFilter filter;
+
+  const _TrackSearchFilterTile({
+    required this.filter,
+  });
+
+  void _onTap() {
+    final filters = settings.trackSearchFilter.value;
+    final isActive = filters.contains(filter);
+    if (isActive && filters.length <= 1) {
+      showMinimumItemsSnack(1);
+      return;
+    }
+    final newFilters = isActive ? filters.where((e) => e != filter).toFixedList() : [...filters, filter];
+    settings.updateTrackSearchFilter(newFilters);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(3.0),
+      child: ObxO(
+        rx: settings.trackSearchFilter,
+        builder: (context, filters) => ListTileWithCheckMark(
+          title: filter.toText(),
+          subtitle: filter.canAffectPerformance ? lang.performanceNote : '',
+          onTap: _onTap,
+          active: filters.contains(filter),
+        ),
+      ),
+    );
+  }
+}
+
+class _SortEntryReverseButton extends StatelessWidget {
+  final bool isReversed;
+  final VoidCallback onTap;
+
+  const _SortEntryReverseButton({
+    required this.isReversed,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return NBuilder(
+      builder: (context, colors) {
+        final iconColor = isReversed ? colors.secondary : colors.icon.withOpacityExt(0.5);
+        return NamidaIconButton(
+          horizontalPadding: 8.0,
+          icon: isReversed ? Broken.arrow_up_3 : Broken.arrow_down_2,
+          iconSize: 18.0,
+          iconColor: NColors.fixed(iconColor),
+          tooltip: () => lang.reverseOrder,
+          onPressed: onTap,
+        );
+      },
+    );
+  }
+}
+
+abstract final class _PresetNameDialog {
+  static void show({
+    required String title,
+    required String initialName,
+    required void Function(String name) onName,
+    VoidCallback? onDelete,
+  }) {
+    final controller = TextEditingController(text: initialName);
+    final formKey = GlobalKey<FormState>();
+    final deleteButton = onDelete == null
+        ? null
+        : NamidaIconButton(
+            icon: Broken.trash,
+            tooltip: () => lang.delete,
+            onPressed: () {
+              NamidaNavigator.inst.closeDialog();
+              onDelete();
+            },
+          );
+    NamidaNavigator.inst.navigateDialog(
+      onDisposing: controller.dispose,
+      dialog: Form(
+        key: formKey,
+        child: CustomBlurryDialog(
+          title: title,
+          normalTitleStyle: true,
+          trailingWidgets: [
+            ?deleteButton,
+          ],
+          actions: [
+            const CancelButton(),
+            NamidaButton(
+              text: lang.save,
+              onTap: () {
+                if (formKey.currentState?.validate() != true) return;
+                NamidaNavigator.inst.closeDialog();
+                final name = controller.text.trim();
+                onName(name);
+              },
+            ),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.only(top: 12.0),
+            child: CustomTagTextField(
+              controller: controller,
+              hintText: initialName,
+              labelText: lang.name,
+              validator: (text) => text == null || text.trim().isEmpty ? lang.emptyValue : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SimilarTracksSourcesChip extends StatelessWidget {
+  const _SimilarTracksSourcesChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaPopupWrapper(
+      children: () => const [
+        _SimilarTracksSourcesGrid(),
+      ],
+      child: NamidaInkWell(
+        padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 12.0),
+        bgColor: const NColors(.card, opacity: 0.5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Broken.filter_edit,
+              size: 16.0,
+            ),
+            const SizedBox(width: 6.0),
+            ObxO(
+              rx: settings.queueInsertion,
+              builder: (context, insertions) {
+                final activeCount = insertions[QueueInsertionType.similar]?.similarSources.length ?? 0;
+                final totalCount = SimilarTracksSource.values.length;
+                final text = activeCount == totalCount ? lang.all : '$activeCount/$totalCount';
+                return NamidaText(
+                  text,
+                  style: NText.medium,
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SimilarTracksSourcesGrid extends StatelessWidget {
+  const _SimilarTracksSourcesGrid();
+
+  static const _type = QueueInsertionType.similar;
+  static const _sourcesPerRow = 4;
+
+  void _toggle(SimilarTracksSource source) {
+    final insertion = _type.toQueueInsertion();
+    final sources = insertion.similarSources;
+    final isActive = sources.contains(source);
+    if (isActive && sources.length == 1) return;
+    final newSources = SimilarTracksSource.values.where((e) => e == source ? !isActive : sources.contains(e)).toFixedList();
+    final newInsertion = insertion.copyWith(similarSources: newSources);
+    settings.queueInsertion.update((insertions) => insertions[_type] = newInsertion);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: settings.queueInsertion,
+      builder: (context, insertions) {
+        final activeSources = insertions[_type]?.similarSources ?? const <SimilarTracksSource>[];
+        const allSources = SimilarTracksSource.values;
+        final rows = <Widget>[];
+        for (int start = 0; start < allSources.length; start += _sourcesPerRow) {
+          final end = (start + _sourcesPerRow).withMaximum(allSources.length);
+          rows.add(
+            _SimilarTracksSourcesRow(
+              sources: allSources.sublist(start, end),
+              activeSources: activeSources,
+              onTap: _toggle,
+            ),
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: rows,
+        );
+      },
+    );
+  }
+}
+
+class _SimilarTracksSourcesRow extends StatelessWidget {
+  final List<SimilarTracksSource> sources;
+  final List<SimilarTracksSource> activeSources;
+  final void Function(SimilarTracksSource source) onTap;
+
+  const _SimilarTracksSourcesRow({
+    required this.sources,
+    required this.activeSources,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 3.0),
+      child: Row(
+        children: sources
+            .map(
+              (source) => Expanded(
+                child: NamidaToggleCard(
+                  icon: source.toIcon(),
+                  title: source.toText(),
+                  active: activeSources.contains(source),
+                  onTap: () => onTap(source),
+                  padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
+                  iconSize: 22.0,
+                ),
+              ),
+            )
+            .addSeparators(separator: const SizedBox(width: 6.0))
+            .toFixedList(),
+      ),
+    );
+  }
+}

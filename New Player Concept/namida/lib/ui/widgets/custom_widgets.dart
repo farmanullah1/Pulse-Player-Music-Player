@@ -1,0 +1,9393 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui';
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart' hide ReorderableListView, ReorderCallback, SliverReorderableList, ReorderableDragStartListener, ReorderableDelayedDragStartListener, Tooltip;
+import 'package:flutter/physics.dart';
+import 'package:flutter/rendering.dart' as fr;
+import 'package:flutter/services.dart';
+
+import 'package:basic_audio_handler/basic_audio_handler.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_scrollbar_modified/flutter_scrollbar_modified.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:flutter_tilt/flutter_tilt.dart';
+import 'package:history_manager/history_manager.dart';
+import 'package:like_button/like_button.dart';
+import 'package:playlist_manager/playlist_manager.dart';
+import 'package:selectable_autolink_text/selectable_autolink_text.dart';
+import 'package:sleek_circular_slider/sleek_circular_slider.dart';
+import 'package:super_sliver_list/super_sliver_list.dart';
+
+import 'package:namida/base/audio_handler.dart';
+import 'package:namida/base/pull_to_refresh.dart';
+import 'package:namida/class/faudiomodel.dart';
+import 'package:namida/class/route.dart';
+import 'package:namida/class/track.dart';
+import 'package:namida/class/version_wrapper.dart';
+import 'package:namida/controller/connectivity.dart';
+import 'package:namida/controller/current_color.dart';
+import 'package:namida/controller/file_browser.dart';
+import 'package:namida/controller/miniplayer_controller.dart';
+import 'package:namida/controller/navigator_controller.dart';
+import 'package:namida/controller/platform/namida_channel/namida_channel.dart';
+import 'package:namida/controller/player_controller.dart';
+import 'package:namida/controller/playlist_controller.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/controller/time_ago_controller.dart';
+import 'package:namida/controller/version_controller.dart';
+import 'package:namida/controller/video_controller.dart';
+import 'package:namida/controller/waveform_controller.dart';
+import 'package:namida/controller/window_controller.dart';
+import 'package:namida/core/constants.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/functions.dart';
+import 'package:namida/core/icon_fonts/broken_icons.dart';
+import 'package:namida/core/namida_converter_ext.dart';
+import 'package:namida/core/ntheme.dart';
+import 'package:namida/core/translations/language.dart';
+import 'package:namida/core/ui_scale.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/main.dart';
+import 'package:namida/packages/scroll_physics_modified.dart';
+import 'package:namida/packages/smooth_scroll_controller.dart';
+import 'package:namida/ui/dialogs/edit_tags_dialog.dart';
+import 'package:namida/ui/dialogs/general_popup_dialog.dart';
+import 'package:namida/ui/dialogs/queue_insertion_dialogs.dart';
+import 'package:namida/ui/pages/about_page.dart';
+import 'package:namida/ui/pages/settings_page.dart';
+import 'package:namida/ui/widgets/animated_widgets.dart';
+import 'package:namida/ui/widgets/baked_blur.dart';
+import 'package:namida/ui/widgets/custom_tooltip.dart';
+import 'package:namida/ui/widgets/effects/effects.dart';
+import 'package:namida/ui/widgets/library/multi_artwork_container.dart';
+import 'package:namida/ui/widgets/library/track_tile.dart';
+import 'package:namida/ui/widgets/namida_markdown.dart';
+import 'package:namida/ui/widgets/network_artwork.dart';
+import 'package:namida/ui/widgets/popup_wrapper.dart';
+import 'package:namida/ui/widgets/settings/extra_settings.dart';
+import 'package:namida/ui/widgets/zoomable_image.dart';
+import 'package:namida/youtube/class/youtube_id.dart';
+import 'package:namida/youtube/controller/youtube_info_controller.dart';
+
+import 'custom_reorderable_list.dart';
+
+export 'popup_wrapper.dart';
+
+part 'check_marks.dart';
+part 'smooth_scroll.dart';
+
+class NamidaReordererableListener extends StatelessWidget {
+  final int index;
+  final int durationMs;
+  final Widget child;
+
+  const NamidaReordererableListener({
+    super.key,
+    required this.index,
+    this.durationMs = 50,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableDelayedDragStartListener(
+      index: index,
+      delay: isDesktop ? Duration.zero : Duration(milliseconds: durationMs),
+      child: child,
+    );
+  }
+}
+
+class CustomSwitch extends StatelessWidget {
+  final bool active;
+  final double height;
+  final double width;
+  final Color? circleColor;
+  final Color? bgColor;
+  final Color? shadowColor;
+  final int durationInMillisecond;
+  final Color? passedColor;
+
+  const CustomSwitch({
+    super.key,
+    required this.active,
+    this.height = 21.0,
+    this.width = 40.0,
+    this.circleColor,
+    this.durationInMillisecond = 300,
+    this.bgColor,
+    this.shadowColor,
+    this.passedColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final finalColor = passedColor ?? CurrentColor.inst.color;
+    final colors = NColorsData.targetOf(context);
+    final duration = Duration(milliseconds: durationInMillisecond);
+    const curve = Curves.fastEaseInToSlowEaseOut;
+    return SizedBox(
+      width: width,
+      height: height,
+      child: AnimatedDecoration(
+        duration: duration,
+        curve: curve,
+        decoration: BoxDecoration(
+          color: (active
+              ? bgColor ?? Color.alphaBlend(finalColor.withOpacityExt(0.71), colors.surface).withOpacityExt(0.55)
+              // : theme.scaffoldBackgroundColor.withOpacityExt(0.13)
+              : Color.alphaBlend(colors.scaffold.withOpacityExt(0.24), colors.disabled)),
+          borderRadius: BorderRadius.circular(30.0.multipliedRadius),
+          boxShadow: [
+            BoxShadow(
+              offset: const Offset(0, 2),
+              blurRadius: active ? 8 : 2,
+              spreadRadius: 0,
+              color: (shadowColor ?? Color.alphaBlend(finalColor.withOpacityExt(0.71), colors.surface)).withOpacityExt(active ? 0.8 : 0.3),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: width / 10),
+          child: AnimatedAlign(
+            duration: duration,
+            curve: curve,
+            alignment: active ? Alignment.centerRight : Alignment.centerLeft,
+            child: SizedBox(
+              width: width / 3,
+              height: height / 1.5,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: circleColor ?? Colors.white.withOpacityExt(0.87),
+                  borderRadius: BorderRadius.circular(30.0.multipliedRadius),
+                  // boxShadow: [
+                  //   BoxShadow(color: Colors.black.withOpacityExt(0.39), spreadRadius: 1, blurRadius: 4, offset: Offset(0, 2)),
+                  // ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CustomSwitchListTile extends StatelessWidget {
+  final bool value;
+  final void Function(bool isTrue) onChanged;
+  final String title;
+  final String? subtitle;
+  final Widget? leading;
+  final IconData? icon;
+  final Color? passedColor;
+  final int? rotateIcon;
+  final bool enabled;
+  final bool largeTitle;
+  final int maxSubtitleLines;
+  final VisualDensity? visualDensity;
+  final Color? bgColor;
+  final bool dense;
+  final bool extraDense;
+  final Widget? trailingBeforeSwitch;
+
+  const CustomSwitchListTile({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    this.subtitle,
+    this.leading,
+    this.icon,
+    this.passedColor,
+    this.rotateIcon,
+    this.enabled = true,
+    this.largeTitle = false,
+    this.maxSubtitleLines = 8,
+    this.visualDensity,
+    this.bgColor,
+    this.dense = true,
+    this.extraDense = false,
+    this.trailingBeforeSwitch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomListTile(
+      bgColor: bgColor,
+      title: title,
+      subtitle: subtitle,
+      enabled: enabled,
+      icon: icon,
+      leading: leading,
+      largeTitle: largeTitle,
+      maxSubtitleLines: maxSubtitleLines,
+      passedColor: passedColor,
+      rotateIcon: rotateIcon,
+      onTap: () => onChanged(value),
+      dense: dense,
+      extraDense: extraDense,
+      trailing: FittedBox(
+        child: Row(
+          children: [
+            ?trailingBeforeSwitch,
+            const SizedBox(
+              width: 12.0,
+            ),
+            IgnorePointer(
+              child: CustomSwitch(active: value, passedColor: passedColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CustomListTile extends StatelessWidget {
+  final void Function()? onTap;
+  final String title;
+  final String? titleSuffix;
+  final String? subtitle;
+
+  /// takes the place of [subtitle].
+  final Widget? subtitleWidget;
+  final bool subtitleAbove;
+  final Widget? trailing;
+  final Widget? trailingRaw;
+  final String? trailingText;
+  final IconData? icon;
+  final Widget? leading;
+  final Color? passedColor;
+  final int? rotateIcon;
+  final bool enabled;
+  final bool largeTitle;
+  final int? maxTitleLines;
+  final int maxSubtitleLines;
+  final TextStyle? titleStyle;
+  final double borderR;
+  final Color? bgColor;
+  final bool dense;
+  final bool extraDense;
+
+  const CustomListTile({
+    super.key,
+    required this.title,
+    this.titleSuffix,
+    this.subtitle,
+    this.subtitleWidget,
+    this.subtitleAbove = false,
+    this.trailing,
+    this.trailingRaw,
+    this.trailingText,
+    this.onTap,
+    this.leading,
+    this.icon,
+    this.passedColor,
+    this.rotateIcon,
+    this.enabled = true,
+    this.largeTitle = false,
+    this.maxTitleLines,
+    this.maxSubtitleLines = 8,
+    this.titleStyle,
+    this.borderR = 18.0,
+    this.bgColor,
+    this.dense = true,
+    this.extraDense = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = NColors.defaultIcon(mainColor: passedColor);
+    final subtitle = this.subtitle;
+    final subtitleWidget = this.subtitleWidget;
+    final hasSubtitleText = subtitle != null && subtitle.isNotEmpty;
+    final hasSubtitle = hasSubtitleText || subtitleWidget != null;
+
+    final baseHeight = 6.0 + VisualDensity.compact.baseSizeAdjustment.dy;
+    var oneLineHeight = baseHeight + (dense ? 50.0 : 56.0);
+    var minTileHeight = hasSubtitle ? baseHeight + (dense ? 60.0 : 62.0) : oneLineHeight;
+    var verticalPadding = 8.0;
+    var borderR = this.borderR;
+    var iconSize = 24.0;
+
+    if (this.extraDense) {
+      oneLineHeight *= 0.85;
+      minTileHeight *= 0.85;
+      verticalPadding = 1.0;
+      borderR *= 0.8;
+    }
+
+    final subtitleText =
+        subtitleWidget ??
+        (hasSubtitleText
+            ? NamidaText(
+                subtitle,
+                style: NText.small,
+                maxLines: maxSubtitleLines,
+                overflow: TextOverflow.ellipsis,
+              )
+            : null);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.0),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 400),
+        opacity: enabled ? 1.0 : 0.5,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: minTileHeight),
+          child: NamidaInkWell(
+            onTap: enabled ? onTap : null,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(borderR.multipliedRadius),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: NamidaMouseRegion(
+              enabled: enabled && onTap != null,
+              child: Row(
+                children: [
+                  if (icon != null) ...[
+                    rotateIcon != null
+                        ? RotatedBox(
+                            quarterTurns: rotateIcon!,
+                            child: NIcon(
+                              icon,
+                              color: iconColor,
+                              size: iconSize,
+                            ),
+                          )
+                        : NIcon(
+                            icon,
+                            color: iconColor,
+                            size: iconSize,
+                          ),
+                    const SizedBox(width: 12.0),
+                  ] else if (leading != null) ...[
+                    leading!,
+                    const SizedBox(width: 12.0),
+                  ],
+
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: verticalPadding),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (subtitleText != null && subtitleAbove) ...[
+                            subtitleText,
+                            if (!(dense || extraDense)) const SizedBox(height: 2.0),
+                          ],
+                          Text.rich(
+                            TextSpan(
+                              text: title,
+                              children: titleSuffix == null
+                                  ? null
+                                  : [
+                                      TextSpan(
+                                        text: titleSuffix,
+                                        style: NText.small.of(context).copyWith(fontSize: 11.0),
+                                      ),
+                                    ],
+                            ),
+                            style: titleStyle ?? (largeTitle ? NText.large.of(context) : NText.medium.of(context)),
+                            maxLines: maxTitleLines ?? (subtitle != null ? 4 : 5),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (subtitleText != null && !subtitleAbove) ...[
+                            if (!(dense || extraDense)) const SizedBox(height: 2.0),
+                            subtitleText,
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 6.0),
+
+                  const SizedBox(width: 12.0),
+
+                  if (trailingRaw != null) ...[
+                    trailingRaw!,
+                  ] else if (trailing != null || trailingText != null) ...[
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minWidth: 0,
+                        maxWidth: Dimensions.inst.availableAppContentWidth * 0.3,
+                        maxHeight: oneLineHeight,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: trailingText != null
+                            ? NamidaText(
+                                trailingText!,
+                                style: NText.medium,
+                                color: const NColors(.onSurface, opacity: 0.78),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              )
+                            : trailing!,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Blurs a child, effective for performance
+class NamidaBlur extends StatelessWidget {
+  final double blur;
+  final bool enabled;
+  final TileMode? tileMode;
+  final Widget child;
+
+  const NamidaBlur({
+    super.key,
+    required this.blur,
+    this.enabled = true,
+    bool fixArtifacts = false,
+    required this.child,
+  }) : tileMode = fixArtifacts ? TileMode.decal : NamidaBlur.kDefaultTileMode;
+
+  static const kDefaultTileMode = TileMode.clamp;
+
+  @override
+  Widget build(BuildContext context) {
+    return ImageFiltered(
+      enabled: enabled && blur > 0,
+      imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur, tileMode: tileMode),
+      child: child,
+    );
+  }
+}
+
+/// Blurs a background behind a child, demanding/expensive for performance.
+class NamidaBgBlur extends StatelessWidget {
+  final double blur;
+  final bool enabled;
+  final bool disableIfBlur0;
+  final Widget child;
+
+  const NamidaBgBlur({
+    super.key,
+    required this.blur,
+    this.enabled = true,
+    this.disableIfBlur0 = true,
+    required this.child,
+  });
+
+  static final _groupKey = BackdropKey();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled || (disableIfBlur0 && blur == 0)) return child;
+    final artworkBlurSources = ArtworkBlurScope.maybeOf(context);
+    if (artworkBlurSources != null) {
+      return ArtworkBackdropBlur(
+        sources: artworkBlurSources,
+        blur: blur,
+        child: child,
+      );
+    }
+    Widget blurredWidget = BackdropFilter(
+      backdropGroupKey: _groupKey,
+      filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur, tileMode: NamidaBlur.kDefaultTileMode),
+      child: child,
+    );
+    final topArea = WindowController.instance?.windowTitleBarHeightIfActive;
+    if (topArea != null) {
+      // -- ensure window title bar is not blurred
+      blurredWidget = ClipRect(
+        child: blurredWidget,
+      );
+    }
+    return blurredWidget;
+  }
+}
+
+/// Same as [NamidaBgBlur] but with more configurations like clipping & decoration
+class NamidaBgBlurClipped extends StatelessWidget {
+  final double blur;
+  final bool enabled;
+  final Clip clipBehavior;
+  final BoxShape shape;
+  final BoxDecoration? decoration;
+  final BorderRadiusGeometry? borderRadius;
+  final Widget child;
+
+  const NamidaBgBlurClipped({
+    super.key,
+    required this.blur,
+    this.enabled = true,
+    this.shape = BoxShape.rectangle,
+    this.clipBehavior = Clip.antiAlias,
+    this.decoration,
+    this.borderRadius,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final decoration = this.decoration;
+
+    if (!enabled || blur == 0) {
+      return decoration != null
+          ? DecoratedBox(
+              decoration: decoration,
+              child: child,
+            )
+          : borderRadius != null && shape != BoxShape.rectangle
+          ? DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                shape: decoration?.shape ?? BoxShape.rectangle,
+              ),
+            )
+          : child;
+    }
+
+    return ClipPath(
+      clipBehavior: clipBehavior,
+      clipper: DecorationClipper(
+        decoration: BoxDecoration(
+          borderRadius: decoration?.borderRadius ?? borderRadius,
+          shape: decoration?.shape ?? shape,
+        ),
+      ),
+      child: NamidaBgBlur(
+        blur: blur,
+        enabled: enabled,
+        child: decoration != null
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: decoration.borderRadius,
+                  shape: decoration.shape,
+                  backgroundBlendMode: decoration.backgroundBlendMode,
+                  border: decoration.border,
+                  boxShadow: decoration.boxShadow,
+                  color: decoration.color,
+                  gradient: decoration.gradient,
+                  image: decoration.image,
+                ),
+                child: child,
+              )
+            : child,
+      ),
+    );
+  }
+}
+
+class DropShadow extends StatelessWidget {
+  final Widget child;
+  final Widget? bottomChild;
+  final double blurRadius;
+  final double bgSizePercentage;
+  final double sizePercentage;
+  final Offset offset;
+
+  const DropShadow({
+    required this.child,
+    this.bottomChild,
+    this.blurRadius = 10.0,
+    this.offset = const Offset(0, 4),
+    this.bgSizePercentage = defaultBgSizePercentage,
+    this.sizePercentage = defaultSizePercentage,
+    super.key,
+  });
+
+  static const defaultBgSizePercentage = 0.925;
+  static const defaultSizePercentage = 0.95;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Transform.scale(
+          scale: bgSizePercentage,
+          child: Transform.translate(
+            offset: offset,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(
+                sigmaX: blurRadius,
+                sigmaY: blurRadius,
+                tileMode: TileMode.decal,
+              ),
+              child: bottomChild ?? child,
+            ),
+          ),
+        ),
+        sizePercentage == 1.0
+            ? child
+            : Transform.scale(
+                scale: sizePercentage,
+                child: child,
+              ),
+      ],
+    );
+  }
+}
+
+class CustomBlurryDialog extends StatelessWidget {
+  final IconData? icon;
+  final String? title;
+  final Widget? titleWidget;
+  final Widget? titleWidgetInPadding;
+  final List<Widget>? trailingWidgets;
+  final Widget? child;
+  final List<Widget>? actions;
+  final Widget? leftAction;
+  final bool normalTitleStyle;
+  final String? bodyText;
+  final bool isWarning;
+  final bool scrollable;
+  final double horizontalInset;
+  final double verticalInset;
+  final double maxWidth;
+  final EdgeInsetsGeometry contentPadding;
+  final ThemeData? theme;
+  final Widget? frame;
+
+  const CustomBlurryDialog({
+    super.key,
+    this.child,
+    this.trailingWidgets,
+    this.title,
+    this.titleWidget,
+    this.titleWidgetInPadding,
+    this.actions,
+    this.icon,
+    this.normalTitleStyle = false,
+    this.bodyText,
+    this.isWarning = false,
+    this.horizontalInset = 42.0,
+    this.verticalInset = 32.0,
+    this.maxWidth = kDialogMaxWidth,
+    this.scrollable = true,
+    this.contentPadding = const EdgeInsets.all(14.0),
+    this.leftAction,
+    this.theme,
+    this.frame,
+  });
+
+  static const _kContentToActionsGap = 16.0;
+  static const _kActionsTopPaddingWithoutContentPadding = 12.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctxth = theme ?? context.theme;
+    final vInsets = verticalInset;
+    final double horizontalMargin = Dimensions.calculateDialogHorizontalMargin(context, horizontalInset);
+    final contentBottomPadding = contentPadding.resolve(Directionality.of(context)).bottom;
+    final actionsTopPaddingAfterContent = (_kContentToActionsGap - contentBottomPadding).withMinimum(0.0);
+    final actionsTopPadding = contentBottomPadding == 0.0 ? _kActionsTopPaddingWithoutContentPadding : actionsTopPaddingAfterContent;
+    return Center(
+      child: SmoothSingleChildScrollView(
+        child: Dialog(
+          backgroundColor: ctxth.dialogTheme.backgroundColor,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: EdgeInsets.symmetric(horizontal: horizontalMargin, vertical: vInsets),
+          clipBehavior: Clip.antiAlias,
+          child: _DialogContentNoSystemPadding(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: TapDetector(
+                onTap: () {},
+                child: _DialogFrame(
+                  frame: frame,
+                  child: Container(
+                    color: Colors.transparent,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        /// Title.
+                        ?titleWidget,
+                        if (titleWidgetInPadding != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 28.0, left: 28.0, right: 24.0),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: titleWidgetInPadding,
+                            ),
+                          ),
+                        if (titleWidget == null && titleWidgetInPadding == null)
+                          normalTitleStyle
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 28.0, left: 28.0, right: 24.0),
+                                  child: Row(
+                                    children: [
+                                      if (icon != null || isWarning) ...[
+                                        Icon(
+                                          isWarning ? Broken.warning_2 : icon,
+                                        ),
+                                        const SizedBox(
+                                          width: 10.0,
+                                        ),
+                                      ],
+                                      Expanded(
+                                        child: NamidaText(
+                                          isWarning ? lang.warning : title ?? '',
+                                          style: NText.large,
+                                        ),
+                                      ),
+                                      ...?trailingWidgets,
+                                    ],
+                                  ),
+                                )
+                              : Container(
+                                  color: Color.alphaBlend(ctxth.colorScheme.primary.withOpacityExt(0.02), ctxth.cardTheme.color!),
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      if (icon != null) ...[
+                                        Icon(
+                                          icon,
+                                        ),
+                                        const SizedBox(
+                                          width: 10.0,
+                                        ),
+                                      ],
+                                      Expanded(
+                                        child: NamidaText(
+                                          title ?? '',
+                                          style: NText.medium,
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                        /// Body.
+                        Padding(
+                          padding: contentPadding,
+                          child: SizedBox(
+                            width: context.width,
+                            child: bodyText != null
+                                ? Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: NamidaText(
+                                      bodyText!,
+                                      style: NText.medium,
+                                    ),
+                                  )
+                                : child,
+                          ),
+                        ),
+
+                        /// Actions.
+                        if (actions != null)
+                          Padding(
+                            padding: EdgeInsets.only(left: 16.0, right: 16.0, top: actionsTopPadding, bottom: 12.0),
+                            child: LayoutWidthProvider(
+                              builder: (context, maxWidth) {
+                                final leftActionMaxWidth = leftAction == null ? 0.0 : maxWidth * 0.35;
+                                final actionsMaxWidth = (maxWidth - leftActionMaxWidth);
+                                return SizedBox(
+                                  width: maxWidth,
+                                  child: Row(
+                                    mainAxisSize: .max,
+                                    children: [
+                                      if (leftAction != null) ...[
+                                        ConstrainedBox(
+                                          constraints: BoxConstraints(maxWidth: leftActionMaxWidth),
+                                          child: FittedBox(
+                                            alignment: AlignmentDirectional.centerStart,
+                                            fit: BoxFit.scaleDown,
+                                            child: leftAction!,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6.0),
+                                      ],
+
+                                      Expanded(
+                                        child: ConstrainedBox(
+                                          constraints: BoxConstraints(maxWidth: actionsMaxWidth),
+                                          child: FittedBox(
+                                            alignment: AlignmentDirectional.centerEnd,
+                                            fit: BoxFit.scaleDown,
+                                            child: Row(
+                                              mainAxisSize: .max,
+                                              mainAxisAlignment: .end,
+                                              children: [
+                                                ...actions!.addSeparators(separator: const SizedBox(width: 6.0)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogContentNoSystemPadding extends StatelessWidget {
+  final Widget child;
+
+  const _DialogContentNoSystemPadding({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return MediaQuery.removePadding(
+      context: context,
+      removeLeft: true,
+      removeTop: true,
+      removeRight: true,
+      removeBottom: true,
+      child: child,
+    );
+  }
+}
+
+class _DialogFrame extends StatelessWidget {
+  final Widget? frame;
+  final Widget child;
+
+  const _DialogFrame({required this.frame, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final frame = this.frame;
+    if (frame == null) return child;
+    return Stack(
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: RepaintBoundary(
+              child: frame,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class NamidaButtonText extends Text {
+  const NamidaButtonText(
+    super.data, {
+    super.key,
+    TextStyle? style,
+    super.softWrap,
+    super.overflow,
+  }) : super(style: style ?? const TextStyle(fontSize: 15.0));
+}
+
+class NamidaFABButton extends StatelessWidget {
+  final IconData icon;
+  final String? text;
+  final String Function()? tooltip;
+  final void Function() onTap;
+  final void Function()? onLongPress;
+  final bool? enabled;
+  final bool big;
+  final bool dim;
+  final bool animateText;
+
+  const NamidaFABButton({
+    super.key,
+    required this.icon,
+    this.text,
+    this.tooltip,
+    required this.onTap,
+    this.onLongPress,
+    this.enabled,
+    this.big = false,
+    this.dim = false,
+    this.animateText = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final size = big ? kFABSize * 1.25 : kFABSize;
+    final iconSize = big ? 28.0 : 22.0;
+    final fontSizeMultiplier = big ? 1.15 : 1.0;
+    return NamidaButton(
+      tooltip: tooltip,
+      minHeight: size,
+      minWidth: size,
+      fontSizeMultiplier: fontSizeMultiplier,
+      icon: icon,
+      text: text,
+      animateText: animateText,
+      enabled: enabled,
+      opaqueBG: true,
+      isMinimumSquared: text == null || animateText,
+      colors: dim ? NamidaButtonColors.dimmed : NamidaButtonColors.fab,
+      iconSize: iconSize,
+      onTap: onTap,
+      onLongPress: onLongPress,
+      tooltipPreferBelow: false,
+    );
+  }
+}
+
+class NamidaTextButton extends StatelessWidget {
+  final String text;
+  final double? minHeight;
+  final bool enabled;
+  final double fontSizeMultiplier;
+  final void Function() onTap;
+
+  const NamidaTextButton({
+    super.key,
+    required this.text,
+    this.minHeight,
+    this.enabled = true,
+    this.fontSizeMultiplier = 1.0,
+    required this.onTap,
+  });
+
+  static const double kDefaultMinHeight = NamidaButton.kDefaultMinHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaButton(
+      onTap: onTap,
+      enabled: enabled,
+      text: text,
+      fontSizeMultiplier: fontSizeMultiplier,
+      minHeight: minHeight,
+      dense: true,
+      colors: NamidaButtonColors.dimmed,
+    );
+  }
+}
+
+enum NamidaButtonColors {
+  selected,
+  fab,
+  saturated,
+  normal,
+  mid,
+  dimmed,
+  ;
+
+  static const defaultValue = normal;
+}
+
+class NamidaButton extends StatelessWidget {
+  final IconData? icon;
+  final Widget? iconWidget;
+  final IconData? secondaryIcon;
+  final double? iconSize;
+  final String? text;
+  final bool animateText;
+  final double fontSizeMultiplier;
+  final Color? colorScheme;
+  final double? minHeight;
+  final double? minWidth;
+  final double? borderRadius;
+  final String Function()? tooltip;
+  final void Function() onTap;
+  final void Function()? onLongPress;
+  final bool? enabled;
+  final bool? isLoading;
+  final bool dense;
+  final NamidaButtonColors colors;
+  final List<BoxShadow>? boxShadow;
+  final bool opaqueBG;
+  final bool animatedDecoration;
+  final bool isCircle;
+  final bool isMinimumSquared;
+  final bool? tooltipPreferBelow;
+  final bool isCentered;
+  final Axis direction;
+  final CustomPainter Function(Color foregroundColor, double borderRadius)? foregroundPainterBuilder;
+
+  const NamidaButton({
+    super.key,
+    this.icon,
+    this.iconWidget,
+    this.secondaryIcon,
+    this.iconSize = 20.0,
+    this.text,
+    this.animateText = false,
+    this.fontSizeMultiplier = 1.0,
+    this.colorScheme,
+    this.minHeight,
+    this.minWidth,
+    this.borderRadius,
+    this.tooltip,
+    required this.onTap,
+    this.onLongPress,
+    this.enabled,
+    this.isLoading,
+    this.dense = false,
+    this.colors = NamidaButtonColors.normal,
+    this.boxShadow,
+    this.opaqueBG = false,
+    this.animatedDecoration = false,
+    this.isCircle = false,
+    this.isMinimumSquared = false,
+    this.tooltipPreferBelow,
+    this.isCentered = true,
+    this.direction = Axis.horizontal,
+    this.foregroundPainterBuilder,
+  });
+
+  static const double kDefaultMinHeight = 36.0;
+
+  static NamidaButtonPalette resolvePalette(NColorsData nColors, {required NamidaButtonColors colors, Color? colorScheme, bool opaqueBG = false}) {
+    final (double colorSchemeOpacity, double bgOpacity, double borderOpacity, double foregroundOpacity) = switch (colors) {
+      NamidaButtonColors.selected => (0.8, 0.8, 0.8, 0.8),
+      NamidaButtonColors.fab => (0.5, 0.2, 0.6, 0.85),
+      NamidaButtonColors.saturated => (0.4, 0.2, 0.6, 0.85),
+      NamidaButtonColors.normal => (0.3, 0.2, 0.6, 0.85),
+      NamidaButtonColors.mid => (0.2, 0.2, 0.6, 0.85),
+      NamidaButtonColors.dimmed => (0.1, 0.2, 0.6, 0.85),
+    };
+
+    final colorSchemeBase = colorScheme ?? nColors.primary;
+    final colorSchemeFinal = colorSchemeBase.withOpacityExt(colorSchemeOpacity);
+
+    bool whiteForeground = switch (colors) {
+      .selected => true,
+      _ => false,
+    };
+
+    var bgColor = colorSchemeFinal.withOpacityExt(colorSchemeFinal.a * bgOpacity);
+    if (opaqueBG) bgColor = Color.alphaBlend(bgColor, nColors.scaffold);
+    final borderColor = colorSchemeFinal.withOpacityExt(colorSchemeFinal.a * borderOpacity);
+    final foregroundBase = whiteForeground ? Colors.white : NColors.defaultIcon(mainColor: colorSchemeFinal).resolve(nColors);
+    final foregroundColor = foregroundBase.withOpacityExt(foregroundOpacity);
+    return (colorScheme: colorSchemeFinal, bg: bgColor, border: borderColor, foreground: foregroundColor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.targetOf(context);
+    final palette = resolvePalette(nColors, colors: colors, colorScheme: this.colorScheme, opaqueBG: opaqueBG);
+    final colorScheme = palette.colorScheme;
+    final bgColor = palette.bg;
+    final borderColor = palette.border;
+    final foregroundColor = palette.foreground;
+
+    final text = this.text;
+    final icon = this.icon;
+    final iconWidget = this.iconWidget;
+    final iconSize = this.iconSize;
+    final secondaryIcon = this.secondaryIcon;
+    final enabled = this.enabled;
+    final isLoading = this.isLoading;
+
+    final iconOfData = (icon == null
+        ? null
+        : secondaryIcon != null
+        ? StackedIcon(
+            disableColor: true,
+            baseIcon: icon,
+            iconSize: iconSize,
+            baseIconColor: NColors.fixed(foregroundColor),
+            secondaryIconColor: NColors.fixed(foregroundColor),
+            secondaryIcon: secondaryIcon,
+            secondaryIconSize: 13.0,
+          )
+        : Icon(
+            icon,
+            size: iconSize,
+            color: foregroundColor,
+          ));
+    final iconChild = iconWidget ?? iconOfData;
+
+    final textStyle = NText.medium
+        .of(context)
+        .copyWith(
+          color: foregroundColor,
+          fontSize: fontSizeMultiplier * (dense ? 15.0 : 15.5),
+        );
+
+    final textChild = (animateText || text == null || text.isEmpty
+        ? null
+        : Text(
+            text,
+            style: textStyle,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ));
+
+    EdgeInsets padding;
+    double minHeight = this.minHeight ?? kDefaultMinHeight;
+
+    if (isCircle || isMinimumSquared) {
+      padding = const EdgeInsets.symmetric(
+        horizontal: 12.0,
+        vertical: 12.0,
+      );
+    } else if (dense) {
+      padding = EdgeInsets.symmetric(
+        horizontal: textChild != null
+            ? iconChild != null
+                  ? 10.0
+                  : 12.0
+            : iconChild != null
+            ? 10.0
+            : 8.0,
+        vertical: 8.0,
+      );
+    } else {
+      padding = EdgeInsets.symmetric(
+        horizontal: textChild != null
+            ? iconChild != null
+                  ? 18.0
+                  : 24.0
+            : iconChild != null
+            ? 16.0
+            : 12.0,
+        vertical: 8.0,
+      );
+    }
+
+    if (!dense && textChild != null && iconChild == null) {
+      padding *= 1.25;
+    }
+
+    final brRaw = borderRadius ?? (isCircle ? 99.0 : 20.0);
+    Widget inkWell = NamidaInkWell(
+      animationDurationMS: animatedDecoration ? 300 : 0,
+      borderRadius: brRaw,
+      onTap: onTap,
+      onLongPress: onLongPress,
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(
+          width: 0.5,
+          color: borderColor,
+        ),
+        boxShadow: boxShadow,
+      ),
+      padding: padding,
+      child: Flex(
+        direction: direction,
+        mainAxisAlignment: isCentered ? MainAxisAlignment.center : MainAxisAlignment.start,
+        mainAxisSize: .min,
+        children: [
+          ?iconChild,
+          if (animateText)
+            Flexible(
+              child: _NamidaButtonAnimatedText(
+                text: text,
+                style: textStyle,
+                direction: direction,
+                hasIcon: iconChild != null,
+              ),
+            ),
+          if (iconChild != null && textChild != null)
+            switch (direction) {
+              Axis.horizontal => const SizedBox(width: 8.0),
+              Axis.vertical => const SizedBox(height: 2.0),
+            },
+          if (textChild != null)
+            Flexible(
+              child: textChild,
+            ),
+        ],
+      ),
+    );
+
+    final foregroundPainter = foregroundPainterBuilder?.call(foregroundColor, brRaw.multipliedRadius);
+    if (foregroundPainter != null) {
+      inkWell = CustomPaint(
+        foregroundPainter: foregroundPainter,
+        child: inkWell,
+      );
+    }
+
+    Widget box = NamidaTooltip(
+      message: tooltip,
+      preferBelow: tooltipPreferBelow,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: minHeight, minWidth: isCircle || isMinimumSquared ? minHeight : 0.0),
+        child: inkWell,
+      ),
+    );
+
+    if (isLoading != null) {
+      box = AnimatedRotatingBorder(
+        isLoading: isLoading,
+        duration: const Duration(milliseconds: 1200),
+        borderRadius: brRaw.multipliedRadius,
+        colors: [
+          colorScheme,
+        ],
+        child: box,
+      );
+    }
+
+    if (enabled != null) {
+      box = IgnorePointer(
+        ignoring: !enabled,
+        child: AnimatedOpacity(
+          opacity: enabled ? 1.0 : 0.6,
+          duration: const Duration(milliseconds: 250),
+          child: box,
+        ),
+      );
+
+      if (opaqueBG) {
+        box = IgnorePointer(
+          ignoring: !enabled,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(brRaw.multipliedRadius),
+                      color: bgColor,
+                    ),
+                  ),
+                ),
+              ),
+              box,
+            ],
+          ),
+        );
+      }
+    }
+
+    return box;
+  }
+}
+
+class _NamidaButtonAnimatedText extends StatefulWidget {
+  final String? text;
+  final TextStyle? style;
+  final Axis direction;
+  final bool hasIcon;
+
+  const _NamidaButtonAnimatedText({
+    required this.text,
+    required this.style,
+    required this.direction,
+    required this.hasIcon,
+  });
+
+  @override
+  State<_NamidaButtonAnimatedText> createState() => _NamidaButtonAnimatedTextState();
+}
+
+class _NamidaButtonAnimatedTextState extends State<_NamidaButtonAnimatedText> {
+  String? _lastShownText;
+
+  void _updateLastShownText() {
+    final text = widget.text;
+    if (text != null && text.isNotEmpty) _lastShownText = text;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _updateLastShownText();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NamidaButtonAnimatedText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateLastShownText();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.text;
+    final lastShownText = _lastShownText;
+    final isHorizontal = widget.direction == Axis.horizontal;
+    return ClipRect(
+      child: AnimatedShow(
+        show: text != null && text.isNotEmpty,
+        isHorizontal: isHorizontal,
+        duration: const Duration(milliseconds: 400),
+        alignment: isHorizontal ? AlignmentDirectional.centerStart : Alignment.topCenter,
+        child: lastShownText == null
+            ? const SizedBox()
+            : Padding(
+                padding: isHorizontal ? EdgeInsetsDirectional.only(start: widget.hasIcon ? 8.0 : 0.0, end: 4.0) : EdgeInsets.only(top: widget.hasIcon ? 2.0 : 0.0),
+                child: Text(
+                  lastShownText,
+                  style: widget.style,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class StatsContainer extends StatelessWidget {
+  final Widget? child;
+  final Widget? leading;
+  final IconData? icon;
+  final String title;
+  final String value;
+  final Widget? valueWidget;
+  final String? total;
+
+  const StatsContainer({
+    super.key,
+    this.child,
+    this.leading,
+    this.icon,
+    required this.title,
+    required this.value,
+    this.valueWidget,
+    this.total,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return NContainer(
+      constraints: const BoxConstraints(minHeight: 42.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      decoration: (colors) => BoxDecoration(
+        color: colors.cardTheme.withOpacityExt(0.78),
+        borderRadius: BorderRadius.circular(18.0.multipliedRadius),
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 5.0),
+      child:
+          child ??
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              leading ??
+                  NIcon(
+                    icon,
+                    color: NColors.defaultIcon(),
+                    size: 22.0,
+                  ),
+              const SizedBox(width: 8.0),
+              Text(title),
+              const SizedBox(width: 6.0),
+              if (total == null)
+                valueWidget ?? Text(value)
+              else
+                Text(
+                  '$value ${lang.ofLabel} $total',
+                  style: const TextStyle(fontSize: 13.0),
+                ),
+            ],
+          ),
+    );
+  }
+}
+
+class SmallListTile extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final IconData? icon;
+  final IconData? trailingIcon;
+  final bool active;
+  final bool compact;
+  final Color? color;
+  final double? iconSize;
+  final void Function()? onTap;
+  final void Function()? onLongPress;
+  final EdgeInsetsGeometry? padding;
+  final double? titleGap;
+  final double borderRadius;
+  final Widget? leading;
+  final VisualDensity? visualDensity;
+
+  const SmallListTile({
+    super.key,
+    required this.title,
+    this.onTap,
+    this.onLongPress,
+    this.trailing,
+    this.active = false,
+    this.icon,
+    this.trailingIcon,
+    this.compact = true,
+    this.subtitle,
+    this.color,
+    this.iconSize,
+    this.padding,
+    this.titleGap,
+    this.borderRadius = 0.0,
+    this.leading,
+    this.visualDensity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = color != null ? Color.alphaBlend(color!.withOpacityExt(0.47), NText.medium.of(context).color!) : null;
+    final padding = this.padding ?? (icon != null ? const EdgeInsets.only(left: 16.0, right: 12.0) : const EdgeInsets.only(left: 12.0, right: 12.0));
+    return ListTile(
+      contentPadding: padding,
+      horizontalTitleGap: titleGap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(borderRadius.multipliedRadius),
+      ),
+      dense: false,
+      leading:
+          leading ??
+          SizedBox(
+            height: double.infinity,
+            child: icon != null
+                ? Icon(
+                    icon,
+                    color: iconColor,
+                    size: iconSize,
+                  )
+                : Stack(
+                    children: [
+                      AnimatedShow(
+                        show: active,
+                        isHorizontal: true,
+                        child: const Icon(
+                          Broken.arrow_circle_right,
+                          size: 20.0,
+                        ),
+                      ),
+                      AnimatedShow(
+                        show: !active,
+                        isHorizontal: true,
+                        child: const Icon(
+                          Broken.arrow_right_3,
+                          size: 18.0,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+      visualDensity: visualDensity ?? (compact ? const VisualDensity(horizontal: -2.2, vertical: -2.2) : const VisualDensity(horizontal: -1.2, vertical: -1.2)),
+      title: NamidaText(
+        title,
+        style: NText.medium,
+        color: NColors.fixed(
+          color != null
+              ? Color.alphaBlend(
+                  color!.withOpacityExt(0.16),
+                  NText.medium.of(context).color!,
+                )
+              : null,
+        ),
+      ),
+      subtitle: subtitle != null
+          ? NamidaText(
+              subtitle!,
+              style: NText.small,
+              color: NColors.fixed(
+                color != null
+                    ? Color.alphaBlend(
+                        color!.withOpacityExt(0.16),
+                        NText.medium.of(context).color!,
+                      )
+                    : null,
+              ),
+            )
+          : null,
+      trailing: trailingIcon != null
+          ? Icon(
+              trailingIcon,
+              color: color,
+              size: 18.0,
+            )
+          : trailing,
+      onTap: onTap,
+      onLongPress: onLongPress,
+    );
+  }
+}
+
+// rewritten by claude, header is a [CustomListTile], one animation drives size, fade, slide, arrow and tint, children sit on a rail.
+class NamidaExpansionTile extends StatefulWidget {
+  static const kBottomGap = 18.0;
+  static const kNestedBottomGap = 8.0;
+
+  final IconData? icon;
+  final Color? iconColor;
+  final Widget? leading;
+  final double trailingIconSize;
+  final String titleText;
+  final Widget? subtitle;
+  final String? subtitleText;
+  final Color? textColor;
+  final Color? textColorScheme;
+  final List<Widget> children;
+
+  /// inside the rail.
+  final EdgeInsetsGeometry childrenPadding;
+
+  final double bottomGap;
+  final bool showRail;
+  final bool initiallyExpanded;
+  final Widget Function(Widget arrow)? trailingBuilder;
+  final ValueChanged<bool>? onExpansionChanged;
+
+  /// followed instead of toggling on tap, [onTap] is expected to change it.
+  final RxBaseCore<bool>? expandedRx;
+  final VoidCallback? onTap;
+  final Color? bgColor;
+
+  const NamidaExpansionTile({
+    super.key,
+    this.icon,
+    this.iconColor,
+    this.leading,
+    this.trailingIconSize = 20.0,
+    required this.titleText,
+    this.subtitle,
+    this.subtitleText,
+    this.textColor,
+    this.textColorScheme,
+    this.children = const <Widget>[],
+    this.childrenPadding = EdgeInsets.zero,
+    this.bottomGap = kBottomGap,
+    this.showRail = true,
+    this.initiallyExpanded = false,
+    this.trailingBuilder,
+    this.onExpansionChanged,
+    this.expandedRx,
+    this.onTap,
+    this.bgColor,
+  });
+
+  @override
+  State<NamidaExpansionTile> createState() => _NamidaExpansionTileState();
+}
+
+class _NamidaExpansionTileState extends State<NamidaExpansionTile> with SingleTickerProviderStateMixin {
+  static const _kBorderRadius = 18.0;
+
+  late bool _isExpanded = widget.initiallyExpanded;
+  late bool _isBodyBuilt = _isExpanded;
+
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+    reverseDuration: const Duration(milliseconds: 220),
+    value: _isExpanded ? 1.0 : 0.0,
+  );
+  late final _sizeAnimation = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+    reverseCurve: Curves.easeInCubic,
+  );
+  late final _fadeAnimation = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
+    reverseCurve: const Interval(0.5, 1.0, curve: Curves.easeIn),
+  );
+  late final _arrowTurns = Tween(begin: 0.0, end: 0.5).animate(_sizeAnimation);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addStatusListener(_onStatusChanged);
+    widget.expandedRx?.addListener(_onExpandedRxChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant NamidaExpansionTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final expandedRx = widget.expandedRx;
+    if (expandedRx == oldWidget.expandedRx) return;
+    oldWidget.expandedRx?.removeListener(_onExpandedRxChanged);
+    expandedRx?.addListener(_onExpandedRxChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.expandedRx?.removeListener(_onExpandedRxChanged);
+    _sizeAnimation.dispose();
+    _fadeAnimation.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onStatusChanged(AnimationStatus status) {
+    final isBodyBuilt = status != AnimationStatus.dismissed;
+    if (isBodyBuilt == _isBodyBuilt) return;
+    setState(() => _isBodyBuilt = isBodyBuilt);
+  }
+
+  void _onExpandedRxChanged() {
+    final expandedRx = widget.expandedRx;
+    if (expandedRx != null) _setExpanded(expandedRx.value);
+  }
+
+  void _setExpanded(bool isExpanded) {
+    if (isExpanded == _isExpanded) return;
+    _isExpanded = isExpanded;
+    if (isExpanded) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  void _onHeaderTap() {
+    if (widget.expandedRx == null) {
+      final isExpanded = !_isExpanded;
+      _setExpanded(isExpanded);
+      widget.onExpansionChanged?.call(isExpanded);
+    }
+    widget.onTap?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final colors = NColorsData.of(context);
+    final textColorScheme = widget.textColorScheme;
+    final titleStyle = NText.medium.of(context);
+    final normalTitleColor = titleStyle.color!;
+    final brightTitleColor = NText.large.of(context).color!;
+    final schemeTint = textColorScheme?.withOpacityExt(0.16);
+    final collapsedTitleColor = schemeTint == null ? normalTitleColor : Color.alphaBlend(schemeTint, normalTitleColor);
+    final expandedTitleColor = widget.textColor ?? (schemeTint == null ? brightTitleColor : Color.alphaBlend(schemeTint, brightTitleColor));
+    final arrow = Padding(
+      padding: const EdgeInsets.all(4.0),
+      child: RotationTransition(
+        turns: _arrowTurns,
+        child: Icon(
+          Broken.arrow_down_2,
+          size: widget.trailingIconSize,
+        ),
+      ),
+    );
+    final trailing = widget.trailingBuilder?.call(arrow) ?? arrow;
+    final icon = widget.icon;
+    final iconColor = widget.iconColor;
+    final leading =
+        widget.leading ??
+        (iconColor == null
+            ? null
+            : Icon(
+                icon,
+                color: iconColor,
+              ));
+    final header = _ExpansionHeader(
+      animation: _sizeAnimation,
+      titleStyle: titleStyle,
+      collapsedTitleColor: collapsedTitleColor,
+      expandedTitleColor: expandedTitleColor,
+      icon: leading == null ? icon : null,
+      leading: leading,
+      title: widget.titleText,
+      subtitle: widget.subtitleText,
+      subtitleWidget: widget.subtitle,
+      trailing: trailing,
+      onTap: _onHeaderTap,
+    );
+    final borderRadius = BorderRadius.circular(_kBorderRadius.multipliedRadius);
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        header,
+        if (_isBodyBuilt)
+          _ExpansionSizeReveal(
+            animation: _sizeAnimation,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: _ExpansionSlideIn(
+                animation: _sizeAnimation,
+                child: _ExpansionChildrenRail(
+                  padding: widget.childrenPadding,
+                  bottomGap: widget.bottomGap,
+                  showRail: widget.showRail,
+                  children: widget.children,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+    final bgColor = widget.bgColor;
+    if (bgColor != null) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: borderRadius,
+        ),
+        child: content,
+      );
+    }
+    final isDark = theme.brightness == Brightness.dark;
+    return _ExpansionTint(
+      animation: _sizeAnimation,
+      color: colors.card,
+      maxOpacity: isDark ? 0.3 : 0.18,
+      borderRadius: borderRadius,
+      child: content,
+    );
+  }
+}
+
+class _ExpansionHeader extends AnimatedWidget {
+  final Animation<double> animation;
+  final TextStyle titleStyle;
+  final Color collapsedTitleColor;
+  final Color expandedTitleColor;
+  final IconData? icon;
+  final Widget? leading;
+  final String title;
+  final String? subtitle;
+  final Widget? subtitleWidget;
+  final Widget trailing;
+  final VoidCallback onTap;
+
+  const _ExpansionHeader({
+    required this.animation,
+    required this.titleStyle,
+    required this.collapsedTitleColor,
+    required this.expandedTitleColor,
+    required this.icon,
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.subtitleWidget,
+    required this.trailing,
+    required this.onTap,
+  }) : super(listenable: animation);
+
+  @override
+  Widget build(BuildContext context) {
+    final titleColor = Color.lerp(collapsedTitleColor, expandedTitleColor, animation.value);
+    return CustomListTile(
+      icon: icon,
+      leading: leading,
+      title: title,
+      titleStyle: titleStyle.copyWith(color: titleColor),
+      subtitle: subtitle,
+      subtitleWidget: subtitleWidget,
+      trailing: trailing,
+      onTap: onTap,
+    );
+  }
+}
+
+class _ExpansionTint extends AnimatedWidget {
+  final Animation<double> animation;
+  final Color color;
+  final double maxOpacity;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const _ExpansionTint({
+    required this.animation,
+    required this.color,
+    required this.maxOpacity,
+    required this.borderRadius,
+    required this.child,
+  }) : super(listenable: animation);
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = animation.value;
+    if (progress == 0.0) return child;
+    final tint = color.withOpacityExt(maxOpacity * progress);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: borderRadius,
+      ),
+      child: child,
+    );
+  }
+}
+
+// -- unlike [SizeTransition], no clip once fully expanded, it would cut children shadows/glows.
+class _ExpansionSizeReveal extends AnimatedWidget {
+  final Animation<double> animation;
+  final Widget child;
+
+  const _ExpansionSizeReveal({required this.animation, required this.child}) : super(listenable: animation);
+
+  @override
+  Widget build(BuildContext context) {
+    final sizeFactor = animation.value.withMinimum(0.0);
+    return ClipRect(
+      clipBehavior: sizeFactor < 1.0 ? Clip.hardEdge : Clip.none,
+      child: Align(
+        alignment: AlignmentDirectional.topStart,
+        heightFactor: sizeFactor,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _ExpansionSlideIn extends AnimatedWidget {
+  final Animation<double> animation;
+  final Widget child;
+
+  const _ExpansionSlideIn({required this.animation, required this.child}) : super(listenable: animation);
+
+  static const _kDistance = 8.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final offsetY = (animation.value - 1.0) * _kDistance;
+    return Transform.translate(
+      offset: Offset(0.0, offsetY),
+      child: child,
+    );
+  }
+}
+
+class _ExpansionChildrenRail extends StatelessWidget {
+  final EdgeInsetsGeometry padding;
+  final double bottomGap;
+  final bool showRail;
+  final List<Widget> children;
+
+  const _ExpansionChildrenRail({required this.padding, required this.bottomGap, required this.showRail, required this.children});
+
+  static const _kRailLeft = 20.0;
+  static const _kChildrenIndent = 12.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    final content = Padding(
+      padding: const EdgeInsetsDirectional.only(start: _kChildrenIndent),
+      child: Padding(
+        padding: padding,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        ),
+      ),
+    );
+    Widget body = content;
+    if (showRail) {
+      final railColor = colors.divider.withOpacityExt(namida.isDarkMode ? 0.39 : 0.16);
+      body = Stack(
+        children: [
+          PositionedDirectional(
+            start: _kRailLeft,
+            top: 4.0,
+            bottom: 4.0,
+            width: 1.0,
+            child: ColoredBox(
+              color: railColor,
+            ),
+          ),
+          content,
+        ],
+      );
+    }
+    if (bottomGap == 0.0) return body;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomGap),
+      child: body,
+    );
+  }
+}
+
+class CreatePlaylistButton extends StatelessWidget {
+  const CreatePlaylistButton({super.key});
+
+  Future<void> promptCreate() async {
+    final controller = TextEditingController();
+    final exportAsM3uRx = false.obs;
+    final m3uDirectoryRx = AppDirs.M3UPlaylists.obs;
+    final formKey = GlobalKey<FormState>();
+
+    Future<void> pickM3UDirectory() async {
+      final directoryPath = await NamidaFileBrowser.getDirectory(note: lang.convertToM3UPlaylist);
+      if (directoryPath == null) return;
+      m3uDirectoryRx.value = directoryPath;
+      exportAsM3uRx.value = true;
+    }
+
+    await NamidaNavigator.inst.navigateDialog(
+      onDisposing: () {
+        controller.dispose();
+        exportAsM3uRx.close();
+        m3uDirectoryRx.close();
+      },
+      dialog: Form(
+        key: formKey,
+        child: CustomBlurryDialog(
+          title: lang.createNewPlaylist,
+          actions: [
+            const CancelButton(),
+            NamidaButton(
+              text: lang.save,
+              onTap: () async {
+                if (formKey.currentState!.validate()) {
+                  final name = controller.text;
+                  final exportAsM3u = exportAsM3uRx.value;
+                  if (exportAsM3u && !await requestManageStoragePermission()) return;
+                  final m3uPath = exportAsM3u ? PlaylistController.getUnusedM3uFilePath(name, m3uDirectoryRx.value) : null;
+
+                  final pl = await PlaylistController.inst.addNewPlaylist(name, m3uPath: m3uPath);
+                  if (pl != null && m3uPath != null) {
+                    await PlaylistController.inst.exportPlaylistToM3UFile(pl, m3uPath);
+                    snackyy(
+                      message: "${lang.savedIn}: $m3uPath",
+                      leftBarIndicatorColor: CurrentColor.inst.color,
+                      altDesign: true,
+                      top: false,
+                    );
+                  }
+
+                  NamidaNavigator.inst.closeDialog();
+                }
+              },
+            ),
+          ],
+          child: Column(
+            mainAxisSize: .min,
+            children: [
+              Obx(
+                (context) => CustomSwitchListTile(
+                  icon: Broken.direct_send,
+                  title: lang.convertToM3UPlaylist,
+                  subtitle: m3uDirectoryRx.valueR,
+                  value: exportAsM3uRx.valueR,
+                  onChanged: (_) => exportAsM3uRx.toggle(),
+                  trailingBeforeSwitch: NamidaIconButton(
+                    icon: Broken.folder_add,
+                    tooltip: () => lang.pickFromStorage,
+                    onPressed: pickM3UDirectory,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              CustomTagTextField(
+                controller: controller,
+                hintText: lang.name,
+                labelText: '',
+                validator: (value) => PlaylistController.inst.validatePlaylistName(value),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaButton(
+      icon: Broken.add,
+      text: lang.create,
+      onTap: promptCreate,
+    );
+  }
+}
+
+class MoreIcon extends StatelessWidget {
+  final void Function()? onPressed;
+  final void Function()? onLongPress;
+  final bool rotated;
+  final double padding;
+  final Color? iconColor;
+  final double iconSize;
+  final bool enableSecondaryTap;
+
+  const MoreIcon({
+    super.key,
+    this.onPressed,
+    this.rotated = true,
+    this.padding = 1.0,
+    this.iconColor,
+    this.iconSize = 18.0,
+    this.onLongPress,
+    this.enableSecondaryTap = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RotatedBox(
+      quarterTurns: rotated ? 1 : 0,
+      child: NamidaInkWell(
+        borderRadius: 4.0,
+        onTap: onPressed,
+        onLongPress: onLongPress,
+        enableSecondaryTap: enableSecondaryTap,
+        padding: EdgeInsets.all(padding),
+        child: Icon(
+          Broken.more,
+          size: iconSize,
+          color: iconColor,
+        ),
+      ),
+    );
+  }
+}
+
+class StackedIcon extends StatelessWidget {
+  final IconData baseIcon;
+  final IconData? secondaryIcon;
+  final String? secondaryText;
+  final NColors? baseIconColor;
+  final NColors? secondaryIconColor;
+  final Color? shadowColor;
+  final double? iconSize;
+  final double? secondaryIconSize;
+  final double blurRadius;
+  final Widget? smallChild;
+  final bool disableColor;
+  final bool delightenColors;
+  final double margin;
+
+  const StackedIcon({
+    super.key,
+    required this.baseIcon,
+    this.secondaryIcon,
+    this.baseIconColor,
+    this.secondaryIconColor,
+    this.shadowColor,
+    this.secondaryText,
+    this.iconSize,
+    this.secondaryIconSize = 14.0,
+    this.blurRadius = 3.0,
+    this.smallChild,
+    this.disableColor = false,
+    this.delightenColors = false,
+    this.margin = -2.0,
+  });
+
+  NColors? _iconColorOf(NColors? color) {
+    if (disableColor) return null;
+    if (color == null) return NColors.defaultIcon();
+    if (!delightenColors) return color;
+    return NColors.custom((colors) => NColors.defaultIcon(mainColor: color.resolve(colors)).resolve(colors));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        NIcon(
+          baseIcon,
+          color: _iconColorOf(baseIconColor),
+          size: iconSize,
+        ),
+        Positioned(
+          bottom: margin,
+          right: margin,
+          child: NDecoratedBox(
+            decoration: (colors) => BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor ?? colors.scaffold,
+                  spreadRadius: 0,
+                  blurRadius: blurRadius,
+                ),
+              ],
+            ),
+            child:
+                smallChild ??
+                (secondaryText != null
+                    ? NamidaText(
+                        secondaryText!,
+                        style: NText.small,
+                        color: _iconColorOf(secondaryIconColor),
+                      )
+                    : NIcon(
+                        secondaryIcon,
+                        size: secondaryIconSize,
+                        color: _iconColorOf(secondaryIconColor),
+                      )),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class SmallIconButton extends StatelessWidget {
+  final IconData icon;
+  final void Function()? onTap;
+
+  const SmallIconButton({super.key, required this.icon, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaIconButton(
+      icon: icon,
+      onPressed: onTap,
+      iconSize: 20.0,
+      horizontalPadding: 0,
+    );
+  }
+}
+
+class CancelButtonDisabled extends StatelessWidget {
+  final Rx<bool> disabledRx;
+  final bool addMargin;
+  final void Function()? onPressed;
+
+  const CancelButtonDisabled({
+    super.key,
+    required this.disabledRx,
+    this.addMargin = true,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: disabledRx,
+      builder: (context, disabled) => CancelButtonDisabledRaw(
+        disabled: disabled,
+        addMargin: addMargin,
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+class CancelButtonDisabledRaw extends StatelessWidget {
+  final bool disabled;
+  final bool addMargin;
+  final void Function()? onPressed;
+
+  const CancelButtonDisabledRaw({
+    super.key,
+    required this.disabled,
+    this.addMargin = true,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CancelButton(
+      enabled: !disabled,
+      addMargin: addMargin,
+      onPressed: onPressed,
+    );
+  }
+}
+
+class CancelButton extends StatelessWidget {
+  final bool addMargin;
+  final bool enabled;
+  final void Function()? onPressed;
+
+  const CancelButton({
+    super.key,
+    this.addMargin = true,
+    this.enabled = true,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: addMargin ? const EdgeInsetsGeometry.symmetric(horizontal: 4.0) : EdgeInsetsGeometry.zero,
+      child: NamidaTextButton(
+        onTap: onPressed ?? NamidaNavigator.inst.closeDialog,
+        enabled: enabled,
+        text: lang.cancel,
+      ),
+    );
+  }
+}
+
+class DoneButton extends StatelessWidget {
+  final bool enabled;
+  final void Function()? additional;
+  const DoneButton({super.key, this.enabled = true, this.additional});
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaButton(
+      enabled: enabled,
+      text: lang.done,
+      onTap: () {
+        NamidaNavigator.inst.closeDialog();
+        if (additional != null) additional!();
+      },
+    );
+  }
+}
+
+class CollapsedSettingTileWidget extends StatelessWidget {
+  final Color? bgColor;
+  const CollapsedSettingTileWidget({super.key, this.bgColor});
+
+  @override
+  Widget build(BuildContext context) {
+    Localizations.localeOf(context);
+    return ObxO(
+      rx: settings.useSettingCollapsedTiles,
+      builder: (context, useSettingCollapsedTiles) => CustomSwitchListTile(
+        bgColor: bgColor,
+        icon: Broken.archive,
+        title: lang.useCollapsedSettingTiles,
+        value: useSettingCollapsedTiles,
+        onChanged: (isTrue) async {
+          settings.useSettingCollapsedTiles.save(!isTrue);
+          await NamidaNavigator.inst.popPage();
+          const SettingsPage().navigate();
+        },
+      ),
+    );
+  }
+}
+
+class AboutPageTileWidget extends StatelessWidget {
+  const AboutPageTileWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Localizations.localeOf(context);
+    return CustomCollapsedListTile(
+      title: () => lang.about,
+      subtitle: null,
+      icon: Broken.info_circle,
+      page: null,
+      rawPage: () => const AboutPage(),
+    );
+  }
+}
+
+class NamidaBlurryContainer extends StatelessWidget {
+  final Widget child;
+  final void Function()? onTap;
+  final BorderRadius? borderRadius;
+  final double? width;
+  final double? height;
+  final EdgeInsetsGeometry padding;
+
+  const NamidaBlurryContainer({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.borderRadius,
+    this.width,
+    this.height,
+    this.padding = const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final blurredOpacityLight = context.isDarkMode ? 0.24 : 0.55;
+    final blurEnabled = settings.enableBlurEffect.value;
+
+    Widget? finalChild = NColoredBox(
+      color: NColors(.card, opacity: blurEnabled ? blurredOpacityLight : 0.86),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Padding(
+          padding: padding,
+          child: child,
+        ),
+      ),
+    );
+
+    if (blurEnabled) {
+      finalChild = NamidaBgBlur(
+        blur: 5.0,
+        child: finalChild,
+      );
+    }
+
+    final brr = borderRadius ?? BorderRadius.only(bottomLeft: Radius.circular(8.0.multipliedRadius));
+
+    if (blurEnabled || brr != BorderRadius.zero) {
+      finalChild = ClipPath(
+        clipper: DecorationClipper(
+          decoration: BoxDecoration(
+            borderRadius: brr,
+          ),
+        ),
+        child: finalChild,
+      );
+    }
+
+    if (onTap != null) {
+      finalChild = InkWell(
+        onTap: onTap,
+        child: finalChild,
+      );
+    }
+    return finalChild;
+  }
+}
+
+class ContainerWithBorder extends StatelessWidget {
+  final Widget? child;
+  final Color? borderColor;
+  const ContainerWithBorder({super.key, this.child, this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return NDecoratedBox(
+      decoration: (colors) => BoxDecoration(
+        shape: BoxShape.circle,
+        color: borderColor ?? colors.card.withOpacityExt(0.63),
+        boxShadow: [
+          BoxShadow(
+            color: colors.shadow.withOpacityExt(0.24),
+            blurRadius: 4,
+            offset: const Offset(0, 2.0),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsetsGeometry.all(3.0),
+        child: child,
+      ),
+    );
+  }
+}
+
+class NamidaWheelSlider extends StatefulWidget {
+  final double width;
+  final double perspective;
+  final int max;
+  final int min;
+  final int stepper;
+  final int multiplier;
+  final int initValue;
+  final bool extraValue;
+  final double itemSize;
+  final double squeeze;
+  final String? text;
+  final String? topText;
+  final double? textPadding;
+  final double? topTextPadding;
+  final void Function(int val) onValueChanged;
+
+  const NamidaWheelSlider({
+    super.key,
+    this.width = 80,
+    this.perspective = 0.01,
+    required int initValue,
+    this.extraValue = false,
+    this.min = 0,
+    required this.max,
+    this.stepper = 1,
+    this.multiplier = 1,
+    required this.onValueChanged,
+    this.text,
+    this.topText,
+    this.textPadding = 2.0,
+    this.topTextPadding = 12.0,
+  }) : itemSize = 8,
+       squeeze = 1.8,
+       initValue = initValue < min ? max + 1 : initValue - min,
+       assert(min < max, 'min should be less than max');
+
+  @override
+  State<NamidaWheelSlider> createState() => _NamidaWheelSliderState();
+}
+
+class _NamidaWheelSliderState extends State<NamidaWheelSlider> {
+  late final _controller = FixedExtentScrollController(initialItem: _itemOf(widget.initValue));
+
+  /// the last value sent through [NamidaWheelSlider.onValueChanged], in [NamidaWheelSlider.initValue] form.
+  int? _reportedInitValue;
+
+  int _itemOf(int initValue) => (initValue / widget.stepper / widget.multiplier).round();
+
+  static bool _isMultipleOfFive(int n) => n % 5 == 0;
+
+  @override
+  void didUpdateWidget(covariant NamidaWheelSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final initValue = widget.initValue;
+    // -- outside changes only, our own report can map back to another item (extra value)
+    if (initValue == oldWidget.initValue || initValue == _reportedInitValue) return;
+    _controller.jumpToItem(_itemOf(initValue));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    final totalCount = ((widget.max - widget.min) / widget.stepper).round() + (widget.extraValue ? 1 : 0);
+
+    return SizedBox(
+      width: widget.width,
+      child: Column(
+        children: [
+          if (widget.topText != null) ...[
+            NamidaText(
+              widget.topText!,
+              style: const NText(.small, weight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(
+              height: widget.topTextPadding,
+            ),
+          ],
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                height: 38.0,
+                child: RotatedBox(
+                  quarterTurns: 3,
+                  child: ListWheelScrollView.useDelegate(
+                    controller: _controller,
+                    childDelegate: ListWheelChildBuilderDelegate(
+                      childCount: totalCount + 1,
+                      builder: (context, index) {
+                        final multipleOfFive = _isMultipleOfFive(index);
+                        return Align(
+                          alignment: Alignment.center,
+                          child: SizedBox(
+                            width: multipleOfFive ? 35.0 : 20.0,
+                            height: 1.5,
+                            child: SizedBox(
+                              width: multipleOfFive ? 35.0 : 20.0,
+                              height: 1.5,
+                              child: const NColoredBox(
+                                color: NColors.icon,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    onSelectedItemChanged: (val) {
+                      int finalValue = (val * widget.stepper * widget.multiplier + widget.min);
+                      if ((widget.extraValue && finalValue > widget.max)) finalValue = -1;
+                      _reportedInitValue = finalValue < widget.min ? widget.max + 1 : finalValue - widget.min;
+                      widget.onValueChanged(finalValue);
+                      HapticFeedback.lightImpact();
+                    },
+                    perspective: widget.perspective,
+                    squeeze: widget.squeeze,
+                    useMagnifier: true,
+                    itemExtent: widget.itemSize,
+                  ),
+                ),
+              ),
+              IgnorePointer(
+                ignoring: true,
+                child: SizedBox(
+                  height: 38.0,
+                  width: 2.5,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4.0.multipliedRadius),
+                      color: colors.listTileText,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (widget.text != null) ...[
+            SizedBox(
+              height: widget.textPadding,
+            ),
+            FittedBox(
+              child: Text(
+                widget.text!,
+                style: TextStyle(
+                  color: NText.small.of(context).color,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class NamidaLoadingControllerProvider extends StatefulWidget {
+  final Widget Function(NamidaLoadingController loadingController) builder;
+  const NamidaLoadingControllerProvider({super.key, required this.builder});
+
+  @override
+  State<NamidaLoadingControllerProvider> createState() => _NamidaLoadingControllerProviderState();
+}
+
+class _NamidaLoadingControllerProviderState extends State<NamidaLoadingControllerProvider> {
+  final _loadingController = NamidaLoadingController();
+
+  @override
+  void dispose() {
+    _loadingController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(_loadingController);
+  }
+}
+
+class NamidaLoadingController {
+  NamidaLoadingController();
+
+  void startLoading() => _startLoadingFn?.call();
+  void stopLoading() => _stopLoadingFn?.call();
+  bool get isLoading => _isLoading;
+
+  void Function()? _startLoadingFn;
+  void Function()? _stopLoadingFn;
+  bool _isLoading = false;
+
+  void dispose() {
+    _startLoadingFn = null;
+    _stopLoadingFn = null;
+  }
+}
+
+class NamidaLoadingSwitcher extends StatefulWidget {
+  final NamidaLoadingController? controller;
+  final Widget Function(NamidaLoadingController loadingController) builder;
+
+  const NamidaLoadingSwitcher({
+    super.key,
+    this.controller,
+    required this.builder,
+  });
+
+  @override
+  State<NamidaLoadingSwitcher> createState() => _NamidaLoadingSwitcherState();
+}
+
+class _NamidaLoadingSwitcherState extends State<NamidaLoadingSwitcher> with TickerProviderStateMixin {
+  late final NamidaLoadingController loadingController;
+  _LoadingDimPulse? _dimPulse;
+
+  @override
+  void initState() {
+    loadingController = widget.controller ?? NamidaLoadingController();
+    loadingController._startLoadingFn = _startLoading;
+    loadingController._stopLoadingFn = _stopLoading;
+    loadingController._isLoading = false;
+    super.initState();
+  }
+
+  void _startLoading() {
+    if (!mounted) return;
+    final dimPulse = _dimPulse ??= _LoadingDimPulse(this);
+    dimPulse.start();
+    setState(() => loadingController._isLoading = true);
+  }
+
+  void _stopLoading() {
+    if (!mounted) return;
+    _dimPulse?.stop();
+    setState(() => loadingController._isLoading = false);
+  }
+
+  @override
+  void dispose() {
+    if (widget.controller == null) loadingController.dispose();
+    _dimPulse?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _dimPulse?.opacity ?? kAlwaysCompleteAnimation,
+      child: widget.builder(loadingController),
+    );
+  }
+}
+
+class _LoadingDimPulse {
+  final AnimationController fade;
+  final AnimationController pulse;
+  late final opacity = _DimPulseOpacity(fade: fade, pulse: pulse);
+
+  _LoadingDimPulse(TickerProvider vsync)
+    : fade = AnimationController(vsync: vsync, duration: _kLoadingFadeDuration),
+      pulse = AnimationController(vsync: vsync, duration: _kLoadingCycle ~/ 2) {
+    fade.addStatusListener(_onFadeStatus);
+  }
+
+  void _onFadeStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed) pulse.stop();
+  }
+
+  void start() {
+    if (!pulse.isAnimating) pulse.repeat(reverse: true);
+    fade.forward();
+  }
+
+  void stop() => fade.reverse();
+
+  void dispose() {
+    fade.dispose();
+    pulse.dispose();
+  }
+}
+
+class _DimPulseOpacity extends CompoundAnimation<double> {
+  _DimPulseOpacity({required Animation<double> fade, required Animation<double> pulse}) : super(first: fade, next: pulse);
+
+  @override
+  double get value {
+    final pulseDepth = Curves.easeInOut.transform(next.value);
+    return 1.0 - first.value * (0.3 + 0.3 * pulseDepth);
+  }
+}
+
+class NamidaRawLikeButton extends StatelessWidget {
+  final double size;
+  final Color? enabledColor;
+  final Color? disabledColor;
+  final bool? isLiked;
+  final EdgeInsetsGeometry padding;
+  final String? removeConfirmationAction;
+  final Future<bool> Function(bool isLiked)? onTap;
+  final IconData likedIcon;
+  final IconData normalIcon;
+  final bool enableGradient;
+
+  /// lets a bigger tap target run the like animation through [LikeButtonState.onTap].
+  final GlobalKey<LikeButtonState>? likeButtonKey;
+
+  const NamidaRawLikeButton({
+    super.key,
+    this.size = 24.0,
+    this.enabledColor,
+    this.disabledColor,
+    required this.isLiked,
+    required this.removeConfirmationAction,
+    required this.onTap,
+    this.padding = EdgeInsets.zero,
+    this.likedIcon = Broken.heart_filled,
+    this.normalIcon = Broken.heart,
+    this.enableGradient = false,
+    this.likeButtonKey,
+  });
+
+  Future<bool> _confirmRemoval(String action) async {
+    bool confirmed = false;
+    await NamidaNavigator.inst.navigateDialog(
+      dialog: CustomBlurryDialog(
+        isWarning: true,
+        normalTitleStyle: true,
+        bodyText: '$action?',
+        actions: [
+          const CancelButton(),
+          NamidaButton(
+            colorScheme: Colors.red,
+            text: lang.remove.toUpperCase(),
+            onTap: () async {
+              confirmed = true;
+              NamidaNavigator.inst.closeDialog();
+            },
+          ),
+        ],
+      ),
+    );
+    return confirmed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.of(context);
+
+    late final enabledIconWidget = NIcon(
+      key: const ValueKey('like_switcher_on'),
+      likedIcon,
+      color: NColors.custom((colors) => enabledColor ?? colors.primary),
+      size: size,
+    );
+    late final normalIconWidget = NIcon(
+      key: const ValueKey('like_switcher_off'),
+      normalIcon,
+      color: NColors.custom((colors) => disabledColor ?? colors.secondary),
+      size: size,
+    );
+    return NamidaMouseRegion(
+      enabled: onTap != null,
+      child: LikeButton(
+        key: likeButtonKey,
+        size: size,
+        padding: padding,
+        likeCountPadding: EdgeInsets.zero,
+        bubblesColor: BubblesColor(
+          dotPrimaryColor: nColors.primary,
+          dotSecondaryColor: nColors.primaryContainer,
+        ),
+        circleColor: CircleColor(
+          start: nColors.secondary,
+          end: nColors.secondaryContainer,
+        ),
+        isLiked: isLiked,
+        onTap: (isLiked) async {
+          if (isLiked && removeConfirmationAction != null) {
+            final confirmed = await _confirmRemoval(removeConfirmationAction!);
+            if (!confirmed) return isLiked;
+          }
+          return await onTap?.call(isLiked);
+        },
+        likeBuilder: (value) {
+          if (enableGradient) {
+            return CustomAnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              reverseDuration: const Duration(milliseconds: 300),
+              child: value
+                  ? ShaderMask(
+                      key: const ValueKey('like_switcher_on'),
+                      blendMode: BlendMode.srcIn,
+                      shaderCallback: (Rect bounds) => LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        stops: const [
+                          0.2,
+                          0.9,
+                        ],
+                        colors: [
+                          nColors.primary.withOpacityExt(0.75),
+                          Color.alphaBlend(nColors.primary.withOpacityExt(0.25), CurrentColor.inst.color).withOpacityExt(0.75),
+                        ],
+                      ).createShader(bounds),
+                      child: enabledIconWidget,
+                    )
+                  : normalIconWidget,
+            );
+          } else {
+            return CustomAnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              reverseDuration: const Duration(milliseconds: 300),
+              child: value ? enabledIconWidget : normalIconWidget,
+            );
+          }
+        },
+      ),
+    );
+  }
+}
+
+class NamidaLocalLikeButton extends StatelessWidget {
+  final Track track;
+  final double size;
+  final Color? color;
+
+  const NamidaLocalLikeButton({
+    super.key,
+    required this.track,
+    this.size = 30.0,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxOClass(
+      rx: PlaylistController.inst.favouritesPlaylist,
+      builder: (context, favouritesPlaylist) => NamidaRawLikeButton(
+        size: size,
+        enabledColor: color,
+        disabledColor: color,
+        isLiked: favouritesPlaylist.isSubItemFavourite(track),
+        removeConfirmationAction: lang.removeFromFavourites,
+        onTap: (isLiked) async => PlaylistController.inst.favouriteButtonOnPressed(track, deferListsSorting: true),
+      ),
+    );
+  }
+}
+
+class NamidaIconButton extends StatefulWidget {
+  final EdgeInsetsGeometry? padding;
+  final double horizontalPadding;
+  final double verticalPadding;
+  final double? iconSize;
+  final IconData? icon;
+  final NColors? iconColor;
+  final void Function()? onPressed;
+  final void Function(LongPressStartDetails details)? onLongPressStart;
+  final void Function()? onLongPressFinish;
+  final void Function()? onLongPress;
+  final String Function()? tooltip;
+  final bool disableColor;
+  final Widget? child;
+
+  const NamidaIconButton({
+    super.key,
+    this.padding,
+    this.horizontalPadding = 8.0,
+    this.verticalPadding = 0.0,
+    required this.icon,
+    this.onPressed,
+    this.onLongPressStart,
+    this.onLongPressFinish,
+    this.onLongPress,
+    this.iconSize,
+    this.iconColor,
+    this.tooltip,
+    this.disableColor = false,
+    this.child,
+  });
+
+  @override
+  State<NamidaIconButton> createState() => _NamidaIconButtonState();
+}
+
+class _NamidaIconButtonState extends State<NamidaIconButton> {
+  bool isPressed = false;
+
+  void _onTapDown(TapDownDetails details) => setState(() => isPressed = true);
+  void _onTapUp(TapUpDetails details) => setState(() => isPressed = false);
+  void _onTapCancel() => setState(() => isPressed = false);
+
+  @override
+  Widget build(BuildContext context) {
+    final onPressed = widget.onPressed;
+    final isTappable = onPressed != null;
+    return NamidaTooltip(
+      message: widget.tooltip,
+      child: NamidaMouseRegion(
+        enabled: isTappable || widget.onLongPress != null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTapDown: isTappable ? _onTapDown : null,
+          onTapUp: isTappable ? _onTapUp : null,
+          onTapCancel: isTappable ? _onTapCancel : null,
+          onTap: onPressed,
+          onLongPressStart: widget.onLongPressStart,
+          onLongPressEnd: widget.onLongPressFinish == null ? null : (details) => widget.onLongPressFinish!(),
+          onLongPressCancel: widget.onLongPressFinish,
+          onLongPress: widget.onLongPress,
+          onLongPressUp: widget.onLongPressFinish,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
+            opacity: isPressed ? 0.5 : 1.0,
+            child: Padding(
+              padding: widget.padding ?? EdgeInsets.symmetric(horizontal: widget.horizontalPadding, vertical: widget.verticalPadding),
+              child:
+                  widget.child ??
+                  NIcon(
+                    widget.icon,
+                    size: widget.iconSize,
+                    color: widget.disableColor ? null : widget.iconColor ?? NColors.secondary,
+                  ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class NamidaAppBarIcon extends StatelessWidget {
+  final IconData icon;
+  final Widget? child;
+  final void Function()? onPressed;
+  final String Function()? tooltip;
+
+  const NamidaAppBarIcon({
+    super.key,
+    required this.icon,
+    this.child,
+    this.onPressed,
+    this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaIconButton(
+      verticalPadding: 8.0,
+      horizontalPadding: 6.0,
+      icon: icon,
+      onPressed: onPressed,
+      tooltip: tooltip,
+      child: child,
+    );
+  }
+}
+
+class NamidaPartyContainer extends StatefulWidget {
+  final double spreadRadiusMultiplier;
+  final double? width;
+  final double? height;
+  const NamidaPartyContainer({
+    super.key,
+    this.spreadRadiusMultiplier = 1.0,
+    this.width,
+    this.height,
+  });
+
+  @override
+  State<NamidaPartyContainer> createState() => _NamidaPartyContainerState();
+}
+
+class _NamidaPartyContainerState extends State<NamidaPartyContainer> {
+  @override
+  void initState() {
+    super.initState();
+    CurrentColor.inst.onPartyContainerMount();
+  }
+
+  @override
+  void dispose() {
+    CurrentColor.inst.onPartyContainerUnmount();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final spreadRadiusMultiplier = widget.spreadRadiusMultiplier;
+    final width = widget.width;
+    final height = widget.height;
+    if (!settings.enablePartyModeColorSwap.value) {
+      return ObxOSelect(
+        rx: Player.inst.nowPlayingPosition,
+        selector: WaveformController.inst.getCurrentAnimatingScale,
+        builder: (context, finalScale) {
+          return AnimatedSizedBox(
+            duration: const Duration(milliseconds: 400),
+            height: height ?? context.height,
+            width: width ?? context.width,
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: CurrentColor.inst.miniplayerColor.withOpacityExt(0.59),
+                  spreadRadius: 150 * finalScale * spreadRadiusMultiplier,
+                  blurRadius: 10 + (200 * finalScale),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } else {
+      return ObxO(
+        rx: CurrentColor.inst.partyPalette,
+        builder: (context, palette) {
+          final splitIndex = CurrentColor.partyPaletteSplitIndexOf(palette.length);
+          final isFirstPart = height != null;
+          final start = isFirstPart ? 0 : splitIndex;
+          final count = isFirstPart ? splitIndex : palette.length - splitIndex;
+          if (count <= 0) return const SizedBox();
+
+          final boxes = List<Widget>.generate(
+            count,
+            (index) => _PartyPaletteBox(
+              index: index,
+              start: start,
+              count: count,
+              height: height ?? context.height / count,
+              width: isFirstPart ? width ?? Dimensions.inst.miniplayerMaxWidth / count : width,
+              spreadRadius: isFirstPart ? 150 * spreadRadiusMultiplier : 140 * spreadRadiusMultiplier,
+            ),
+          );
+          return isFirstPart
+              ? Row(
+                  children: boxes,
+                )
+              : Column(
+                  children: boxes,
+                );
+        },
+      );
+    }
+  }
+}
+
+class _PartyPaletteBox extends StatelessWidget {
+  final int index;
+  final int start;
+  final int count;
+  final double? width;
+  final double? height;
+  final double spreadRadius;
+
+  const _PartyPaletteBox({
+    required this.index,
+    required this.start,
+    required this.count,
+    required this.width,
+    required this.height,
+    required this.spreadRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: CurrentColor.inst.partyPaletteRotation,
+      builder: (context, rotation) {
+        final palette = CurrentColor.inst.partyPalette.value;
+        if (palette.isEmpty) {
+          return SizedBox(
+            width: width,
+            height: height,
+          );
+        }
+        final colorIndex = (start + ((index - rotation) % count)) % palette.length;
+        final color = palette[colorIndex];
+        return ObxOSelect(
+          rx: Player.inst.nowPlayingPosition,
+          selector: WaveformController.inst.getCurrentAnimatingScale,
+          builder: (context, finalScale) {
+            return AnimatedSizedBox(
+              duration: const Duration(milliseconds: 400),
+              height: height,
+              width: width,
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacityExt(0.59),
+                    spreadRadius: spreadRadius * finalScale,
+                    blurRadius: 10 + (200 * finalScale),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class SubpageInfoContainer extends StatelessWidget {
+  final double maxWidth;
+  final MediaType type;
+  final String title;
+  final String subtitle;
+  final String thirdLineText;
+  final String description;
+  final double? height;
+  final double topPadding;
+  final double bottomPadding;
+  final Widget Function(double size) imageBuilder;
+  final Widget Function(double width, double height) bannerBuilder;
+  final Iterable<Selectable> Function() tracksFn;
+  final QueueSource source;
+  final String heroTag;
+  final VoidCallback? onOpenMenu;
+  final CustomArtworkManager? customArtworkManager;
+
+  const SubpageInfoContainer({
+    super.key,
+    required this.maxWidth,
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    this.thirdLineText = '',
+    this.description = '',
+    this.height,
+    required this.imageBuilder,
+    required this.bannerBuilder,
+    required this.tracksFn,
+    this.onOpenMenu,
+    this.customArtworkManager,
+    this.topPadding = 16.0,
+    this.bottomPadding = 16.0,
+    required this.source,
+    required this.heroTag,
+  });
+
+  void _openAdvancedShuffleDialog() {
+    return showAdvancedShuffleDialog(tracksFn, source);
+  }
+
+  void _openAdvancedPlayDialog() {
+    return showAdvancedPlayDialog(tracksFn, source);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const textHeroEnabled = false;
+    const pauseHero = 'kururing';
+    final showSubpageInfoAtSide = Dimensions.inst.showSubpageInfoAtSideContext(context);
+    final subpageInfoType = type.toSubpageInfoType();
+
+    return ObxO(
+      rx: settings.subpageInfoStyles,
+      builder: (context, styles) {
+        final style = styles[subpageInfoType] ?? SubpageInfoStyle.compact;
+        final layout = _SubpageInfoLayout.resolve(style, showSubpageInfoAtSide);
+        final isBanner = style == SubpageInfoStyle.banner;
+        final isHeroBanner = style == SubpageInfoStyle.heroBanner;
+        final isSingleArtworkType = subpageInfoType == MediaType.album || subpageInfoType == MediaType.artist;
+        final isOverlay = style == SubpageInfoStyle.overlay;
+        final isBlurBackdrop = style == SubpageInfoStyle.blurBackdrop;
+        final contentPadding = layout.isEdgeToEdge ? EdgeInsets.zero : const EdgeInsets.only(top: 12.0, left: 12.0, right: 12.0, bottom: 4.0);
+        final topMargin = style == SubpageInfoStyle.compact ? topPadding : 0.0;
+
+        Widget content = Padding(
+          padding: contentPadding,
+          child: LayoutWidthHeightProvider(
+            builder: (context, maxWidth, maxHeight) {
+              maxWidth = maxWidth.withMaximum(this.maxWidth);
+
+              double imageMaxWidth;
+              double infoMaxWidth;
+              double thumbnailSize = 0.0;
+              double bannerHeight = 0.0;
+              bool isBannerTextBelow = false;
+
+              if (isHeroBanner) {
+                imageMaxWidth = maxWidth;
+                infoMaxWidth = maxWidth - 24.0;
+              } else if (isBanner) {
+                bannerHeight = (maxWidth * 0.34).clampDouble(96.0, maxHeight * 0.25);
+                final besideThumbnailSize = (maxWidth * _kBannerThumbnailPercentage).clampDouble(96.0, 200.0);
+                final besideInfoWidth = maxWidth - besideThumbnailSize - _kBannerThumbnailInsets;
+                isBannerTextBelow = showSubpageInfoAtSide || besideInfoWidth < _kBannerMinBesideTextWidth;
+                thumbnailSize = isBannerTextBelow ? (maxWidth * _kBannerStackedThumbnailPercentage).clampDouble(88.0, 240.0) : besideThumbnailSize;
+                imageMaxWidth = thumbnailSize;
+                infoMaxWidth = isBannerTextBelow ? maxWidth - 24.0 : besideInfoWidth;
+              } else if (showSubpageInfoAtSide) {
+                imageMaxWidth = maxWidth;
+                infoMaxWidth = maxWidth;
+              } else if (layout.isImageFullWidth) {
+                imageMaxWidth = maxWidth.withMaximum(maxHeight * 0.55);
+                infoMaxWidth = maxWidth;
+              } else {
+                final thumbnailScale = subpageInfoType == MediaType.artist ? _kArtistThumbnailScale : 1.0;
+                imageMaxWidth = (maxWidth * _kThumbnailWidthPercentage).withMaximum(maxHeight * _kThumbnailHeightPercentage) * thumbnailScale;
+                infoMaxWidth = maxWidth - imageMaxWidth;
+              }
+
+              final imageWidget = ArtworkContainerScope(
+                bareForFan: true,
+                bareFanScale: layout.isImageFullWidth ? 1.0 : _kThumbnailFanScale,
+                frameless: isHeroBanner,
+                opensInFullscreen: true,
+                child: imageBuilder(imageMaxWidth),
+              );
+
+              final fontBaseWidth = layout.isTextOverImage ? maxWidth * _kOverlayFontWidthPercentage : infoMaxWidth;
+              final fontScale = isBannerTextBelow ? _kBannerStackedFontScale : layout.fontScale;
+              double getFontSize(double p, double min, double max) => ((fontBaseWidth * 0.2).withMaximum(maxHeight * 0.1) * p * fontScale).clampDouble(min, max);
+
+              final titleMaxLines = layout.titleMaxLines;
+              final titleFontSize = getFontSize(layout.isImageFullWidth || isBannerTextBelow ? 0.5 : 0.4, 10.0, 32.0);
+              final buttonsMaxWidth = layout.isEdgeToEdge ? maxWidth - 24.0 : maxWidth;
+              final hasRoomForExtraButtons = buttonsMaxWidth >= _kExtraButtonsMinWidth;
+              final onOpenMenu = this.onOpenMenu;
+              final customArtworkManager = hasRoomForExtraButtons ? this.customArtworkManager : null;
+
+              final isCentered = isBannerTextBelow;
+              final textCrossAlignment = isCentered ? CrossAxisAlignment.center : CrossAxisAlignment.start;
+              final textAlign = isCentered ? TextAlign.center : TextAlign.start;
+              final textPadding = isCentered ? const EdgeInsets.symmetric(horizontal: 7.0) : const EdgeInsets.only(left: 14.0);
+
+              final textWidget = Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: textCrossAlignment,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(height: isBanner ? 6.0 : 18.0),
+                  Padding(
+                    padding: textPadding,
+                    child: NamidaHero(
+                      enabled: textHeroEnabled,
+                      tag: '${pauseHero}line1_$heroTag',
+                      child: Text(
+                        title,
+                        textAlign: textAlign,
+                        style: NText.large.of(context).copyWith(fontSize: titleFontSize),
+                        maxLines: titleMaxLines,
+                        softWrap: titleMaxLines != 1,
+                        overflow: titleMaxLines == null ? null : TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2.0),
+                    Padding(
+                      padding: textPadding,
+                      child: NamidaHero(
+                        enabled: textHeroEnabled,
+                        tag: '${pauseHero}line2_$heroTag',
+                        child: Text(
+                          subtitle,
+                          textAlign: textAlign,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                          style: NText.medium.of(context).copyWith(fontSize: getFontSize(0.28, 10.0, 24.0)),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (thirdLineText.isNotEmpty) ...[
+                    const SizedBox(height: 2.0),
+                    Padding(
+                      padding: textPadding,
+                      child: NamidaHero(
+                        enabled: textHeroEnabled,
+                        tag: '${pauseHero}line3_$heroTag',
+                        child: Text(
+                          thirdLineText,
+                          textAlign: textAlign,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: NText.small.of(context).copyWith(fontSize: getFontSize(0.25, 10.0, 22.0)),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 4.0),
+                    Padding(
+                      padding: textPadding,
+                      child: Text(
+                        description,
+                        textAlign: textAlign,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 3,
+                        style: NText.small.of(context).copyWith(fontSize: getFontSize(0.22, 10.0, 18.0)),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+
+              final buttonsWidget = _SubpageButtonsRow(
+                maxWidth: buttonsMaxWidth,
+                alignment: isCentered ? Alignment.center : Alignment.centerRight,
+                children: [
+                  NamidaButton(
+                    icon: Broken.shuffle,
+                    tooltip: () => lang.shuffle,
+                    onTap: () => Player.inst.playOrPause(
+                      0,
+                      tracksFn(),
+                      source,
+                      shuffle: true,
+                    ),
+                    onLongPress: _openAdvancedShuffleDialog,
+                  ),
+                  if (hasRoomForExtraButtons)
+                    NamidaButton(
+                      icon: Broken.next,
+                      tooltip: () => lang.playNext,
+                      onTap: () => Player.inst.addToQueue(tracksFn(), insertNext: true),
+                      onLongPress: _openAdvancedPlayDialog,
+                    ),
+                  NamidaButton(
+                    icon: Broken.play_cricle,
+                    tooltip: () => lang.playLast,
+                    onTap: () => Player.inst.addToQueue(tracksFn()),
+                    onLongPress: _openAdvancedPlayDialog,
+                  ),
+                  if (customArtworkManager != null)
+                    NamidaButton(
+                      icon: Broken.gallery_edit,
+                      tooltip: () => lang.editArtwork,
+                      onTap: customArtworkManager.showEditDialog,
+                    ),
+                  if (onOpenMenu != null)
+                    NamidaButton(
+                      icon: Broken.more,
+                      tooltip: () => lang.more,
+                      onTap: onOpenMenu,
+                    ),
+                ],
+              );
+
+              final textAndButtonsWidget = Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  textWidget,
+                  const SizedBox(height: 18.0),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: buttonsWidget,
+                  ),
+                ],
+              );
+
+              final fittedImageWidget = ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: imageMaxWidth),
+                child: FittedBox(
+                  alignment: Alignment.topLeft,
+                  fit: BoxFit.scaleDown,
+                  child: imageWidget,
+                ),
+              );
+
+              if (isBanner) {
+                final bannerWidget = HeroMode(
+                  enabled: false, // -- the thumbnail owns the hero
+                  child: ClipRect(
+                    child: SizedBox(
+                      width: maxWidth,
+                      height: bannerHeight,
+                      child: bannerBuilder(maxWidth, bannerHeight),
+                    ),
+                  ),
+                );
+                final bannerLayoutHeight = bannerHeight - thumbnailSize * _kBannerThumbnailOverlap;
+                final thumbnailAndTextWidget = isBannerTextBelow
+                    ? SizedBox(
+                        width: infoMaxWidth,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            imageWidget,
+                            textWidget,
+                          ],
+                        ),
+                      )
+                    : Row(
+                        children: [
+                          imageWidget,
+                          Expanded(
+                            child: textWidget,
+                          ),
+                        ],
+                      );
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: maxWidth,
+                      height: bannerLayoutHeight,
+                      child: OverflowBox(
+                        alignment: Alignment.topCenter,
+                        maxHeight: bannerHeight,
+                        child: _BottomFeathered(
+                          featherHeight: bannerHeight * _kBannerFeatherPercentage,
+                          child: bannerWidget,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: thumbnailAndTextWidget,
+                    ),
+                    const SizedBox(height: 12.0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: buttonsWidget,
+                    ),
+                  ],
+                );
+              }
+
+              if (isHeroBanner) {
+                final coverHeight = showSubpageInfoAtSide ? maxWidth.withMaximum(maxHeight * 0.5) : (maxWidth * _kHeroBannerHeightPercentage).clampDouble(160.0, maxHeight * 0.35);
+                final coverSource = isSingleArtworkType ? bannerBuilder(maxWidth, coverHeight) : imageWidget;
+                final maxStretch = (maxWidth - coverHeight).withMinimum(0.0);
+                final topOverscroll = SubpageOverscrollScope.maybeOf(context);
+                final coverWidget = HeroMode(
+                  enabled: false,
+                  child: ClipRect(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: coverSource,
+                    ),
+                  ),
+                );
+                final stretchingCoverWidget = topOverscroll == null
+                    ? SizedBox(
+                        width: maxWidth,
+                        height: coverHeight,
+                        child: coverWidget,
+                      )
+                    : ObxO(
+                        rx: topOverscroll,
+                        builder: (context, overscroll) {
+                          final stretch = overscroll.withMaximum(maxStretch);
+                          final isReleasing = stretch == 0.0;
+                          return AnimatedContainer(
+                            duration: isReleasing ? const Duration(milliseconds: 350) : Duration.zero,
+                            curve: Curves.easeOutCubic,
+                            width: maxWidth,
+                            height: coverHeight + stretch,
+                            child: coverWidget,
+                          );
+                        },
+                      );
+                if (showSubpageInfoAtSide) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _BottomFeathered(
+                        featherHeight: coverHeight * _kSideCoverFeatherPercentage,
+                        child: stretchingCoverWidget,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: textWidget,
+                      ),
+                      const SizedBox(height: 12.0),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                        child: buttonsWidget,
+                      ),
+                    ],
+                  );
+                }
+                final textOverlayWidget = Stack(
+                  alignment: Alignment.bottomLeft,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      left: 0.0,
+                      top: 0.0,
+                      right: 0.0,
+                      bottom: -_kFeatherOverdraw,
+                      child: IgnorePointer(
+                        child: NDecoratedBox(
+                          decoration: (colors) => BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: const Alignment(0.0, -0.4),
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                colors.scaffold.withOpacityExt(0.8),
+                                colors.scaffold,
+                              ],
+                              stops: const [0.0, 0.55, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: infoMaxWidth),
+                        child: textWidget,
+                      ),
+                    ),
+                  ],
+                );
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        stretchingCoverWidget,
+                        Positioned.fill(
+                          child: textOverlayWidget,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12.0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: buttonsWidget,
+                    ),
+                  ],
+                );
+              }
+
+              if (isOverlay && !showSubpageInfoAtSide) {
+                final overlayWidget = Stack(
+                  alignment: Alignment.bottomLeft,
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: NDecoratedBox(
+                          decoration: (colors) => BoxDecoration(
+                            borderRadius: BorderRadius.circular(18.0.multipliedRadius),
+                            gradient: LinearGradient(
+                              begin: const Alignment(0.0, -0.3),
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                colors.scaffold.withOpacityExt(0.8),
+                                colors.scaffold,
+                              ],
+                              stops: const [0.0, 0.55, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: infoMaxWidth),
+                      child: textAndButtonsWidget,
+                    ),
+                  ],
+                );
+                return Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: fittedImageWidget,
+                    ),
+                    Positioned.fill(
+                      child: _RouteFadeIn(
+                        child: overlayWidget,
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              if (showSubpageInfoAtSide) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Flexible(
+                      child: FittedBox(
+                        alignment: Alignment.topLeft,
+                        fit: BoxFit.scaleDown,
+                        child: imageWidget,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4.0),
+                      child: textAndButtonsWidget,
+                    ),
+                  ],
+                );
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      fittedImageWidget,
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: infoMaxWidth),
+                        child: textWidget,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12.0),
+                  buttonsWidget,
+                ],
+              );
+            },
+          ),
+        );
+
+        if (isBlurBackdrop) {
+          content = Stack(
+            children: [
+              Positioned.fill(
+                child: _SubpageInfoBackdrop(
+                  artwork: imageBuilder(_kBackdropArtworkSize),
+                ),
+              ),
+              content,
+            ],
+          );
+        }
+
+        return Container(
+          alignment: Alignment.topCenter,
+          margin: EdgeInsets.only(top: topMargin, bottom: bottomPadding),
+          height: height,
+          child: content,
+        );
+      },
+    );
+  }
+
+  static const _kBannerThumbnailInsets = 24.0 + 24.0 + 14.0;
+  static const _kBannerThumbnailOverlap = 0.45;
+  static const _kBannerFeatherPercentage = 0.8;
+  static const _kBannerThumbnailPercentage = 0.34;
+  static const _kBannerStackedThumbnailPercentage = 0.7;
+  static const _kBannerStackedFontScale = 1.2;
+  static const _kBannerMinBesideTextWidth = 140.0;
+  static const _kSideCoverFeatherPercentage = 0.35;
+
+  /// feathers are drawn this far past the image's bottom, an antialiased edge there would leave the last pixel row of a fractional height uncovered.
+  static const _kFeatherOverdraw = 1.0;
+  static const _kExtraButtonsMinWidth = 310.0;
+  static const _kThumbnailWidthPercentage = 0.5;
+  static const _kThumbnailHeightPercentage = 0.35;
+  static const _kArtistThumbnailScale = 0.85;
+
+  /// a frameless fan in a thumbnail spills a little into the surrounding padding instead of leaving it empty.
+  static const _kThumbnailFanScale = 1.12;
+  static const _kOverlayFontWidthPercentage = 0.65;
+  static const _kHeroBannerHeightPercentage = 0.6;
+  static const _kBackdropArtworkSize = 200.0;
+}
+
+class _SubpageInfoLayout {
+  final bool isImageFullWidth;
+  final bool isEdgeToEdge;
+  final bool isTextOverImage;
+  final int? titleMaxLines;
+  final double fontScale;
+
+  const _SubpageInfoLayout({
+    required this.isImageFullWidth,
+    required this.isEdgeToEdge,
+    this.isTextOverImage = false,
+    required this.titleMaxLines,
+    this.fontScale = 1.0,
+  });
+
+  static const _kBesideImageFontScale = 1.25;
+
+  static _SubpageInfoLayout resolve(SubpageInfoStyle style, bool showAtSide) {
+    if (showAtSide) {
+      return switch (style) {
+        SubpageInfoStyle.banner || SubpageInfoStyle.heroBanner => const _SubpageInfoLayout(isImageFullWidth: true, isEdgeToEdge: true, titleMaxLines: 2),
+        SubpageInfoStyle.compact ||
+        SubpageInfoStyle.overlay ||
+        SubpageInfoStyle.blurBackdrop => const _SubpageInfoLayout(isImageFullWidth: true, isEdgeToEdge: false, titleMaxLines: null),
+      };
+    }
+    return switch (style) {
+      SubpageInfoStyle.compact => const _SubpageInfoLayout(isImageFullWidth: false, isEdgeToEdge: false, titleMaxLines: 1, fontScale: _kBesideImageFontScale),
+      SubpageInfoStyle.banner => const _SubpageInfoLayout(isImageFullWidth: false, isEdgeToEdge: true, titleMaxLines: 2, fontScale: _kBesideImageFontScale),
+      SubpageInfoStyle.heroBanner => const _SubpageInfoLayout(isImageFullWidth: true, isEdgeToEdge: true, isTextOverImage: true, titleMaxLines: 2),
+      SubpageInfoStyle.overlay => const _SubpageInfoLayout(isImageFullWidth: true, isEdgeToEdge: false, isTextOverImage: true, titleMaxLines: 2),
+      SubpageInfoStyle.blurBackdrop => const _SubpageInfoLayout(isImageFullWidth: false, isEdgeToEdge: false, titleMaxLines: 2, fontScale: _kBesideImageFontScale),
+    };
+  }
+}
+
+class _SubpageButtonsRow extends StatelessWidget {
+  final double maxWidth;
+  final Alignment alignment;
+  final List<Widget> children;
+
+  const _SubpageButtonsRow({
+    required this.maxWidth,
+    required this.alignment,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+      child: SizedBox(
+        width: maxWidth,
+        child: FittedBox(
+          alignment: alignment,
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (int i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6.0),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomFeathered extends StatelessWidget {
+  final double featherHeight;
+  final Widget child;
+
+  const _BottomFeathered({
+    required this.featherHeight,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.of(context);
+    final bgColor = nColors.scaffold;
+    const overdraw = SubpageInfoContainer._kFeatherOverdraw;
+    final overdrawnHeight = featherHeight + overdraw;
+    final solidFromStop = featherHeight / overdrawnHeight;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        Positioned(
+          left: 0.0,
+          right: 0.0,
+          bottom: -overdraw,
+          height: overdrawnHeight,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [bgColor.withOpacityExt(0.0), bgColor],
+                  stops: [0.0, solidFromStop],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// by claude
+class _SubpageInfoBackdrop extends StatelessWidget {
+  final Widget artwork;
+
+  const _SubpageInfoBackdrop({
+    required this.artwork,
+  });
+
+  static const _kBlur = 28.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.of(context);
+    final bgColor = nColors.scaffold;
+    final dimColorTop = bgColor.withOpacityExt(0.5);
+    return IgnorePointer(
+      child: HeroMode(
+        enabled: false, // -- the real artwork owns the hero
+        child: ClipRect(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              NamidaBlur(
+                blur: _kBlur,
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  clipBehavior: Clip.hardEdge,
+                  child: artwork,
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      dimColorTop,
+                      bgColor,
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// shown only once the route has settled, hero flights paint above the route so anything drawn earlier would sit under them.
+///
+/// by claude
+class _RouteFadeIn extends StatefulWidget {
+  final Widget child;
+
+  const _RouteFadeIn({
+    required this.child,
+  });
+
+  @override
+  State<_RouteFadeIn> createState() => _RouteFadeInState();
+}
+
+class _RouteFadeInState extends State<_RouteFadeIn> {
+  Animation<double>? _routeAnimation;
+  bool _isSettled = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final routeAnimation = ModalRoute.of(context)?.animation;
+    if (routeAnimation == _routeAnimation) return;
+    _routeAnimation?.removeStatusListener(_onRouteStatusChanged);
+    _routeAnimation = routeAnimation;
+    routeAnimation?.addStatusListener(_onRouteStatusChanged);
+    _isSettled = routeAnimation == null || routeAnimation.status == AnimationStatus.completed;
+  }
+
+  void _onRouteStatusChanged(AnimationStatus status) {
+    final isSettled = status == AnimationStatus.completed;
+    if (isSettled == _isSettled) return;
+    setState(() => _isSettled = isSettled);
+  }
+
+  @override
+  void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteStatusChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: _isSettled ? 1.0 : 0.0,
+      duration: _isSettled ? const Duration(milliseconds: 250) : const Duration(milliseconds: 80),
+      child: widget.child,
+    );
+  }
+}
+
+class AnimatingTile extends StatelessWidget {
+  final int position;
+  final Widget child;
+  final bool shouldAnimate;
+  final bool allowTilting;
+  final Duration duration;
+
+  const AnimatingTile({
+    super.key,
+    required this.position,
+    required this.child,
+    this.duration = const Duration(milliseconds: 400),
+    this.shouldAnimate = true,
+    this.allowTilting = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget child = this.child;
+    if (shouldAnimate && context.getInheritedWidgetOfExactType<_ReorderProxyScope>() == null) {
+      child = AnimationConfiguration.staggeredList(
+        position: position,
+        duration: duration,
+        delay: const Duration(milliseconds: 50),
+        child: SlideAnimation(
+          verticalOffset: 25.0,
+          child: FadeInAnimation(
+            duration: duration,
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    if (NamidaFeaturesVisibility.tiltingCardsEffect) {
+      if (allowTilting && settings.extra.tiltingCardsEffect.value == true) {
+        child = _EncapsulateWithTilt(
+          isInOpenSpace: false,
+          child: child,
+        );
+      }
+    }
+
+    return child;
+  }
+}
+
+class AnimatingGrid extends StatelessWidget {
+  final int position;
+  final int countPerRowResolved;
+  final int columnCount;
+  final Widget child;
+  final bool shouldAnimate;
+  final bool isInOpenSpace;
+
+  const AnimatingGrid({
+    super.key,
+    required this.position,
+    required this.countPerRowResolved,
+    required this.columnCount,
+    required this.child,
+    this.shouldAnimate = true,
+    this.isInOpenSpace = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget child = this.child;
+    if (shouldAnimate) {
+      final duration = Duration(
+        milliseconds: (400 / countPerRowResolved).clamp(100, 400).round(),
+      );
+      child = AnimationConfiguration.staggeredGrid(
+        columnCount: columnCount,
+        position: position,
+        duration: duration,
+        child: SlideAnimation(
+          verticalOffset: 25.0,
+          child: FadeInAnimation(
+            duration: duration,
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    if (NamidaFeaturesVisibility.tiltingCardsEffect) {
+      if (settings.extra.tiltingCardsEffect.value == true) {
+        child = _EncapsulateWithTilt(
+          isInOpenSpace: isInOpenSpace,
+          child: child,
+        );
+      }
+    }
+
+    return child;
+  }
+}
+
+class _EncapsulateWithTilt extends StatelessWidget {
+  final Widget child;
+
+  /// when parent doesn't have limited size, cuz we force expand child by default.
+  final bool isInOpenSpace;
+
+  const _EncapsulateWithTilt({
+    required this.child,
+    required this.isInOpenSpace,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tilt.base(
+      tiltConfig: const TiltConfig(
+        angle: 2.0,
+        sensorFactor: 0.5,
+        sensorRevertFactor: 0.1,
+        enableOutsideAreaMove: false,
+        enableReverse: false,
+        enableGestureTouch: false,
+        enableGestureHover: true,
+        enableGestureSensors: false,
+        controllerMoveDuration: Duration(milliseconds: 200),
+        leaveDuration: Duration(milliseconds: 400),
+        moveDuration: Duration(milliseconds: 100),
+        sensorMoveDuration: Duration(milliseconds: 50),
+        enterDuration: Duration(milliseconds: 800),
+        controllerLeaveDuration: Duration(milliseconds: 200),
+      ),
+      fps: 30,
+      clipBehavior: Clip.none,
+      lightConfig: const LightConfig(
+        enableReverse: true,
+        maxIntensity: 0.2,
+        // projectorScale: 0.8,
+        spreadFactor: 2.0,
+        color: Color(0xCCFFFFFF),
+      ),
+      shadowConfig: const ShadowBaseConfig(
+        disable: true,
+        enableReverse: true,
+        color: Colors.transparent,
+      ),
+      childLayout: ChildLayout(
+        inner: [
+          Stack(
+            clipBehavior: Clip.none,
+            fit: isInOpenSpace ? StackFit.loose : StackFit.expand, // otherwise inner stacks collapse
+            children: [
+              child,
+            ],
+          ),
+        ],
+      ),
+      child: const SizedBox(),
+    );
+  }
+}
+
+class NamidaDrawerListTile extends StatelessWidget {
+  final void Function()? onTap;
+  final bool enabled;
+  final String title;
+  final IconData? icon;
+  final double? width;
+  final double? height;
+  final EdgeInsetsGeometry margin;
+  final EdgeInsetsGeometry padding;
+  final bool isCentered;
+  final double iconSize;
+  final Widget? trailing;
+
+  const NamidaDrawerListTile({
+    super.key,
+    this.onTap,
+    required this.enabled,
+    required this.title,
+    required this.icon,
+    this.width,
+    this.height,
+    this.margin = const EdgeInsets.symmetric(horizontal: 12.0, vertical: 3.0),
+    this.padding = const EdgeInsets.symmetric(horizontal: 10.0, vertical: 11.0),
+    this.isCentered = false,
+    this.iconSize = 20.0,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = CurrentColor.inst.color;
+    final colors = NColorsData.targetOf(context);
+    return NamidaInkWell(
+      animationDurationMS: 200,
+      alignment: Alignment.center,
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: enabled ? colorScheme : colors.card,
+        borderRadius: BorderRadius.circular(8.0.multipliedRadius),
+        boxShadow: enabled
+            ? [
+                BoxShadow(
+                  color: colorScheme.withOpacityExt(0.39),
+                  spreadRadius: 0.2,
+                  blurRadius: 8.0,
+                  offset: const Offset(0.0, 3.0),
+                ),
+              ]
+            : null,
+      ),
+      margin: margin,
+      padding: padding,
+      onTap: onTap,
+      borderRadius: 8.0,
+      child: Row(
+        mainAxisAlignment: isCentered ? MainAxisAlignment.center : MainAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            color: enabled ? Colors.white.withOpacityExt(0.78) : null,
+            size: iconSize,
+          ),
+          if (title != '') const SizedBox(width: 10.0),
+          if (title != '')
+            Expanded(
+              child: NamidaText(
+                title,
+                style: const NText(.medium, size: .s15),
+                color: NColors.fixed(enabled ? Colors.white.withOpacityExt(0.78) : null),
+                overflow: TextOverflow.fade,
+                softWrap: false,
+              ),
+            ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
+class SearchPageTitleRow extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget? trailing;
+  final Widget? subtitleWidget;
+  final Widget? leading;
+
+  const SearchPageTitleRow({
+    super.key,
+    required this.title,
+    this.subtitle = '',
+    required this.icon,
+    this.trailing,
+    this.subtitleWidget,
+    this.leading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(width: 16.0),
+        Expanded(
+          child: Row(
+            children: [
+              leading ?? Icon(icon),
+              const SizedBox(width: 8.0),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    NamidaText(
+                      title,
+                      style: const NText(.large, size: .s15p5),
+                    ),
+                    ?subtitleWidget,
+                    if (subtitle != '')
+                      NamidaText(
+                        subtitle,
+                        style: NText.small,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        ?trailing,
+        const SizedBox(width: 8.0),
+      ],
+    );
+  }
+}
+
+/// fades the end edge of a horizontal scrollable into [color], the page background by default.
+class NamidaEndEdgeFeather extends StatelessWidget {
+  final double width;
+  final Color? color;
+  final Widget child;
+
+  const NamidaEndEdgeFeather({
+    super.key,
+    this.width = 16.0,
+    this.color,
+    required this.child,
+  });
+
+  /// drawn past the edge and clipped by the stack, same as the child's clip. an antialiased edge
+  /// there would leave the last pixel column of a fractional width uncovered.
+  static const _kEdgeOverdraw = 1.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.of(context);
+    final bgColor = color ?? nColors.scaffold;
+    final overdrawnWidth = width + _kEdgeOverdraw;
+    final solidFromStop = width / overdrawnWidth;
+    return Stack(
+      children: [
+        child,
+        PositionedDirectional(
+          end: -_kEdgeOverdraw,
+          top: 0.0,
+          bottom: 0.0,
+          width: overdrawnWidth,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: AlignmentDirectional.centerStart,
+                  end: AlignmentDirectional.centerEnd,
+                  colors: [bgColor.withOpacityExt(0.0), bgColor],
+                  stops: [0.0, solidFromStop],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class NoResultsWidget extends StatelessWidget {
+  final IconData icon;
+  final Color? iconColor;
+
+  const NoResultsWidget({
+    super.key,
+    this.icon = Broken.emoji_sad,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 48.0,
+          color: iconColor,
+        ),
+        const SizedBox(height: 8.0),
+        NamidaText(
+          lang.noResults,
+          style: NText.large,
+        ),
+      ],
+    );
+  }
+}
+
+class NamidaLogoContainer extends StatelessWidget {
+  final double? width, height;
+  final double iconSize;
+  final bool displayText;
+  final bool lighterShadow;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final VoidCallback? afterTap;
+
+  const NamidaLogoContainer({
+    super.key,
+    this.height = 54.0,
+    this.width,
+    this.iconSize = 40.0,
+    this.displayText = true,
+    this.lighterShadow = false,
+    this.padding,
+    this.margin,
+    this.afterTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.targetOf(context);
+    final isDarkMode = context.isDarkMode;
+    final colorScheme = CurrentColor.inst.color;
+    final scaffoldBgColor = Color.alphaBlend(nColors.scaffold.withOpacityExt(0.5), isDarkMode ? Colors.black : Colors.white);
+    const foregroundColorOpacity = 0.8;
+    final foregroundColor = Color.alphaBlend(colorScheme.withOpacityExt(0.1), nColors.onSurface).withOpacityExt(foregroundColorOpacity);
+    return NamidaInkWell(
+      onTap: () {
+        if (NamidaNavigator.inst.currentRoute?.route != RouteType.PAGE_about) {
+          const AboutPage().navigate();
+        }
+        afterTap?.call();
+      },
+      animationDurationMS: 300,
+      alignment: Alignment.center,
+      height: height,
+      width: width,
+      margin: margin ?? const EdgeInsets.symmetric(horizontal: 12.0).add(const EdgeInsets.only(top: 16.0, bottom: 8.0)),
+      padding: padding ?? const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12.0.multipliedRadius),
+        border: Border.all(
+          color: colorScheme.withOpacityExt(0.5),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(scaffoldBgColor.withOpacityExt(0.90), colorScheme).withOpacityExt(1.0),
+            Color.alphaBlend(scaffoldBgColor.withOpacityExt(0.65), colorScheme).withOpacityExt(1.0),
+          ],
+        ),
+        boxShadow: [
+          lighterShadow
+              ? BoxShadow(
+                  color: colorScheme.withOpacityExt(isDarkMode ? 0.08 : 0.24),
+                  spreadRadius: 0.1,
+                  blurRadius: 6.0,
+                  offset: const Offset(0.0, 2.0),
+                )
+              : BoxShadow(
+                  color: colorScheme.withOpacityExt(isDarkMode ? 0.12 : 0.31),
+                  spreadRadius: 0.2,
+                  blurRadius: 8.0,
+                  offset: const Offset(0.0, 4.0),
+                ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (displayText) const SizedBox(width: 4.0),
+          Image.asset(
+            NamidaChannel.defaultLayerIconForPlatform,
+            width: iconSize,
+            height: iconSize,
+            cacheHeight: 240,
+            cacheWidth: 240,
+            alignment: Alignment.center,
+            color: foregroundColor,
+          ),
+          if (displayText) ...[
+            const SizedBox(width: 10.0),
+            Expanded(
+              child: NamidaText(
+                'Namida',
+                style: const NText(.large, size: .s17p5),
+                color: NColors.fixed(foregroundColor.withOpacityExt(foregroundColorOpacity * 0.9)),
+                overflow: TextOverflow.fade,
+                softWrap: false,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class NamidaContainerDivider extends StatelessWidget {
+  final double? width;
+  final double height;
+  final Color? color;
+  final Color? colorForce;
+  final EdgeInsetsGeometry? margin;
+
+  const NamidaContainerDivider({
+    super.key,
+    this.width,
+    this.height = 2.0,
+    this.color,
+    this.margin,
+    this.colorForce,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return NContainer(
+      height: height,
+      width: width,
+      margin: margin,
+      decoration: (colors) => BoxDecoration(
+        color: colorForce ?? (color ?? colors.divider).withOpacityExt(namida.isDarkMode ? 0.39 : 0.08),
+        borderRadius: BorderRadius.circular(18.0.multipliedRadius),
+      ),
+    );
+  }
+}
+
+class FadeDismissible extends StatefulWidget {
+  final Widget child;
+  final void Function(DismissDirection direction) onDismissed;
+  final void Function(DragStartDetails details)? onDismissStart;
+  final void Function(DragEndDetails details)? onDismissEnd;
+  final void Function(DragEndDetails details)? onDismissCancel;
+  final DismissDirection direction;
+  final Duration dismissDuration;
+  final Duration settleDuration;
+  final double dismissThreshold;
+  final double dismissRangeStart;
+  final double dismissRangeEnd;
+  final Curve dismissCurve;
+  final Curve settleCurve;
+  final bool Function()? draggable;
+  final RxBase<bool>? draggableRx;
+  final Widget? onTopWidget;
+  final bool removeOnDismiss;
+  final Widget Function()? leftWidget;
+  final Widget Function()? rightWidget;
+
+  /// value multiplied by the animation.
+  /// 0.0 means top friction, 1.0 means normal friction & >1 means more lose friction
+  final double friction;
+
+  const FadeDismissible({
+    required super.key,
+    required this.child,
+    required this.onDismissed,
+    this.onDismissStart,
+    this.onDismissEnd,
+    this.onDismissCancel,
+    this.direction = DismissDirection.horizontal,
+    this.dismissDuration = const Duration(milliseconds: 300),
+    this.settleDuration = const Duration(milliseconds: 300),
+    this.dismissThreshold = 0.8,
+    this.dismissRangeStart = 0.1,
+    this.dismissRangeEnd = 0.9,
+    this.dismissCurve = Curves.fastOutSlowIn,
+    this.settleCurve = Curves.easeOutQuart,
+    this.draggable,
+    this.draggableRx,
+    this.onTopWidget,
+    this.removeOnDismiss = true,
+    this.leftWidget,
+    this.rightWidget,
+    this.friction = 1.0,
+  });
+
+  static bool isDismissing = false;
+
+  @override
+  State<FadeDismissible> createState() => _FadeDismissibleState();
+}
+
+class _FadeDismissibleState extends State<FadeDismissible> with SingleTickerProviderStateMixin {
+  double get progress => _animation.value.abs();
+
+  late final _animation = AnimationController(
+    vsync: this,
+    lowerBound: -1,
+    upperBound: 1,
+    value: 0,
+  );
+
+  @override
+  void dispose() {
+    _animation.dispose();
+    super.dispose();
+  }
+
+  double _dragged = 0;
+
+  bool _draggable = true;
+  bool? _canSwipeInternal; // calculate for direction once to allow swiping back.
+
+  bool _isInDismissRange(double localDx) {
+    final percentage = localDx / Dimensions.inst.availableAppContentWidth;
+    return percentage >= widget.dismissRangeStart && percentage <= widget.dismissRangeEnd;
+  }
+
+  Future<void> _animateDismiss(double to, {required bool faster}) async {
+    await _animation.animateTo(to, duration: faster ? widget.dismissDuration * 0.5 : widget.dismissDuration, curve: faster ? Curves.linear : widget.dismissCurve);
+  }
+
+  Future<void> _dismissToRight(DragEndDetails d, {bool faster = false}) async {
+    if (widget.removeOnDismiss) {
+      await _animateDismiss(1, faster: faster);
+      widget.onDismissed(DismissDirection.startToEnd);
+      if (widget.onDismissEnd != null) widget.onDismissEnd!(d);
+      _animation.animateTo(0, duration: Duration.zero); // fixes rendering issue
+    } else {
+      widget.onDismissed(DismissDirection.startToEnd);
+      await _resetToMiddle(d);
+    }
+  }
+
+  Future<void> _dismissToLeft(DragEndDetails d, {bool faster = false}) async {
+    if (widget.removeOnDismiss) {
+      await _animateDismiss(-1, faster: faster);
+      widget.onDismissed(DismissDirection.endToStart);
+      if (widget.onDismissEnd != null) widget.onDismissEnd!(d);
+      _animation.animateTo(0, duration: Duration.zero); // fixes rendering issue
+    } else {
+      widget.onDismissed(DismissDirection.endToStart);
+      await _resetToMiddle(d);
+    }
+  }
+
+  Future<void> _resetToMiddle(DragEndDetails d) async {
+    if (widget.onDismissCancel != null) widget.onDismissCancel!(d);
+    await _animation.animateTo(0, duration: widget.settleDuration, curve: widget.settleCurve);
+  }
+
+  Widget buildChild(bool draggable, Widget child, double maxWidth, Animation<double> fadeAnimation) {
+    return _FadeDismissibleDragDetector(
+      isInDismissRange: _isInDismissRange,
+      onStart: !draggable
+          ? null
+          : (d) {
+              if (PullToRefreshMixin.isPulling) return;
+              FadeDismissible.isDismissing = true;
+              if (widget.onDismissStart != null) widget.onDismissStart!(d);
+              if (widget.draggable != null) _draggable = widget.draggable!();
+            },
+      onUpdate: !draggable
+          ? null
+          : (d) {
+              if (!_draggable) return;
+              if (PullToRefreshMixin.isPulling) return;
+              if (_canSwipeInternal == null) {
+                bool canSwipe = true;
+                if (d.delta.dx.isNegative) {
+                  if (widget.direction == DismissDirection.startToEnd) canSwipe = false;
+                } else {
+                  if (widget.direction == DismissDirection.endToStart) canSwipe = false;
+                }
+                if (canSwipe != _canSwipeInternal) _canSwipeInternal = canSwipe;
+              }
+              if (_canSwipeInternal == false) return;
+
+              _dragged += d.delta.dx;
+              _animation.animateTo(_dragged / maxWidth, duration: Duration.zero);
+            },
+      onEnd: !draggable
+          ? null
+          : (d) {
+              if (PullToRefreshMixin.isPulling) return;
+              FadeDismissible.isDismissing = false;
+              _canSwipeInternal = null;
+
+              final velocity = d.velocity.pixelsPerSecond.dx;
+              if (velocity > 800) {
+                _dismissToRight(d, faster: true);
+              } else if (velocity < -800) {
+                _dismissToLeft(d, faster: true);
+              } else if (progress > widget.dismissThreshold) {
+                if (_animation.value < 0) {
+                  _dismissToLeft(d);
+                } else {
+                  _dismissToRight(d);
+                }
+              } else {
+                _resetToMiddle(d);
+              }
+              _dragged = 0;
+            },
+      onCancel: !draggable
+          ? null
+          : () {
+              FadeDismissible.isDismissing = false;
+            },
+      child: AnimatedBuilder(
+        animation: _animation,
+        child: FadeTransition(
+          opacity: fadeAnimation,
+          child: child,
+        ),
+        builder: (context, child) {
+          final p = _animation.value;
+          // if (p == 0) return child!; // causes unnecessary rebuilds
+          return Transform.translate(
+            offset: p == 0 ? Offset.zero : Offset(p * widget.friction * maxWidth, 0),
+            child: child!,
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxWidth = Dimensions.inst.availableAppContentWidth;
+    final child = widget.onTopWidget != null
+        ? Stack(
+            children: [
+              widget.child,
+              widget.onTopWidget!,
+            ],
+          )
+        : widget.child;
+
+    final fadeAnimation = _animation.drive(
+      widget.friction == 1.0
+          ? Animatable.fromCallback((value) => 1 - value.abs())
+          : Animatable.fromCallback(
+              (value) => 1 - (value * widget.friction).abs().clampDouble(0, 1),
+            ),
+    );
+    Widget dismissibleChild = widget.draggableRx != null
+        ? ObxO(
+            rx: widget.draggableRx!,
+            builder: (context, value) => buildChild(value && widget.direction != DismissDirection.none, child, maxWidth, fadeAnimation),
+          )
+        : buildChild(_draggable && widget.direction != DismissDirection.none, child, maxWidth, fadeAnimation);
+
+    if (widget.leftWidget != null || widget.rightWidget != null) {
+      final reverseFadeAnimation = ReverseAnimation(fadeAnimation.drive(Animatable.fromCallback((value) => (value * 1.5 - 0.5).clampDouble(0, 1))));
+      Widget? leftWidget;
+      Widget? rightWidget;
+      dismissibleChild = Stack(
+        alignment: AlignmentGeometry.center,
+        children: [
+          if (widget.leftWidget != null)
+            Positioned(
+              left: 0.0,
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, _) {
+                  final p = _animation.value;
+                  if (p <= 0) return const SizedBox();
+                  return leftWidget ??= FadeTransition(
+                    opacity: reverseFadeAnimation,
+                    child: widget.leftWidget!(),
+                  );
+                },
+              ),
+            ),
+          if (widget.rightWidget != null)
+            Positioned(
+              right: 0.0,
+              child: AnimatedBuilder(
+                animation: _animation,
+                builder: (context, _) {
+                  final p = _animation.value;
+                  if (p >= 0) return const SizedBox();
+                  return rightWidget ??= FadeTransition(
+                    opacity: reverseFadeAnimation,
+                    child: widget.rightWidget!(),
+                  );
+                },
+              ),
+            ),
+          dismissibleChild,
+        ],
+      );
+    }
+    return dismissibleChild;
+  }
+}
+
+class _FadeDismissibleDragDetector extends _LinearDragDetector<_FadeDismissibleDragRecognizer> {
+  final bool Function(double localDx) isInDismissRange;
+
+  @override
+  _FadeDismissibleDragRecognizer create() => _FadeDismissibleDragRecognizer(isInDismissRange: isInDismissRange, debugOwner: this);
+
+  const _FadeDismissibleDragDetector({
+    required this.isInDismissRange,
+    super.child,
+    super.onStart,
+    super.onUpdate,
+    super.onEnd,
+    super.onCancel,
+  });
+}
+
+// by claude
+/// leaves edge starts and diagonal moves to the scrollable underneath.
+class _FadeDismissibleDragRecognizer extends HorizontalDragGestureRecognizer {
+  static const _kMinHorizontalRatio = 2.0;
+
+  final bool Function(double localDx) isInDismissRange;
+
+  _FadeDismissibleDragRecognizer({
+    required this.isInDismissRange,
+    super.debugOwner,
+  });
+
+  double _verticalDistanceMoved = 0.0;
+
+  @override
+  bool isPointerAllowed(PointerEvent event) {
+    if (!isInDismissRange(event.localPosition.dx)) return false;
+    return super.isPointerAllowed(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) _verticalDistanceMoved += event.delta.dy;
+    super.handleEvent(event);
+  }
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(PointerDeviceKind pointerDeviceKind, double? deviceTouchSlop) {
+    if (!super.hasSufficientGlobalDistanceToAccept(pointerDeviceKind, deviceTouchSlop)) return false;
+    return globalDistanceMoved.abs() > _verticalDistanceMoved.abs() * _kMinHorizontalRatio;
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    super.didStopTrackingLastPointer(pointer);
+    _verticalDistanceMoved = 0.0;
+  }
+}
+
+class FadeIgnoreTransition extends StatefulWidget {
+  /// Wether to completely replace the [child] with a [SizedBox], instead of just using [IgnorePointer].
+  final bool completelyKillWhenPossible;
+  final Animation<double> opacity;
+  final Widget child;
+
+  const FadeIgnoreTransition({
+    super.key,
+    this.completelyKillWhenPossible = false,
+    required this.opacity,
+    required this.child,
+  });
+
+  @override
+  State<FadeIgnoreTransition> createState() => _FadeIgnoreTransitionState();
+}
+
+class _FadeIgnoreTransitionState extends State<FadeIgnoreTransition> {
+  bool _ignoring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.opacity.addListener(_checkOpacity);
+    _checkOpacity();
+
+    // -- just extra, for some rare cases
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkOpacity();
+    });
+  }
+
+  @override
+  void didUpdateWidget(FadeIgnoreTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.opacity != oldWidget.opacity) {
+      oldWidget.opacity.removeListener(_checkOpacity);
+      widget.opacity.addListener(_checkOpacity);
+      _checkOpacity();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.opacity.removeListener(_checkOpacity);
+    super.dispose();
+  }
+
+  void _checkOpacity() {
+    final shouldIgnore = widget.opacity.value <= 0.01;
+    if (_ignoring != shouldIgnore) {
+      setState(() => _ignoring = shouldIgnore);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.completelyKillWhenPossible && _ignoring) return const SizedBox();
+    return IgnorePointer(
+      ignoring: _ignoring,
+      child: FadeTransition(
+        opacity: widget.opacity,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class NamidaSelectableAutoLinkText extends StatelessWidget {
+  final String text;
+  final double fontScale;
+  final Color? colorScheme;
+  const NamidaSelectableAutoLinkText({super.key, required this.text, this.fontScale = 1.0, this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final colors = NColorsData.of(context);
+    return SelectableAutoLinkText(
+      text,
+      style: NText.medium
+          .of(context)
+          .copyWith(
+            fontSize: 13.5 * fontScale,
+          ),
+      linkStyle: NText.medium
+          .of(context)
+          .copyWith(
+            color: colors.primary.withOpacityExt(0.82),
+            fontSize: 13.5 * fontScale,
+          ),
+      highlightedLinkStyle: TextStyle(
+        color: colors.primary.withOpacityExt(0.86),
+        backgroundColor: colors.onSurface.withOpacityExt(0.16),
+        fontSize: 13.5 * fontScale,
+      ),
+      scrollPhysics: const NeverScrollableScrollPhysics(),
+      onTap: (url) async => await NamidaLinkUtils.openLinkPreferNamida(url, theme: theme),
+    );
+  }
+}
+
+class DefaultPlaylistCard extends StatelessWidget {
+  final Color colorScheme;
+  final IconData icon;
+  final String title;
+  final String text;
+  final double? width;
+  final bool displayLoadingIndicator;
+  final void Function()? onTap;
+
+  const DefaultPlaylistCard({
+    super.key,
+    required this.colorScheme,
+    required this.icon,
+    required this.title,
+    this.text = '',
+    this.width,
+    this.displayLoadingIndicator = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    return NamidaInkWell(
+      borderRadius: 12.0,
+      bgColor: NColors.fixed(Color.alphaBlend(colorScheme.withOpacityExt(0.04), colors.card)),
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: colorScheme.withOpacityExt(0.78),
+          ),
+          const SizedBox(width: 10.0),
+          Expanded(
+            child: NamidaText(
+              title,
+              style: NText.medium,
+              color: NColors.fixed(Color.alphaBlend(colorScheme.withOpacityExt(0.04), NText.medium.of(context).color!)),
+              softWrap: false,
+              overflow: TextOverflow.fade,
+            ),
+          ),
+          const SizedBox(width: 6.0),
+          displayLoadingIndicator
+              ? const LoadingIndicator()
+              : NamidaText(
+                  text,
+                  style: NText.medium,
+                  color: NColors.fixed(Color.alphaBlend(colorScheme.withOpacityExt(0.12), NText.medium.of(context).color!)),
+                ),
+          const SizedBox(width: 2.0),
+        ],
+      ),
+    );
+  }
+}
+
+class NamidaCircularPercentage extends StatelessWidget {
+  final double size;
+  final RxBaseCore<int?> percentageRx;
+  final String heroTag;
+  final bool hero;
+
+  const NamidaCircularPercentage({
+    super.key,
+    this.size = 48.0,
+    required this.hero,
+    required this.percentageRx,
+    required this.heroTag,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    final textStyle = NText.small.of(context).copyWith(fontSize: size / 3.2);
+    final circularSlider = SleekCircularSlider(
+      appearance: CircularSliderAppearance(
+        customWidths: CustomSliderWidths(
+          trackWidth: size / 24,
+          progressBarWidth: size / 12,
+        ),
+        customColors: CustomSliderColors(
+          dotColor: Colors.transparent,
+          trackColor: colors.cardTheme,
+          dynamicGradient: true,
+          progressBarColors: [
+            colors.primary.withOpacityExt(0.39),
+            Colors.transparent,
+            colors.secondary.withOpacityExt(0.39),
+            Colors.transparent,
+            colors.primary.withOpacityExt(0.39),
+          ],
+          hideShadow: true,
+        ),
+        size: size,
+        spinnerMode: true,
+      ),
+    );
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        hero
+            ? Hero(
+                tag: heroTag,
+                child: circularSlider,
+              )
+            : circularSlider,
+        ObxO(
+          rx: percentageRx,
+          builder: (context, percentage) {
+            if (percentage == null) return const SizedBox();
+            final percentageShown = percentage.withMinimum(1);
+            return Text(
+              "$percentageShown%",
+              style: textStyle,
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class NamidaListView extends StatelessWidget {
+  final Widget Function(Widget list)? listBuilder;
+  final Widget Function(BuildContext context, int i) itemBuilder;
+  final ReorderCallback? onReorder;
+  final VoidCallback? onReorderCancel;
+  final void Function(int index)? onReorderStart;
+  final void Function(int index)? onReorderEnd;
+  final Widget? header;
+  final Widget? footer;
+  final Widget? stickyHeader;
+  final Widget Function(double maxWidth)? infoBox;
+  final List<Widget>? widgetsInColumn;
+  final double? listBottomPadding;
+  final double? itemExtent;
+  final fr.ItemExtentBuilder? itemExtentBuilder;
+  final ScrollController? scrollController;
+  final int itemCount;
+  final ScrollPhysics? physics;
+  final double scrollStep;
+  final ScrollbarThumbLabelResolver? Function()? thumbLabel;
+  final bool reverse;
+  final bool showScrollbarOnStart;
+
+  const NamidaListView({
+    super.key,
+    this.listBuilder,
+    this.header,
+    this.footer,
+    this.stickyHeader,
+    this.infoBox,
+    this.widgetsInColumn,
+    this.listBottomPadding,
+    this.onReorder,
+    this.onReorderCancel,
+    required this.itemBuilder,
+    required this.itemCount,
+    required this.itemExtent,
+    this.itemExtentBuilder,
+    this.scrollController,
+    this.onReorderStart,
+    this.onReorderEnd,
+    this.physics,
+    this.scrollStep = 0,
+    this.thumbLabel,
+    this.reverse = false,
+    this.showScrollbarOnStart = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final list = onReorder != null
+        ? NamidaSliverReorderableList(
+            itemExtent: itemExtent,
+            itemExtentBuilder: itemExtentBuilder,
+            itemBuilder: itemBuilder,
+            itemCount: itemCount,
+            onReorder: onReorder!,
+            onReorderCancel: onReorderCancel,
+            onReorderStart: onReorderStart,
+            onReorderEnd: onReorderEnd,
+          )
+        : itemExtent != null
+        ? SliverFixedExtentList.builder(
+            itemExtent: itemExtent!,
+            itemBuilder: itemBuilder,
+            itemCount: itemCount,
+          )
+        : itemExtentBuilder != null
+        ? SliverVariedExtentList.builder(
+            itemExtentBuilder: itemExtentBuilder!,
+            itemBuilder: itemBuilder,
+            itemCount: itemCount,
+          )
+        : SuperSliverList.builder(
+            itemBuilder: itemBuilder,
+            itemCount: itemCount,
+          );
+    return NamidaListViewRaw(
+      reverse: reverse,
+      showScrollbarOnStart: showScrollbarOnStart,
+      scrollController: scrollController,
+      thumbLabel: thumbLabel,
+      scrollStep: scrollStep,
+      header: header,
+      footer: footer,
+      stickyHeader: stickyHeader,
+      infoBox: infoBox,
+      slivers: [list],
+      builder:
+          listBuilder ??
+          (list) => widgetsInColumn != null
+              ? Column(
+                  children: [
+                    ...widgetsInColumn!,
+                    Expanded(child: list),
+                  ],
+                )
+              : list,
+      listBottomPadding: listBottomPadding,
+      physics: physics,
+    );
+  }
+}
+
+class NamidaListViewRaw extends StatefulWidget {
+  final List<Widget> slivers;
+  final Widget Function(Widget list)? builder;
+  final Widget Function(double maxWidth)? infoBox;
+  final Widget? header;
+  final Widget? stickyHeader;
+  final Widget? footer;
+
+  /// defaults to [Dimensions.globalBottomPaddingTotal]
+  final double? listBottomPadding;
+  final ScrollController? scrollController;
+  final ScrollPhysics? physics;
+  final ScrollbarThumbLabelResolver? Function()? thumbLabel;
+  final double scrollStep;
+  final Axis scrollDirection;
+  final bool reverse;
+  final bool showScrollbarOnStart;
+
+  const NamidaListViewRaw({
+    super.key,
+    required this.slivers,
+    this.builder,
+    this.infoBox,
+    this.header,
+    this.stickyHeader,
+    this.footer,
+    this.listBottomPadding,
+    this.scrollController,
+    this.physics,
+    this.thumbLabel,
+    this.scrollStep = 0,
+    this.scrollDirection = Axis.vertical,
+    this.reverse = false,
+    this.showScrollbarOnStart = false,
+  });
+
+  @override
+  State<NamidaListViewRaw> createState() => _NamidaListViewRawState();
+}
+
+class _NamidaListViewRawState extends State<NamidaListViewRaw> {
+  ScrollController? _scrollController;
+  final _topOverscroll = 0.0.obs;
+
+  static const _kTopOverscrollResistance = 0.6;
+  static const _kTopOverscrollMax = 600.0;
+
+  @override
+  void initState() {
+    _scrollController = widget.scrollController ?? NamidaScrollController.create();
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    if (widget.scrollController == null) _scrollController?.dispose();
+    _topOverscroll.close();
+    super.dispose();
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is OverscrollNotification) {
+      final isPullingPastTop = notification.overscroll < 0 && notification.metrics.pixels <= notification.metrics.minScrollExtent;
+      if (isPullingPastTop) {
+        final pulled = _topOverscroll.value - notification.overscroll * _kTopOverscrollResistance;
+        _topOverscroll.value = pulled.withMaximum(_kTopOverscrollMax);
+      }
+    } else if (notification is ScrollEndNotification || notification is ScrollUpdateNotification) {
+      if (_topOverscroll.value != 0.0) _topOverscroll.value = 0.0;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    double? start = widget.header == null ? null : 0.0;
+    double? end = widget.footer == null ? null : 0.0;
+    if (widget.reverse) {
+      (start, end) = (end, start);
+    }
+
+    final padding = EdgeInsets.only(bottom: this.widget.listBottomPadding ?? Dimensions.globalBottomPaddingTotal);
+    final EdgeInsets startPadding, endPadding, listPadding;
+    (startPadding, endPadding, listPadding) = switch (widget.scrollDirection) {
+      Axis.horizontal || Axis.vertical when (start ?? end) == null => (EdgeInsets.zero, EdgeInsets.zero, padding),
+      Axis.horizontal => (padding.copyWith(left: 0), padding.copyWith(right: 0), padding.copyWith(left: start, right: end)),
+      Axis.vertical => (padding.copyWith(top: 0), padding.copyWith(bottom: 0), padding.copyWith(top: start, bottom: end)),
+    };
+    final (EdgeInsets headerPadding, EdgeInsets footerPadding) = widget.reverse ? (startPadding, endPadding) : (endPadding, startPadding);
+
+    final showSubpageInfoAtSide = Dimensions.inst.showSubpageInfoAtSideContext(context);
+    final displayHeaderAtTop = widget.header != null;
+    final displayStickyHeaderAtTop = widget.stickyHeader != null;
+    final displayInfoBoxAtTop = widget.infoBox != null && !showSubpageInfoAtSide;
+    final displayInfoBoxAtSide = widget.infoBox != null && showSubpageInfoAtSide;
+    Widget listW = ClipRect(
+      child: SmoothCustomScrollView(
+        scrollDirection: widget.scrollDirection,
+        controller: _scrollController,
+        physics: widget.physics,
+        reverse: widget.reverse,
+        slivers: <Widget>[
+          if (displayInfoBoxAtTop)
+            SliverPadding(
+              padding: headerPadding,
+              sliver: SliverToBoxAdapter(
+                child: widget.infoBox?.call(Dimensions.inst.availableAppContentWidth),
+              ),
+            ),
+          if (displayHeaderAtTop)
+            SliverPadding(
+              padding: displayInfoBoxAtTop ? EdgeInsets.zero : headerPadding,
+              sliver: SliverToBoxAdapter(
+                child: widget.header,
+              ),
+            ),
+          if (displayStickyHeaderAtTop)
+            SliverPadding(
+              padding: displayInfoBoxAtTop ? EdgeInsets.zero : headerPadding,
+              sliver: PinnedHeaderSliver(
+                child: widget.stickyHeader,
+              ),
+            ),
+          SliverPadding(
+            padding: EdgeInsets.only(top: listPadding.top),
+          ),
+          ...widget.slivers,
+          SliverPadding(
+            padding: EdgeInsets.only(bottom: listPadding.bottom),
+          ),
+          if (widget.footer != null)
+            SliverPadding(
+              padding: footerPadding,
+              sliver: SliverToBoxAdapter(child: widget.footer),
+            ),
+        ],
+      ),
+    );
+    if (displayInfoBoxAtTop) {
+      listW = SubpageOverscrollScope(
+        topOverscroll: _topOverscroll,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onScrollNotification,
+          child: listW,
+        ),
+      );
+    }
+    if (displayInfoBoxAtSide) {
+      listW = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Dimensions.inst.sideInfoMaxWidth),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: SmoothSingleChildScrollView(
+                child: widget.infoBox?.call(Dimensions.inst.sideInfoMaxWidth),
+              ),
+            ),
+          ),
+          Expanded(
+            child: listW,
+          ),
+        ],
+      );
+    }
+    return NamidaScrollbar(
+      controller: _scrollController,
+      scrollStep: widget.scrollStep,
+      showOnStart: widget.showScrollbarOnStart,
+      thumbLabel: widget.thumbLabel,
+      child: widget.builder?.call(listW) ?? listW,
+    );
+  }
+}
+
+/// how far the list above is being pulled past its top, for headers that stretch with it.
+///
+/// by claude
+class SubpageOverscrollScope extends InheritedWidget {
+  final Rx<double> topOverscroll;
+
+  const SubpageOverscrollScope({
+    super.key,
+    required this.topOverscroll,
+    required super.child,
+  });
+
+  static Rx<double>? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<SubpageOverscrollScope>()?.topOverscroll;
+
+  @override
+  bool updateShouldNotify(SubpageOverscrollScope oldWidget) => topOverscroll != oldWidget.topOverscroll;
+}
+
+class NamidaSliverReorderableList extends StatelessWidget {
+  final Widget Function(BuildContext context, int i) itemBuilder;
+  final ReorderCallback onReorder;
+  final VoidCallback? onReorderCancel;
+  final void Function(int index)? onReorderStart;
+  final void Function(int index)? onReorderEnd;
+  final double? itemExtent;
+  final fr.ItemExtentBuilder? itemExtentBuilder;
+  final int itemCount;
+  final bool longPressToDrag;
+
+  const NamidaSliverReorderableList({
+    super.key,
+    required this.itemBuilder,
+    required this.onReorder,
+    this.onReorderCancel,
+    this.onReorderStart,
+    this.onReorderEnd,
+    this.itemExtent,
+    this.itemExtentBuilder,
+    required this.itemCount,
+    this.longPressToDrag = true,
+  });
+
+  Widget _reorderableItemBuilder(BuildContext context, int index) {
+    final Widget item = itemBuilder(context, index);
+    return ReorderableDelayedDragStartListener(
+      delay: kLongPressTimeout,
+      key: item.key!,
+      index: index,
+      child: item,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverReorderableList(
+      itemExtent: itemExtent,
+      itemExtentBuilder: itemExtentBuilder,
+      itemBuilder: longPressToDrag ? _reorderableItemBuilder : itemBuilder,
+      itemCount: itemCount,
+      onReorder: onReorder,
+      onReorderCancel: onReorderCancel,
+      proxyDecorator: (child, index, animation) => _ReorderProxyScope(
+        child: child,
+      ),
+      onReorderStart: onReorderStart,
+      onReorderEnd: onReorderEnd,
+      autoScrollerVelocityScalar: 500,
+    );
+  }
+}
+
+/// the drag proxy lives in the overlay, outside any [AnimationLimiter], so entrance animations would re-run.
+class _ReorderProxyScope extends InheritedWidget {
+  const _ReorderProxyScope({required super.child});
+
+  @override
+  bool updateShouldNotify(_ReorderProxyScope oldWidget) => false;
+}
+
+class NamidaTracksList extends StatelessWidget {
+  final List<Selectable>? queue;
+  final int queueLength;
+  final Widget Function(BuildContext context, int i)? itemBuilder;
+  final fr.ItemExtentBuilder? itemExtentBuilder;
+  final Widget? header;
+  final Widget? stickyHeader;
+  final Widget Function(double maxWidth)? infoBox;
+  final Widget? footer;
+  final List<Widget>? widgetsInColumn;
+  final ScrollController? scrollController;
+  final double? listBottomPadding;
+  final bool Function()? isTrackSelectable;
+  final void Function()? onTap;
+  final ScrollPhysics? physics;
+  final QueueSourceBase queueSource;
+  final bool displayTrackNumber;
+  final bool shouldAnimate;
+  final String Function(Selectable track)? thirdLineText;
+
+  const NamidaTracksList({
+    super.key,
+    this.queue,
+    this.itemBuilder,
+    this.itemExtentBuilder,
+    this.header,
+    this.stickyHeader,
+    required this.infoBox,
+    this.footer,
+    this.widgetsInColumn,
+    this.scrollController,
+    this.listBottomPadding,
+    required this.queueLength,
+    this.isTrackSelectable,
+    this.onTap,
+    this.physics,
+    required this.queueSource,
+    this.displayTrackNumber = false,
+    this.shouldAnimate = true,
+    this.thirdLineText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (itemBuilder != null) {
+      return AnimationLimiter(
+        child: NamidaListView(
+          infoBox: infoBox,
+          header: header,
+          stickyHeader: stickyHeader,
+          widgetsInColumn: widgetsInColumn,
+          scrollController: scrollController,
+          itemCount: queueLength,
+          itemExtent: Dimensions.inst.trackTileItemExtent,
+          itemExtentBuilder: itemExtentBuilder,
+          listBottomPadding: listBottomPadding,
+          physics: physics,
+          itemBuilder: itemBuilder!,
+        ),
+      );
+    } else if (queue != null) {
+      final queue = this.queue!;
+      final thirdLineText = this.thirdLineText;
+      return AnimationLimiter(
+        child: TrackTilePropertiesProvider(
+          configs: TrackTilePropertiesConfigs(
+            queueSource: queueSource,
+            selectable: isTrackSelectable,
+            displayTrackNumber: displayTrackNumber,
+          ),
+          builder: (properties) {
+            return NamidaListView(
+              infoBox: infoBox,
+              header: header,
+              stickyHeader: stickyHeader,
+              widgetsInColumn: widgetsInColumn,
+              scrollController: scrollController,
+              itemCount: queueLength,
+              itemExtent: Dimensions.inst.trackTileItemExtent,
+              listBottomPadding: listBottomPadding,
+              physics: physics,
+              itemBuilder: (context, i) {
+                final track = queue[i];
+                return AnimatingTile(
+                  key: ValueKey(i),
+                  position: i,
+                  shouldAnimate: shouldAnimate,
+                  child: TrackTile(
+                    properties: properties,
+                    index: i,
+                    trackOrTwd: track,
+                    tracks: queue,
+                    onTap: onTap,
+                    thirdLineText: thirdLineText == null ? null : thirdLineText(track),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      );
+    } else {
+      return const Text('PASS A QUEUE OR USE ITEM BUILDER');
+    }
+  }
+}
+
+class NamidaSupportButton extends StatelessWidget {
+  final String? title;
+  final bool closeDialog;
+  final Widget? iconWidget;
+  const NamidaSupportButton({super.key, this.title, this.closeDialog = true, this.iconWidget});
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaButton(
+      icon: Broken.heart,
+      iconWidget: iconWidget,
+      text: title ?? lang.support,
+      onTap: () {
+        closeDialog.closeDialog();
+        NamidaLinkUtils.openLink(AppSocial.DONATE_BUY_ME_A_COFFEE);
+      },
+    );
+  }
+}
+
+class BackgroundWrapper extends StatelessWidget {
+  final Widget child;
+  const BackgroundWrapper({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    return Material(
+      color: colors.scaffold,
+      clipBehavior: Clip.hardEdge,
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          const Positioned.fill(
+            child: NamidaAppWallpaper(),
+          ),
+          const Positioned.fill(
+            child: NamidaEffectsLayer.background(),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class NamidaInkWell extends StatelessWidget {
+  final NColors? bgColor;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool enableSecondaryTap;
+  final double borderRadius;
+  final EdgeInsetsGeometry padding;
+  final BoxDecoration decoration;
+  final Widget? child;
+  final int animationDurationMS;
+  final EdgeInsetsGeometry? margin;
+  final double? width;
+  final double? height;
+  final AlignmentGeometry? alignment;
+
+  /// Setting this to [true] will force the [borderRadius] to be [0.0].
+  final bool transparentHighlight;
+  const NamidaInkWell({
+    super.key,
+    this.bgColor,
+    this.onTap,
+    this.onLongPress,
+    this.enableSecondaryTap = false,
+    this.borderRadius = 12.0,
+    this.padding = EdgeInsets.zero,
+    this.decoration = const BoxDecoration(),
+    this.child,
+    this.transparentHighlight = false,
+    this.animationDurationMS = 0,
+    this.margin,
+    this.width,
+    this.height,
+    this.alignment,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = animationDurationMS > 0 ? NColorsData.targetOf(context) : NColorsData.of(context);
+    final borderR =
+        decoration.borderRadius?.resolve(Directionality.of(context)) ?? (transparentHighlight || borderRadius == 0 ? null : BorderRadius.circular(borderRadius.multipliedRadius));
+    final highlightColor = transparentHighlight ? Colors.transparent : Color.alphaBlend(colors.scaffold.withOpacityExt(0.08), colors.highlight);
+    final resolvedBgColor = bgColor?.resolve(colors);
+    final finalBgColor = resolvedBgColor ?? decoration.color;
+    final decorationFinal = BoxDecoration(
+      color: finalBgColor,
+      borderRadius: borderR,
+      backgroundBlendMode: decoration.backgroundBlendMode,
+      boxShadow: decoration.boxShadow,
+      gradient: decoration.gradient,
+      shape: decoration.shape,
+      image: decoration.image,
+    );
+
+    final foregroundDecorationFinal = BoxDecoration(
+      border: decoration.border,
+      borderRadius: borderR,
+    );
+    final childFinal = Material(
+      clipBehavior: Clip.none,
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: borderR,
+        hoverColor: highlightColor,
+        highlightColor: highlightColor,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        onSecondaryTap: enableSecondaryTap ? onLongPress ?? onTap : null,
+        child: SizedBox(
+          height: height,
+          width: width,
+          child: Padding(
+            padding: padding,
+            child: child,
+          ),
+        ),
+      ),
+    );
+    if (animationDurationMS > 0) {
+      final animationDuration = Duration(milliseconds: animationDurationMS);
+      final animationDurationFinal = NColorsData.targetDurationOf(context, animationDuration);
+      return AnimatedContainer(
+        alignment: alignment,
+        margin: margin,
+        duration: animationDurationFinal,
+        decoration: decorationFinal,
+        foregroundDecoration: foregroundDecorationFinal,
+        clipBehavior: Clip.none,
+        child: childFinal,
+      );
+    }
+    return Container(
+      alignment: alignment,
+      margin: margin,
+      decoration: decorationFinal,
+      foregroundDecoration: foregroundDecorationFinal,
+      clipBehavior: Clip.none,
+      child: childFinal,
+    );
+  }
+}
+
+class NamidaInkWellButton extends StatelessWidget {
+  final Color? bgColor;
+  final VoidCallback? onTap;
+  final double borderRadius;
+  final int animationDurationMS;
+  final IconData? icon;
+  final double iconSize;
+  final String text;
+  final bool enabled;
+  final bool showLoadingWhenDisabled;
+  final bool disableWhenLoading;
+  final double sizeMultiplier;
+  final double paddingMultiplier;
+  final Widget? leading;
+  final Widget? trailing;
+  final BoxDecoration decoration;
+  final Color? itemsColor;
+  final AlignmentGeometry? alignment;
+  final bool centered;
+
+  const NamidaInkWellButton({
+    super.key,
+    this.bgColor,
+    this.itemsColor,
+    this.onTap,
+    this.borderRadius = 10.0,
+    this.animationDurationMS = 250,
+    required this.icon,
+    this.iconSize = 18.0,
+    required this.text,
+    this.enabled = true,
+    this.showLoadingWhenDisabled = true,
+    this.disableWhenLoading = true,
+    this.sizeMultiplier = 1.0,
+    this.paddingMultiplier = 1.0,
+    this.leading,
+    this.trailing,
+    this.decoration = const BoxDecoration(),
+    this.alignment,
+    this.centered = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.targetOf(context);
+    final itemsColor = this.itemsColor ?? colors.onSurface.withOpacityExt(0.8);
+    final textGood = text.isNotEmpty;
+    return IgnorePointer(
+      ignoring: !enabled && disableWhenLoading,
+      child: AnimatedOpacity(
+        opacity: enabled ? 1.0 : 0.6,
+        duration: Duration(milliseconds: animationDurationMS),
+        child: NamidaInkWell(
+          animationDurationMS: animationDurationMS,
+          borderRadius: borderRadius * sizeMultiplier,
+          padding: EdgeInsets.symmetric(horizontal: 12.0 * sizeMultiplier * paddingMultiplier, vertical: 6.0 * sizeMultiplier * paddingMultiplier),
+          bgColor: NColors.fixed(bgColor ?? colors.secondaryContainer.withOpacityExt(0.5)),
+          decoration: decoration,
+          onTap: onTap,
+          enableSecondaryTap: false,
+          alignment: alignment,
+          child: Row(
+            mainAxisAlignment: centered ? MainAxisAlignment.center : MainAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ?leading,
+              if (!enabled && showLoadingWhenDisabled) ...[
+                const LoadingIndicator(boxHeight: 18.0),
+                SizedBox(width: 6.0 * sizeMultiplier),
+              ] else if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: iconSize * sizeMultiplier,
+                  color: itemsColor,
+                ),
+              ],
+              if (textGood) ...[
+                SizedBox(width: 6.0 * sizeMultiplier),
+                Flexible(
+                  child: Text(
+                    text,
+                    style: NText.medium
+                        .of(context)
+                        .copyWith(
+                          color: itemsColor,
+                          fontSize: (15.0 * sizeMultiplier),
+                        ),
+                  ),
+                ),
+                if (textGood) const SizedBox(width: 4.0),
+              ],
+              ?trailing,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HistoryJumpToDayIcon<T extends ItemWithDate, E> extends StatelessWidget {
+  final HistoryManager<T, E> controller;
+  final ({double itemExtent, double dayHeaderExtent}) Function() itemExtentAndDayHeaderExtent;
+  final bool considerInfoBoxPadding;
+
+  const HistoryJumpToDayIcon({
+    super.key,
+    required this.controller,
+    required this.itemExtentAndDayHeaderExtent,
+    required this.considerInfoBoxPadding,
+  });
+
+  double get topPadding => considerInfoBoxPadding && !Dimensions.inst.showSubpageInfoAtSide ? 64.0 : 0.0;
+
+  DateTime? getCurrentDateFromScrollPosition() {
+    final currentScrolledDay = getCurrentDayFromScrollPosition();
+    return currentScrolledDay == null ? null : DateTime(1970).add(Duration(days: currentScrolledDay));
+  }
+
+  int? getCurrentDayFromScrollPosition() {
+    final info = itemExtentAndDayHeaderExtent();
+    final topPadding = this.topPadding;
+    final currentScrolledDay = controller.currentScrollPositionToDay(info.itemExtent, info.dayHeaderExtent, topPadding: topPadding);
+    return currentScrolledDay;
+  }
+
+  void scrollToDate(DateTime dateToScrollTo) {
+    final dayToScrollTo = dateToScrollTo.toDaysSince1970();
+    final days = controller.historyDays.toList();
+    days.removeWhere((element) => element <= dayToScrollTo);
+    double totalScrollOffset = controller.daysToSectionExtent(days);
+    controller.scrollController.jumpTo(totalScrollOffset + topPadding - 48.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaAppBarIcon(
+      icon: Broken.calendar,
+      tooltip: () => lang.jumpToDay,
+      onPressed: () {
+        final initialDate = getCurrentDateFromScrollPosition();
+        showCalendarDialog(
+          historyController: controller,
+          title: lang.jumpToDay,
+          buttonText: lang.jump,
+          calendarType: NamidaCalendarDatePickerType.single,
+          useHistoryDates: true,
+          initialDate: initialDate,
+          onGenerate: (dates) {
+            NamidaNavigator.inst.closeDialog();
+            final dateToScrollTo = dates.firstOrNull;
+            if (dateToScrollTo != null) scrollToDate(dateToScrollTo);
+          },
+        );
+      },
+    );
+  }
+}
+
+class BetweenDatesTextButton extends StatefulWidget {
+  final bool useHistoryDates;
+  final void Function(List<DateTime> dates) onConfirm;
+  final bool maxToday;
+  final int tracksLength;
+
+  const BetweenDatesTextButton({
+    super.key,
+    required this.useHistoryDates,
+    required this.onConfirm,
+    this.maxToday = false,
+    this.tracksLength = 0,
+  });
+
+  @override
+  State<BetweenDatesTextButton> createState() => _BetweenDatesTextButtonState();
+}
+
+class _BetweenDatesTextButtonState extends State<BetweenDatesTextButton> {
+  DateTime? oldestDate;
+  DateTime? newestDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final textWidget = Text(lang.betweenDates);
+
+    return TextButton.icon(
+      onPressed: () {
+        showCalendarDialog(
+          useHistoryDates: widget.useHistoryDates,
+          lastDate: widget.maxToday ? DateTime.now() : null,
+          title: lang.betweenDates,
+          buttonText: lang.confirm,
+          onGenerate: (dates) {
+            oldestDate = dates.firstOrNull;
+            newestDate = dates.lastOrNull;
+            widget.onConfirm(dates);
+            setState(() {});
+          },
+        );
+      },
+      icon: const Icon(Broken.calendar_1),
+      label: oldestDate == null || newestDate == null
+          ? textWidget
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    textWidget,
+                    const SizedBox(width: 6.0),
+                    if (widget.tracksLength != 0)
+                      NamidaButtonText(
+                        "(${widget.tracksLength.displayTrackKeyword})",
+                        style: NText.small.of(context),
+                      ),
+                  ],
+                ),
+                NamidaButtonText(
+                  "${oldestDate?.dateFormattedOriginal} → ${newestDate?.dateFormattedOriginal}",
+                  style: NText.small.of(context),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Obx((context) => showIf.value ? child : const SizedBox(context));
+class ObxShow extends StatelessWidget {
+  final RxBase<bool> showIf;
+  final Widget child;
+
+  const ObxShow({
+    super.key,
+    required this.showIf,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: showIf,
+      builder: (context, show) => show ? child : const SizedBox(),
+    );
+  }
+}
+
+class NamidaHero extends StatelessWidget {
+  final Object? tag;
+  final Widget child;
+  final bool enabled;
+
+  /// rounds the flight between two heroes that both set it, going from one radius to the other.
+  /// for children whose rounding comes from a parent clip, which the flight leaves behind.
+  final double? flightBorderRadius;
+
+  const NamidaHero({
+    super.key,
+    required this.tag,
+    required this.child,
+    this.enabled = true,
+    this.flightBorderRadius,
+  });
+
+  static final fadeAnimation2Convert = Animatable.fromCallback((value) => (value * (1 / 0.2)).clampDouble(0, 1));
+  static final fadeAnimation1Convert = Animatable.fromCallback((value) => 1.0 - (value * 12 - 11).clampDouble(0, 1));
+
+  static Widget _customHeroFlightShuttleBuilder(
+    BuildContext flightContext,
+    Animation<double> animation,
+    HeroFlightDirection flightDirection,
+    BuildContext fromHeroContext,
+    BuildContext toHeroContext,
+  ) {
+    final Hero toHero = toHeroContext.widget as Hero;
+    final Hero fromHero = fromHeroContext.widget as Hero;
+
+    final (Hero hero1, Hero hero2) = switch (flightDirection) {
+      HeroFlightDirection.push => (fromHero, toHero),
+      HeroFlightDirection.pop => (toHero, fromHero),
+    };
+    final (BuildContext hero1Context, BuildContext hero2Context) = switch (flightDirection) {
+      HeroFlightDirection.push => (fromHeroContext, toHeroContext),
+      HeroFlightDirection.pop => (toHeroContext, fromHeroContext),
+    };
+    final hero1Radius = hero1Context.findAncestorWidgetOfExactType<NamidaHero>()?.flightBorderRadius;
+    final hero2Radius = hero2Context.findAncestorWidgetOfExactType<NamidaHero>()?.flightBorderRadius;
+
+    final MediaQueryData? toMediaQueryData = MediaQuery.maybeOf(toHeroContext);
+    final MediaQueryData? fromMediaQueryData = MediaQuery.maybeOf(fromHeroContext);
+
+    if (toMediaQueryData == null || fromMediaQueryData == null) {
+      return toHero.child;
+    }
+
+    final EdgeInsets fromHeroPadding = fromMediaQueryData.padding;
+    final EdgeInsets toHeroPadding = toMediaQueryData.padding;
+
+    final fadeAnimation2 = animation.drive(fadeAnimation2Convert);
+    final fadeAnimation1 = animation.drive(fadeAnimation1Convert);
+
+    final stackChild = Stack(
+      alignment: Alignment.center,
+      fit: StackFit.passthrough,
+      children: [
+        FadeTransition(
+          opacity: fadeAnimation2,
+          child: hero2.child,
+        ),
+        FadeTransition(
+          opacity: fadeAnimation1,
+          child: hero1.child,
+        ),
+      ],
+    );
+
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        Widget flightChild = stackChild;
+        if (hero1Radius != null && hero2Radius != null) {
+          final radius = hero1Radius + (hero2Radius - hero1Radius) * animation.value;
+          flightChild = ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: stackChild,
+          );
+        }
+        return MediaQuery(
+          data: toMediaQueryData.copyWith(
+            padding: (flightDirection == HeroFlightDirection.push)
+                ? EdgeInsetsTween(
+                    begin: fromHeroPadding,
+                    end: toHeroPadding,
+                  ).evaluate(animation)
+                : EdgeInsetsTween(
+                    begin: toHeroPadding,
+                    end: fromHeroPadding,
+                  ).evaluate(animation),
+          ),
+          child: flightChild,
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return enabled && tag != null
+        ? Hero(
+            tag: tag!,
+            // -- quite expensive to animate 2 fade transitions.
+            flightShuttleBuilder: settings.performanceMode.value == PerformanceMode.highPerformance ? null : _customHeroFlightShuttleBuilder,
+            child: child,
+          )
+        : child;
+  }
+}
+
+class NamidaTooltip extends StatelessWidget {
+  final String Function()? message;
+  final bool? preferBelow;
+  final TooltipTriggerMode? triggerMode;
+  final void Function()? onTriggered;
+  final Widget child;
+
+  const NamidaTooltip({
+    super.key,
+    required this.message,
+    this.preferBelow,
+    this.triggerMode,
+    this.onTriggered,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (message == null) return child;
+    return Tooltip(
+      message: message,
+      preferBelow: preferBelow,
+      triggerMode: triggerMode,
+      onTriggered: onTriggered,
+      child: child,
+    );
+  }
+}
+
+class NamidaAnimatedSwitcher extends StatelessWidget {
+  final Widget firstChild;
+  final Widget secondChild;
+  final bool showFirst;
+  final int durationMS;
+  final int? reverseDurationMS;
+  final Curve? firstCurve;
+  final Curve? secondCurve;
+  final Curve? sizeCurve;
+  final Curve? allCurves;
+
+  const NamidaAnimatedSwitcher({
+    super.key,
+    required this.firstChild,
+    required this.secondChild,
+    required this.showFirst,
+    this.durationMS = 400,
+    this.reverseDurationMS,
+    this.firstCurve,
+    this.secondCurve,
+    this.sizeCurve,
+    this.allCurves,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final allCurves = this.allCurves ?? Curves.fastLinearToSlowEaseIn;
+    return AnimatedCrossFade(
+      firstChild: firstChild,
+      secondChild: secondChild,
+      crossFadeState: showFirst ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+      duration: Duration(milliseconds: durationMS),
+      reverseDuration: Duration(milliseconds: reverseDurationMS ?? durationMS),
+      firstCurve: firstCurve ?? allCurves,
+      secondCurve: secondCurve ?? allCurves,
+      sizeCurve: sizeCurve ?? allCurves,
+      layoutBuilder: (topChild, topChildKey, bottomChild, bottomChildKey) {
+        return Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: <Widget>[
+            Positioned(
+              key: bottomChildKey,
+              top: 0,
+              child: bottomChild,
+            ),
+            Positioned(
+              key: topChildKey,
+              child: topChild,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class CustomAnimatedSwitcher extends StatelessWidget {
+  final Duration duration;
+  final Duration? reverseDuration;
+  final Curve switchInCurve;
+  final Curve switchOutCurve;
+  final AlignmentGeometry alignment;
+  final AnimatedSwitcherLayoutBuilder? layoutBuilder;
+  final Widget? child;
+
+  const CustomAnimatedSwitcher({
+    super.key,
+    this.child,
+    required this.duration,
+    this.reverseDuration,
+    this.switchInCurve = Curves.linear,
+    this.switchOutCurve = Curves.linear,
+    this.alignment = Alignment.center,
+    this.layoutBuilder,
+  });
+
+  Widget defaultLayoutBuilder(Widget? currentChild, List<Widget> previousChildren) {
+    return Stack(
+      alignment: alignment,
+      children: <Widget>[...previousChildren, ?currentChild],
+    );
+  }
+
+  static Widget defaultTransitionBuilder(Widget child, Animation<double> animation) {
+    return FadeTransition(
+      key: ValueKey(animation),
+      opacity: animation,
+      child: child,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: duration,
+      reverseDuration: reverseDuration,
+      switchInCurve: switchInCurve,
+      switchOutCurve: switchOutCurve,
+      layoutBuilder: layoutBuilder ?? defaultLayoutBuilder,
+      transitionBuilder: CustomAnimatedSwitcher.defaultTransitionBuilder,
+      child: child,
+    );
+  }
+}
+
+class ShimmerWrapper extends StatelessWidget {
+  final bool shimmerEnabled;
+  final Widget child;
+  final int fadeDurationMS;
+  final int shimmerDelayMS;
+  final int shimmerDurationMS;
+  final bool transparent;
+  final AlignmentGeometry alignment;
+
+  const ShimmerWrapper({
+    super.key,
+    required this.shimmerEnabled,
+    required this.child,
+    this.fadeDurationMS = 600,
+    this.shimmerDelayMS = 400,
+    this.shimmerDurationMS = 700,
+    this.transparent = true,
+    this.alignment = Alignment.center,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.of(context);
+    final color = transparent ? Colors.transparent : nColors.card.withOpacityExt(0.47);
+    return CustomAnimatedSwitcher(
+      duration: fadeDurationMS.ms,
+      alignment: alignment,
+      child: shimmerEnabled
+          ? Animate(
+              onPlay: (controller) => controller.repeat(),
+              effects: [
+                ShimmerEffect(
+                  delay: shimmerDelayMS.ms,
+                  duration: shimmerDurationMS.ms,
+                  colors: [
+                    color,
+                    const Color(0x80FFFFFF),
+                    color,
+                  ],
+                ),
+              ],
+              child: child,
+            )
+          : child,
+    );
+  }
+}
+
+class LazyLoadListView extends StatefulWidget {
+  final ScrollController? scrollController;
+  final int extend;
+  final FutureOr<bool> Function() onReachingEnd;
+  final Widget Function(ScrollController controller) listview;
+  final bool requiresNetwork;
+
+  const LazyLoadListView({
+    super.key,
+    this.scrollController,
+    this.extend = 400,
+    required this.onReachingEnd,
+    required this.listview,
+    this.requiresNetwork = true,
+  });
+
+  @override
+  State<LazyLoadListView> createState() => _LazyLoadListViewState();
+}
+
+class _LazyLoadListViewState extends State<LazyLoadListView> {
+  ScrollPosition? get _getControllerPositionSafe => controller.positions.firstOrNull;
+
+  late final ScrollController controller;
+  bool _isExecuting = false;
+
+  bool? _lastWasSuccess;
+  bool _isInExtendRange = false; // prevent re-execution if latest failed & still in range.
+
+  void _scrollListener() async {
+    if (_isExecuting) return;
+
+    final position = controller.positions.firstOrNull;
+    if (position != null && position.pixels >= position.maxScrollExtent - widget.extend) {
+      if (!position.outOfRange) {
+        if (_lastWasSuccess == false && _isInExtendRange) return;
+        _isInExtendRange = true;
+        if (widget.requiresNetwork && !ConnectivityController.inst.hasConnection) return;
+        _isExecuting = true;
+        _lastWasSuccess = await widget.onReachingEnd();
+        _isExecuting = false;
+      }
+    } else {
+      _isInExtendRange = false;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    controller = (widget.scrollController ?? NamidaScrollController.create())..addListener(_scrollListener);
+  }
+
+  Future<void> _fetchIfNotScrollable() async {
+    if (_isExecuting) return;
+    final position = _getControllerPositionSafe;
+    if (position == null) return;
+    if (position.maxScrollExtent > 0) return;
+    if (widget.requiresNetwork && !ConnectivityController.inst.hasConnection) return;
+
+    _isExecuting = true;
+    _lastWasSuccess = await widget.onReachingEnd();
+    _isExecuting = false;
+
+    if (_lastWasSuccess == true) {
+      // -- keep fetching until list is scrollable or source is exhausted
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchIfNotScrollable());
+    }
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_scrollListener);
+    if (widget.scrollController == null) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.maxScrollExtent == 0) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) {
+              if (_getControllerPositionSafe?.maxScrollExtent == 0) {
+                // -- ensure still 0
+                _fetchIfNotScrollable();
+              }
+            },
+          );
+        }
+        return false;
+      },
+      child: widget.listview(controller),
+    );
+  }
+}
+
+class NamidaAspectRatio extends StatelessWidget {
+  final double? aspectRatio;
+  final Widget child;
+
+  const NamidaAspectRatio({
+    super.key,
+    required this.aspectRatio,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return aspectRatio == null
+        ? child
+        : AspectRatio(
+            aspectRatio: aspectRatio!,
+            child: child,
+          );
+  }
+}
+
+class NamidaTabView extends StatefulWidget {
+  final int initialIndex;
+  final List<String>? tabs;
+  final List<Widget>? tabWidgets;
+  final List<Widget> children;
+  final void Function(int index) onIndexChanged;
+  final bool isScrollable;
+  final bool compact;
+  final bool reportIndexChangedOnInit;
+  final Widget? trailing;
+
+  const NamidaTabView({
+    super.key,
+    required this.children,
+    required this.initialIndex,
+    this.tabs,
+    this.tabWidgets,
+    required this.onIndexChanged,
+    this.isScrollable = false,
+    this.compact = false,
+    this.reportIndexChangedOnInit = true,
+    this.trailing,
+  });
+
+  @override
+  State<NamidaTabView> createState() => NamidaTabViewState();
+}
+
+class NamidaTabViewState extends State<NamidaTabView> with SingleTickerProviderStateMixin {
+  late TabController controller;
+  int? _index;
+
+  void fn() {
+    final newIndex = controller.index;
+    if (newIndex == _index) return;
+    _index = newIndex;
+    widget.onIndexChanged(newIndex);
+  }
+
+  void animateToTab(int index) {
+    controller.animateTo(index);
+  }
+
+  void jumpToTab(int index) {
+    controller.animateTo(index, duration: Duration.zero);
+  }
+
+  @override
+  void initState() {
+    final initialIndex = widget.initialIndex.clampInt(0, widget.children.length - 1);
+    if (widget.reportIndexChangedOnInit) Timer(Duration.zero, () => widget.onIndexChanged(initialIndex));
+    controller = TabController(
+      length: widget.children.length,
+      vsync: this,
+      animationDuration: const Duration(milliseconds: 400),
+      initialIndex: initialIndex,
+    );
+    controller.addListener(fn);
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(fn);
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itemsPadding = widget.compact ? const EdgeInsets.symmetric(horizontal: 2.0, vertical: 8.0) : const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0);
+    final trailing = widget.trailing;
+    Widget tabBar = TabBar(
+      indicatorWeight: widget.compact ? 1.0 : 3.0,
+      controller: controller,
+      isScrollable: widget.isScrollable,
+      tabs:
+          widget.tabs
+              ?.map(
+                (e) => Padding(
+                  padding: itemsPadding,
+                  child: Text(e, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList() ??
+          widget.tabWidgets ??
+          widget.children
+              .map(
+                (e) => Padding(
+                  padding: itemsPadding,
+                  child: Text(e.toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
+      splashBorderRadius: BorderRadius.circular(12.0.multipliedRadius),
+      indicatorSize: TabBarIndicatorSize.label,
+    );
+    if (trailing != null) {
+      tabBar = Row(
+        children: [
+          Expanded(
+            child: tabBar,
+          ),
+          trailing,
+        ],
+      );
+    }
+    return Column(
+      children: [
+        tabBar,
+        Expanded(
+          child: TabBarView(
+            physics: isDesktop ? const NeverScrollableScrollPhysics() : null,
+            controller: controller,
+            children: widget.children,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ShaderFadingWidget extends StatelessWidget {
+  final bool biggerValues;
+  final Widget child;
+  final Alignment begin;
+  final Alignment end;
+  const ShaderFadingWidget({
+    super.key,
+    this.biggerValues = false,
+    required this.child,
+    this.begin = Alignment.topCenter,
+    this.end = Alignment.bottomCenter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) {
+        final stops = biggerValues ? [0.07, 0.3, 0.6, 0.8, 1.0] : [0.0, 0.2, 0.8, 0.9, 1.0];
+        return LinearGradient(
+          begin: begin,
+          end: end,
+          tileMode: TileMode.clamp,
+          stops: stops,
+          colors: const [Colors.transparent, Colors.white, Colors.white, Colors.white, Colors.transparent],
+        ).createShader(Rect.fromLTRB(0, 0, rect.width, rect.height));
+      },
+      child: child,
+    );
+  }
+}
+
+class NamidaOpacity extends StatelessWidget {
+  final bool enabled;
+  final double opacity;
+  final Widget child;
+
+  const NamidaOpacity({
+    super.key,
+    required this.opacity,
+    required this.child,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (opacity == 0) {
+      return const SizedBox();
+    } else if (!enabled || opacity == 1) {
+      return child;
+    }
+    return Opacity(
+      key: key,
+      opacity: opacity,
+      child: child,
+    );
+  }
+}
+
+class NamidaScrollbar extends StatelessWidget {
+  final ScrollController? controller;
+  final Widget child;
+  final double scrollStep;
+  final bool showOnStart;
+  final ScrollbarThumbLabelResolver? Function()? thumbLabel;
+
+  const NamidaScrollbar({
+    super.key,
+    required this.controller,
+    required this.child,
+    this.scrollStep = 0.0,
+    this.showOnStart = false,
+    this.thumbLabel,
+  });
+
+  /// the thumb sits next to the item at the same fraction of [list] as the scroll fraction.
+  static ScrollbarThumbLabelResolver? createListThumbLabel<T>(List<T> list, String? Function(T item)? labelOf) {
+    if (labelOf == null) return null;
+    var lastIndex = -1;
+    String? lastLabel;
+    return (scrollFraction) {
+      final length = list.length;
+      if (length == 0) return null;
+      final fractionIndex = (scrollFraction * length).floor();
+      final index = fractionIndex.withMaximum(length - 1);
+      if (index != lastIndex) {
+        lastIndex = index;
+        final item = list[index];
+        lastLabel = labelOf(item);
+      }
+      return lastLabel;
+    };
+  }
+
+  ScrollbarThumbLabelResolver? _createThumbLabelIfEnabled() {
+    if (settings.scrollbarThumbLabel.value != true) return null;
+    return thumbLabel?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller == null) return child;
+    return ObxO(
+      rx: settings.easyScrollbarGrab,
+      builder: (context, easyScrollbarGrab) => CupertinoScrollbar(
+        controller: controller,
+        showOnStart: showOnStart,
+        scrollStep: scrollStep,
+        thicknessWhileDragging: 8.5,
+        minInteractiveSize: easyScrollbarGrab == true ? 96.0 : 60.0,
+        pressDuration: isDesktop ? const Duration(milliseconds: 50) : const Duration(milliseconds: 120),
+        tapToScroll: () => settings.tapToScroll.value ?? false,
+        enhancedDragToScroll: () => settings.enhancedDragToScroll.value ?? true,
+        instantThumbGrab: () => settings.easyScrollbarGrab.value ?? false,
+        onThumbLongPressStart: () => isScrollbarThumbDragging = true,
+        onThumbLongPressEnd: () => isScrollbarThumbDragging = false,
+        thumbLabel: thumbLabel == null ? null : _createThumbLabelIfEnabled,
+        child: child,
+      ),
+    );
+  }
+}
+
+class NamidaScrollbarWithController extends StatefulWidget {
+  /// used as is and never disposed, a new one is created otherwise.
+  final ScrollController? controller;
+  final bool showOnStart;
+  final double scrollStep;
+  final Widget Function(ScrollController sc) child;
+  const NamidaScrollbarWithController({
+    super.key,
+    this.controller,
+    this.showOnStart = false,
+    this.scrollStep = 0.0,
+    required this.child,
+  });
+
+  @override
+  State<NamidaScrollbarWithController> createState() => _NamidaScrollbarWithControllerState();
+}
+
+class _NamidaScrollbarWithControllerState extends State<NamidaScrollbarWithController> {
+  late final ScrollController _sc;
+  late final bool _ownsController;
+
+  @override
+  void initState() {
+    final controller = widget.controller;
+    _ownsController = controller == null;
+    _sc = controller ?? NamidaScrollController.create();
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    if (_ownsController) _sc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaScrollbar(
+      controller: _sc,
+      showOnStart: widget.showOnStart,
+      scrollStep: widget.scrollStep,
+      child: widget.child(_sc),
+    );
+  }
+}
+
+class AnimatedEnabled extends StatelessWidget {
+  final bool enabled;
+  final double disabledOpacity;
+  final int durationMS;
+  final Widget child;
+
+  const AnimatedEnabled({
+    super.key,
+    required this.enabled,
+    this.disabledOpacity = 0.6,
+    this.durationMS = 300,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !enabled,
+      child: AnimatedOpacity(
+        opacity: enabled ? 1.0 : disabledOpacity,
+        duration: Duration(milliseconds: durationMS),
+        child: child,
+      ),
+    );
+  }
+}
+
+class AnimatedShow extends StatelessWidget {
+  final bool show;
+  final bool isHorizontal;
+  final Duration duration;
+  final Curve curve;
+  final AlignmentGeometry alignment;
+  final Widget child;
+
+  const AnimatedShow({
+    super.key,
+    required this.show,
+    this.isHorizontal = false,
+    this.duration = const Duration(milliseconds: 300),
+    this.curve = Curves.fastEaseInToSlowEaseOut,
+    this.alignment = Alignment.center,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final factor = show ? 1.0 : 0.0;
+    return IgnorePointer(
+      ignoring: !show,
+      child: AnimatedAlign(
+        alignment: alignment,
+        heightFactor: isHorizontal ? null : factor,
+        widthFactor: isHorizontal ? factor : null,
+        duration: duration,
+        curve: curve,
+        child: AnimatedOpacity(
+          opacity: factor,
+          duration: duration,
+          curve: curve,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class DelayedAnimatedShow extends StatefulWidget {
+  final bool show;
+  final bool isHorizontal;
+  final Duration showDelay;
+  final Duration hideDelay;
+  final Duration duration;
+  final Widget child;
+
+  const DelayedAnimatedShow({
+    super.key,
+    required this.show,
+    this.isHorizontal = false,
+    required this.child,
+    this.showDelay = const Duration(milliseconds: 600),
+    this.hideDelay = Duration.zero,
+    this.duration = const Duration(milliseconds: 300),
+  });
+
+  @override
+  State<DelayedAnimatedShow> createState() => _DelayedAnimatedShowState();
+}
+
+class _DelayedAnimatedShowState extends State<DelayedAnimatedShow> {
+  Timer? _timer;
+  late bool _visible;
+
+  void _setVisible(bool visible, Duration delay) {
+    if (delay == Duration.zero) {
+      if (mounted) setState(() => _visible = visible);
+      return;
+    }
+    _timer = Timer(delay, () {
+      if (mounted && widget.show == visible) setState(() => _visible = visible);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _visible = widget.show;
+  }
+
+  @override
+  void didUpdateWidget(DelayedAnimatedShow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.show == widget.show) return;
+
+    _timer?.cancel();
+    if (widget.show) {
+      _setVisible(true, widget.showDelay);
+    } else {
+      _setVisible(false, widget.hideDelay);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedShow(
+      show: _visible,
+      isHorizontal: widget.isHorizontal,
+      duration: widget.duration,
+      child: widget.child,
+    );
+  }
+}
+
+class QueueUtilsRow extends StatelessWidget {
+  final String Function(int number) itemsKeyword;
+  final void Function() onAddItemsTap;
+  final Widget scrollQueueWidget;
+
+  const QueueUtilsRow({
+    super.key,
+    required this.itemsKeyword,
+    required this.onAddItemsTap,
+    required this.scrollQueueWidget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        const SizedBox(width: 12.0),
+        NamidaButton(
+          tooltip: () => lang.remove,
+          icon: Broken.broom,
+          onTap: () {
+            void removedSnack(int removedCount) => snackyy(
+              top: false,
+              icon: Broken.filter_remove,
+              message: "${lang.removed}: ${itemsKeyword(removedCount)}",
+            );
+            NamidaPopupWrapper(
+              childrenDefault: () => [
+                NamidaPopupItem(
+                  icon: Broken.copy,
+                  title: lang.duplicatedTracks,
+                  onTap: () {
+                    final removed = Player.inst.removeDuplicatesFromQueue();
+                    removedSnack(removed);
+                  },
+                ),
+                NamidaPopupItem(
+                  icon: Broken.arrow_left,
+                  title: lang.previous,
+                  onTap: () {
+                    final removed = Player.inst.removeAllPrevious();
+                    removedSnack(removed);
+                  },
+                ),
+                NamidaPopupItem(
+                  icon: Broken.arrow_right_2,
+                  title: lang.next,
+                  onTap: () {
+                    final removed = Player.inst.removeAllNext();
+                    removedSnack(removed);
+                  },
+                ),
+                NamidaPopupItem(
+                  icon: Broken.task,
+                  title: lang.all,
+                  onTap: () {
+                    final removed = Player.inst.removeAllQueueExceptCurrent();
+                    removedSnack(removed);
+                  },
+                ),
+              ],
+            ).showPopupMenu(context);
+          },
+        ),
+        const SizedBox(width: 6.0),
+        NamidaButton(
+          tooltip: () => lang.newTracksAdd,
+          icon: Broken.add_circle,
+          onTap: () => onAddItemsTap(),
+        ),
+        const SizedBox(width: 6.0),
+        scrollQueueWidget,
+        const SizedBox(width: 6.0),
+        const _QueueShuffleButton(),
+        const SizedBox(width: 12.0),
+      ],
+    );
+  }
+}
+
+class RepeatModeIconButton extends StatelessWidget {
+  final bool compact;
+  final NColors? color;
+  final double iconSize;
+  final VoidCallback? onPressed;
+  final Widget Function(Widget child, String Function()? tooltipCallback, void Function() onTap)? builder;
+
+  const RepeatModeIconButton({
+    super.key,
+    this.compact = false,
+    this.color,
+    this.iconSize = 20.0,
+    this.onPressed,
+    this.builder,
+  });
+
+  static final _numberOfRepeats = 1.obso;
+
+  void _onPressed(BuildContext context) {
+    NamidaPopupWrapper(
+      children: () => _popupChildren(context),
+    ).showPopupMenu(context);
+  }
+
+  // void _switchMode() {
+  //   final e = settings.player.repeatMode.value.nextElement(PlayerRepeatMode.values);
+  //   settings.player.repeatMode.save(e);
+  // }
+
+  // String _buildTooltip() {
+  //   final repeat = settings.player.repeatMode.value;
+  //   return repeat.buildText();
+  // }
+
+  Iterable<Widget> _popupChildren(BuildContext context) {
+    return PlayerRepeatMode.values.map(
+      (repeatMode) {
+        final enabled = repeatMode == (Player.inst.forcedRepeatMode.value ?? settings.player.repeatMode.value);
+        final mainIcon = repeatMode.toMainIcon();
+        final secondaryIcon = repeatMode.toSecondaryIcon();
+        const iconSize = 22.0;
+        final iconColor = NColors.defaultIcon();
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+          child: NamidaInkWell(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            borderRadius: 12.0,
+            bgColor: NColors.fixed(enabled ? CurrentColor.inst.color.withOpacityExt(0.2) : null),
+            onTap: () {
+              final times = repeatMode == PlayerRepeatMode.forNtimes ? _numberOfRepeats.value : null;
+              Player.inst.setRepeatMode(repeatMode, times: times);
+              NamidaNavigator.inst.popMenu();
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    secondaryIcon != null
+                        ? StackedIcon(
+                            baseIcon: mainIcon,
+                            secondaryIcon: secondaryIcon,
+                            baseIconColor: iconColor,
+                            secondaryIconColor: iconColor,
+                            iconSize: iconSize,
+                            secondaryIconSize: iconSize * 0.6,
+                          )
+                        : NIcon(
+                            mainIcon,
+                            size: iconSize,
+                            color: iconColor,
+                          ),
+
+                    if (repeatMode == PlayerRepeatMode.forNtimes)
+                      ObxO(
+                        rx: _numberOfRepeats,
+                        builder: (context, repeats) => NamidaText(
+                          '$repeats',
+                          style: NText.small,
+                          color: iconColor,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 8.0),
+                Expanded(
+                  child: ObxPrefer(
+                    rx: _numberOfRepeats,
+                    enabled: repeatMode == PlayerRepeatMode.forNtimes,
+                    builder: (context, repeats) => NamidaText(
+                      repeatMode.buildText(numberOfRepeats: repeats),
+                      style: NText.medium,
+                    ),
+                  ),
+                ),
+
+                if (repeatMode == PlayerRepeatMode.forNtimes)
+                  NumberOfRepeatsWidgetProvider(
+                    numberOfRepeatsRx: _numberOfRepeats,
+                    iconColor: iconColor,
+                    iconSize: 18.0,
+                    horizontalPadding: 4.0,
+                  ),
+                // if (repeatMode == PlayerRepeatMode.shuffle)
+                //   ObxO(
+                //     rx: settings.player.shuffleReflectInQueue,
+                //     builder: (context, shuffleReflectInQueue) => NamidaTooltip(
+                //       message: () => lang.reflectInQueue,
+                //       child: NamidaInkWell(
+                //         padding: const EdgeInsets.all(6.0),
+                //         borderRadius: 8.0,
+                //         bgColor: shuffleReflectInQueue ? CurrentColor.inst.color.withOpacityExt(0.4) : null,
+                //         onTap: () => settings.player.shuffleReflectInQueue.save(!shuffleReflectInQueue),
+                //         child: Icon(
+                //           Broken.task,
+                //           size: 18.0,
+                //           color: shuffleReflectInQueue ? iconColor : iconColor.withOpacityExt(0.5),
+                //         ),
+                //       ),
+                //     ),
+                //   ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    final iconColor = color?.resolve(colors) ?? colors.onSecondaryContainer;
+
+    final rawWidget = ObxO(
+      rx: Player.inst.forcedRepeatMode,
+      builder: (context, forcedRepeatMode) => ObxO(
+        rx: settings.player.repeatMode,
+        builder: (context, userRepeatMode) {
+          final repeatMode = forcedRepeatMode ?? userRepeatMode;
+          final mainIcon = repeatMode.toMainIcon();
+          final secondaryIcon = repeatMode.toSecondaryIcon();
+
+          final child = Stack(
+            alignment: Alignment.center,
+            children: [
+              secondaryIcon != null
+                  ? StackedIcon(
+                      baseIcon: mainIcon,
+                      secondaryIcon: secondaryIcon,
+                      baseIconColor: NColors.fixed(iconColor),
+                      secondaryIconColor: NColors.fixed(iconColor),
+                      iconSize: iconSize,
+                      secondaryIconSize: iconSize * 0.6,
+                    )
+                  : Icon(
+                      mainIcon,
+                      size: iconSize,
+                      color: iconColor,
+                    ),
+              if (repeatMode == PlayerRepeatMode.forNtimes)
+                ObxO(
+                  rx: Player.inst.numberOfRepeats,
+                  builder: (context, numberOfRepeats) => NamidaText(
+                    '$numberOfRepeats',
+                    style: NText.small,
+                    color: NColors.fixed(iconColor),
+                  ),
+                ),
+            ],
+          );
+          if (builder != null) {
+            return builder!(
+              child,
+              null,
+              () {
+                onPressed?.call();
+                _onPressed(context);
+              },
+            );
+          }
+
+          return compact
+              ? NamidaIconButton(
+                  icon: null,
+                  verticalPadding: 2.0,
+                  horizontalPadding: 4.0,
+                  padding: EdgeInsets.zero,
+                  iconSize: iconSize,
+                  onPressed: () {
+                    onPressed?.call();
+                    _onPressed(context);
+                  },
+                  child: child,
+                )
+              : IconButton(
+                  visualDensity: VisualDensity.compact,
+                  style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 6.0),
+                  onPressed: () {
+                    onPressed?.call();
+                    _onPressed(context);
+                  },
+                  icon: child,
+                );
+        },
+      ),
+    );
+    return NamidaPopupWrapper(
+      onPop: () {
+        _numberOfRepeats.value = 1;
+      },
+      openOnTap: true,
+      openOnLongPress: true,
+      children: () => _popupChildren(context),
+      child: rawWidget,
+    );
+  }
+}
+
+class NumberOfRepeatsWidgetProvider extends StatelessWidget {
+  final RxBase<int> numberOfRepeatsRx;
+  final NColors? iconColor;
+  final double iconSize;
+  final double horizontalPadding;
+
+  const NumberOfRepeatsWidgetProvider({
+    super.key,
+    required this.numberOfRepeatsRx,
+    required this.iconColor,
+    this.iconSize = 20.0,
+    this.horizontalPadding = 8.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        NamidaIconButton(
+          horizontalPadding: horizontalPadding,
+          icon: Broken.minus_cirlce,
+          onPressed: () => numberOfRepeatsRx.value = (numberOfRepeatsRx.value - 1).clampInt(1, 20),
+          iconSize: iconSize,
+          iconColor: iconColor,
+        ),
+        NamidaIconButton(
+          horizontalPadding: horizontalPadding,
+          icon: Broken.add_circle,
+          onPressed: () => numberOfRepeatsRx.value = (numberOfRepeatsRx.value + 1).clampInt(1, 20),
+          iconSize: iconSize,
+          iconColor: iconColor,
+        ),
+      ],
+    );
+  }
+}
+
+class SoundControlButton extends StatelessWidget {
+  final bool compact;
+  final NColors? color;
+  final double iconSize;
+  final VoidCallback? onPressed;
+  final Widget Function(Widget child, String Function() tooltipCallback, void Function() onTap)? builder;
+
+  const SoundControlButton({
+    super.key,
+    this.compact = false,
+    this.color,
+    this.iconSize = 20.0,
+    this.onPressed,
+    this.builder,
+  });
+
+  void _onTap() {
+    NamidaOnTaps.inst.openSoundControl();
+  }
+
+  String _buildTooltip() => lang.soundControl;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    final tooltip = lang.soundControl;
+    final iconColor = color?.resolve(colors) ?? colors.onSecondaryContainer;
+    final child = SoundControlButtonRaw(
+      iconSize: iconSize,
+      iconColor: iconColor,
+    );
+
+    if (builder != null) {
+      return builder!(child, _buildTooltip, _onTap);
+    }
+
+    return compact
+        ? NamidaIconButton(
+            tooltip: () => tooltip,
+            icon: null,
+            verticalPadding: 2.0,
+            horizontalPadding: 4.0,
+            padding: EdgeInsets.zero,
+            iconSize: iconSize,
+            onPressed: () {
+              onPressed?.call();
+              _onTap();
+            },
+            child: child,
+          )
+        : IconButton(
+            visualDensity: VisualDensity.compact,
+            style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 6.0),
+            tooltip: tooltip,
+            onPressed: () {
+              onPressed?.call();
+              _onTap();
+            },
+            icon: child,
+          );
+  }
+}
+
+class SoundControlButtonRaw extends StatelessWidget {
+  final double iconSize;
+  final Color iconColor;
+
+  const SoundControlButtonRaw({
+    super.key,
+    required this.iconSize,
+    required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(
+      (context) {
+        final currentItem = Player.inst.currentItem.valueR;
+        final defaultConfig = Player.inst.getDefaultPlayerConfigR(currentItem);
+        var config = defaultConfig;
+        if (!settings.player.isPerTrackAudioConfigOverriden.valueR) {
+          final currentItemOverrides = Player.audioConfigs.map.valueR[currentItem?.key ?? ''];
+          if (currentItemOverrides != null) config = currentItemOverrides.resolve(defaultConfig);
+        }
+        final soundModificationScale = config.getModificationScale();
+
+        final secondaryIcon = switch (soundModificationScale) {
+          PlayerConfigModificationScale.main => Broken.edit_2,
+          PlayerConfigModificationScale.alt => Broken.magicpen,
+          PlayerConfigModificationScale.none => null,
+        };
+
+        return secondaryIcon != null
+            ? StackedIcon(
+                baseIcon: Broken.sound,
+                secondaryIcon: secondaryIcon,
+                iconSize: iconSize,
+                secondaryIconSize: iconSize * 0.5,
+                baseIconColor: NColors.fixed(iconColor),
+                secondaryIconColor: NColors.fixed(iconColor),
+                blurRadius: 12.0,
+              )
+            : Icon(
+                Broken.sound,
+                size: iconSize,
+                color: iconColor,
+              );
+      },
+    );
+  }
+}
+
+class TapDetector extends StatelessWidget {
+  final VoidCallback? onTap;
+  final void Function(TapGestureRecognizer instance)? initializer;
+  final Widget? child;
+  final HitTestBehavior? behavior;
+
+  const TapDetector({
+    super.key,
+    required this.onTap,
+    this.initializer,
+    this.child,
+    this.behavior,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<Type, GestureRecognizerFactory> gestures = <Type, GestureRecognizerFactory>{};
+    gestures[TapGestureRecognizer] = GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+      () => TapGestureRecognizer(debugOwner: this),
+      initializer ??
+          (TapGestureRecognizer instance) {
+            instance
+              ..onTap = onTap
+              ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+          },
+    );
+
+    return RawGestureDetector(
+      behavior: behavior,
+      gestures: gestures,
+      child: child,
+    );
+  }
+}
+
+class DoubleTapDetector extends StatelessWidget {
+  final VoidCallback? onDoubleTap;
+  final void Function(DoubleTapGestureRecognizer instance)? initializer;
+  final Widget? child;
+  final HitTestBehavior? behavior;
+
+  const DoubleTapDetector({
+    super.key,
+    required this.onDoubleTap,
+    this.initializer,
+    this.child,
+    this.behavior,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<Type, GestureRecognizerFactory> gestures = <Type, GestureRecognizerFactory>{};
+    gestures[DoubleTapGestureRecognizer] = GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+      () => DoubleTapGestureRecognizer(debugOwner: this),
+      initializer ??
+          (DoubleTapGestureRecognizer instance) {
+            instance
+              ..onDoubleTap = onDoubleTap
+              ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+          },
+    );
+
+    return RawGestureDetector(
+      behavior: behavior,
+      gestures: gestures,
+      child: child,
+    );
+  }
+}
+
+class LongPressDetector extends StatelessWidget {
+  final VoidCallback? onLongPress;
+  final void Function(LongPressGestureRecognizer instance)? initializer;
+  final Widget? child;
+  final HitTestBehavior? behavior;
+  final bool enableSecondaryTap;
+  final Duration? duration;
+
+  const LongPressDetector({
+    super.key,
+    required this.onLongPress,
+    this.initializer,
+    this.child,
+    this.behavior,
+    this.enableSecondaryTap = false,
+    this.duration,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<Type, GestureRecognizerFactory> gestures = <Type, GestureRecognizerFactory>{};
+    gestures[LongPressGestureRecognizer] = GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+      () => LongPressGestureRecognizer(debugOwner: this, duration: duration),
+      initializer ??
+          (LongPressGestureRecognizer instance) {
+            instance
+              ..onLongPress = onLongPress
+              ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+          },
+    );
+
+    if (enableSecondaryTap) {
+      gestures[TapGestureRecognizer] = GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+        () => TapGestureRecognizer(debugOwner: this),
+        (TapGestureRecognizer instance) {
+          instance
+            ..onSecondaryTap = onLongPress
+            ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+        },
+      );
+    }
+
+    return RawGestureDetector(
+      behavior: behavior,
+      gestures: gestures,
+      child: child,
+    );
+  }
+}
+
+/// pinch to scale. on desktop also ctrl+wheel, and hotkeys via [ScaleDetectorState.topmost].
+class ScaleDetector extends StatefulWidget {
+  final GestureScaleStartCallback? onScaleStart;
+  final GestureScaleUpdateCallback? onScaleUpdate;
+  final GestureScaleEndCallback? onScaleEnd;
+  final VoidCallback? onScaleReset;
+  final Widget? child;
+  final HitTestBehavior? behavior;
+
+  const ScaleDetector({
+    super.key,
+    this.onScaleStart,
+    this.onScaleUpdate,
+    this.onScaleEnd,
+    this.onScaleReset,
+    this.child,
+    this.behavior,
+  });
+
+  @override
+  State<ScaleDetector> createState() => ScaleDetectorState();
+}
+
+class ScaleDetectorState extends State<ScaleDetector> {
+  static final _mounted = <ScaleDetectorState>[];
+  static ScaleDetectorState? get topmost => _mounted.lastOrNull;
+
+  @override
+  void initState() {
+    super.initState();
+    _mounted.add(this);
+  }
+
+  @override
+  void dispose() {
+    _mounted.remove(this);
+    super.dispose();
+  }
+
+  void scaleBy(double factor) {
+    widget.onScaleStart?.call(ScaleStartDetails());
+    widget.onScaleUpdate?.call(ScaleUpdateDetails(scale: factor));
+    widget.onScaleEnd?.call(ScaleEndDetails());
+  }
+
+  void reset() => widget.onScaleReset?.call();
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent && HardwareKeyboard.instance.isPrimaryModifierPressed) {
+      GestureBinding.instance.pointerSignalResolver.register(event, _onScaleScroll);
+    }
+  }
+
+  void _onScaleScroll(PointerSignalEvent event) {
+    scaleBy(math.exp(-(event as PointerScrollEvent).scrollDelta.dy / 2500));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<Type, GestureRecognizerFactory> gestures = <Type, GestureRecognizerFactory>{};
+    gestures[_PinchGestureRecognizer] = GestureRecognizerFactoryWithHandlers<_PinchGestureRecognizer>(
+      () => _PinchGestureRecognizer(debugOwner: this),
+      (_PinchGestureRecognizer instance) {
+        instance
+          ..onStart = widget.onScaleStart
+          ..onUpdate = widget.onScaleUpdate
+          ..onEnd = widget.onScaleEnd;
+      },
+    );
+
+    final behavior = widget.behavior ?? (widget.child == null ? HitTestBehavior.translucent : HitTestBehavior.deferToChild);
+    return Listener(
+      behavior: behavior,
+      onPointerSignal: _onPointerSignal,
+      child: RawGestureDetector(
+        behavior: behavior,
+        gestures: gestures,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+// by claude
+/// claims only 2+ fingers (or a trackpad pinch), the moment the second lands, so drags with a smaller slop can't win first.
+class _PinchGestureRecognizer extends OneSequenceGestureRecognizer {
+  _PinchGestureRecognizer({super.debugOwner});
+
+  static const _kTrackpadAcceptScale = 1.05;
+
+  GestureScaleStartCallback? onStart;
+  GestureScaleUpdateCallback? onUpdate;
+  GestureScaleEndCallback? onEnd;
+
+  final _touchPositions = <int, Offset>{};
+  int? _trackpadPointer;
+  double? _trackpadPinchScale;
+  Matrix4? _lastTransform;
+  Offset _focalPoint = Offset.zero;
+
+  bool _isAccepted = false;
+  bool _isPinching = false;
+  double _scale = 1.0;
+  double _segmentStartScale = 1.0;
+  double _segmentStartSpread = 1.0;
+
+  int get _pointerCount => _trackpadPinchScale != null ? 2 : _touchPositions.length;
+
+  @override
+  String get debugDescription => 'pinch';
+
+  @override
+  bool isPointerPanZoomAllowed(PointerPanZoomStartEvent event) => true;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    _touchPositions[event.pointer] = event.position;
+    _lastTransform = event.transform;
+    if (_touchPositions.length < 2) return;
+    resolve(GestureDisposition.accepted);
+    _onPointersChanged();
+  }
+
+  @override
+  void addAllowedPointerPanZoom(PointerPanZoomStartEvent event) {
+    startTrackingPointer(event.pointer, event.transform);
+    _trackpadPointer = event.pointer;
+    _lastTransform = event.transform;
+  }
+
+  @override
+  void acceptGesture(int pointer) {
+    _isAccepted = true;
+    _onPointersChanged();
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    _removePointer(pointer);
+    stopTrackingPointer(pointer);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      _touchPositions[event.pointer] = event.position;
+      _lastTransform = event.transform;
+      if (_isPinching) _dispatchUpdate();
+    } else if (event is PointerPanZoomUpdateEvent) {
+      _lastTransform = event.transform;
+      _onTrackpadUpdate(event);
+    } else if (event is PointerUpEvent || event is PointerCancelEvent || event is PointerPanZoomEndEvent) {
+      _removePointer(event.pointer);
+    }
+    stopTrackingIfPointerNoLongerDown(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    if (!_isAccepted) resolve(GestureDisposition.rejected);
+    _isAccepted = false;
+  }
+
+  void _onTrackpadUpdate(PointerPanZoomUpdateEvent event) {
+    final scale = event.scale;
+    final wasTrackpadPinch = _trackpadPinchScale != null;
+    if (!wasTrackpadPinch) {
+      final scaleRatio = math.max(scale, 1.0 / scale);
+      final isPinch = scaleRatio > _kTrackpadAcceptScale;
+      if (!isPinch) return;
+    }
+    _trackpadPinchScale = scale;
+    _focalPoint = event.position;
+    if (wasTrackpadPinch) {
+      if (_isPinching) _dispatchUpdate();
+      return;
+    }
+    resolve(GestureDisposition.accepted);
+    _onPointersChanged();
+  }
+
+  void _removePointer(int pointer) {
+    if (pointer == _trackpadPointer) {
+      _trackpadPointer = null;
+      _trackpadPinchScale = null;
+    } else if (_touchPositions.remove(pointer) == null) {
+      return;
+    }
+    _onPointersChanged();
+  }
+
+  double? _measureSpread() {
+    final trackpadScale = _trackpadPinchScale;
+    if (trackpadScale != null) return trackpadScale;
+    final count = _touchPositions.length;
+    if (count < 2) return null;
+    var focalPoint = Offset.zero;
+    for (final position in _touchPositions.values) {
+      focalPoint += position;
+    }
+    focalPoint /= count.toDouble();
+    var totalDistance = 0.0;
+    for (final position in _touchPositions.values) {
+      totalDistance += (position - focalPoint).distance;
+    }
+    _focalPoint = focalPoint;
+    return totalDistance / count;
+  }
+
+  void _onPointersChanged() {
+    if (!_isAccepted) return;
+    final spread = _measureSpread();
+    if (spread == null) {
+      if (_isPinching) _endPinch();
+      return;
+    }
+    _segmentStartSpread = spread;
+    if (_isPinching) {
+      _segmentStartScale = _scale;
+      return;
+    }
+    _isPinching = true;
+    _scale = 1.0;
+    _segmentStartScale = 1.0;
+    final onStart = this.onStart;
+    if (onStart == null) return;
+    final localFocalPoint = PointerEvent.transformPosition(_lastTransform, _focalPoint);
+    final details = ScaleStartDetails(
+      focalPoint: _focalPoint,
+      localFocalPoint: localFocalPoint,
+      pointerCount: _pointerCount,
+    );
+    invokeCallback<void>('onStart', () => onStart(details));
+  }
+
+  void _dispatchUpdate() {
+    final spread = _measureSpread();
+    if (spread == null) return;
+    final ratio = _segmentStartSpread > 0.0 ? spread / _segmentStartSpread : 1.0;
+    _scale = _segmentStartScale * ratio;
+    final onUpdate = this.onUpdate;
+    if (onUpdate == null) return;
+    final localFocalPoint = PointerEvent.transformPosition(_lastTransform, _focalPoint);
+    final details = ScaleUpdateDetails(
+      scale: _scale,
+      focalPoint: _focalPoint,
+      localFocalPoint: localFocalPoint,
+      pointerCount: _pointerCount,
+    );
+    invokeCallback<void>('onUpdate', () => onUpdate(details));
+  }
+
+  void _endPinch() {
+    _isPinching = false;
+    final onEnd = this.onEnd;
+    if (onEnd == null) return;
+    final details = ScaleEndDetails(
+      pointerCount: _pointerCount,
+    );
+    invokeCallback<void>('onEnd', () => onEnd(details));
+  }
+}
+
+class HorizontalDragDetector extends _LinearDragDetector<HorizontalDragGestureRecognizer> {
+  @override
+  HorizontalDragGestureRecognizer create() => HorizontalDragGestureRecognizer(debugOwner: this);
+
+  const HorizontalDragDetector({
+    super.key,
+    super.initializer,
+    super.child,
+    super.behavior,
+    super.onStart,
+    super.onDown,
+    super.onUpdate,
+    super.onEnd,
+    super.onCancel,
+  });
+}
+
+class VerticalDragDetector extends _LinearDragDetector<VerticalDragGestureRecognizer> {
+  @override
+  VerticalDragGestureRecognizer create() => VerticalDragGestureRecognizer(debugOwner: this);
+
+  const VerticalDragDetector({
+    super.key,
+    super.initializer,
+    super.child,
+    super.behavior,
+    super.onStart,
+    super.onDown,
+    super.onUpdate,
+    super.onEnd,
+    super.onCancel,
+    super.dragStartBehavior,
+  });
+}
+
+abstract class _LinearDragDetector<T extends DragGestureRecognizer> extends StatelessWidget {
+  T create();
+
+  final GestureDragStartCallback? onStart;
+  final GestureDragDownCallback? onDown;
+  final GestureDragUpdateCallback? onUpdate;
+  final GestureDragEndCallback? onEnd;
+  final GestureDragCancelCallback? onCancel;
+  final void Function(T instance)? initializer;
+  final Widget? child;
+  final HitTestBehavior? behavior;
+  final DragStartBehavior dragStartBehavior;
+
+  const _LinearDragDetector({
+    super.key,
+    this.initializer,
+    this.child,
+    this.behavior,
+    this.onStart,
+    this.onDown,
+    this.onUpdate,
+    this.onEnd,
+    this.onCancel,
+    this.dragStartBehavior = DragStartBehavior.start,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<Type, GestureRecognizerFactory> gestures = <Type, GestureRecognizerFactory>{};
+    gestures[T] = GestureRecognizerFactoryWithHandlers<T>(
+      create,
+      initializer ??
+          (instance) {
+            instance
+              ..onStart = onStart
+              ..onDown = onDown
+              ..onUpdate = onUpdate
+              ..onEnd = onEnd
+              ..onCancel = onCancel
+              ..dragStartBehavior = dragStartBehavior
+              ..gestureSettings = MediaQuery.maybeGestureSettingsOf(context);
+          },
+    );
+
+    return RawGestureDetector(
+      behavior: behavior,
+      gestures: gestures,
+      child: child,
+    );
+  }
+}
+
+class DecorationClipper extends CustomClipper<Path> {
+  const DecorationClipper({
+    this.textDirection = TextDirection.ltr,
+    required this.decoration,
+  });
+
+  final TextDirection textDirection;
+  final Decoration decoration;
+
+  @override
+  Path getClip(Size size) {
+    return decoration.getClipPath(Offset.zero & size, textDirection);
+  }
+
+  @override
+  bool shouldReclip(DecorationClipper oldClipper) {
+    return oldClipper.decoration != decoration || oldClipper.textDirection != textDirection;
+  }
+}
+
+class BorderRadiusClip extends StatelessWidget {
+  final TextDirection textDirection;
+  final BorderRadiusGeometry borderRadius;
+  final Clip clipBehavior;
+  final Widget child;
+
+  const BorderRadiusClip({
+    super.key,
+    this.textDirection = TextDirection.ltr,
+    this.clipBehavior = Clip.antiAlias,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipPath(
+      clipper: DecorationClipper(
+        textDirection: textDirection,
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+        ),
+      ),
+      clipBehavior: clipBehavior,
+      child: child,
+    );
+  }
+}
+
+class NamidaHistoryDayHeaderBox extends StatelessWidget {
+  final double height;
+  final String title;
+  final Widget menu;
+  final Color bgColor;
+  final Color sideColor;
+  final Color shadowColor;
+
+  const NamidaHistoryDayHeaderBox({
+    super.key,
+    required this.height,
+    required this.title,
+    required this.menu,
+    required this.sideColor,
+    required this.bgColor,
+    required this.shadowColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border(
+          left: BorderSide(
+            color: sideColor,
+            width: 4.0,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            offset: const Offset(0, 2.0),
+            blurRadius: 4.0,
+            color: shadowColor,
+          ),
+        ],
+      ),
+      child: SizedBox(
+        width: Dimensions.inst.availableAppContentWidth,
+        height: height,
+        child: Row(
+          children: [
+            const SizedBox(width: 12.0),
+            Expanded(
+              child: NamidaText(
+                title,
+                style: NText.medium,
+              ),
+            ),
+            const SizedBox(width: 4.0),
+            menu,
+            const SizedBox(width: 4.0),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class NamidaClearDialogExpansionTile<T> extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<T> items;
+  final ({String title, String? subtitle, String path}) Function(T item) itemBuilder;
+  final int Function(T item) itemSize;
+  final RxMap<File, int>? tempFilesSize;
+  final Rx<bool>? tempFilesDelete;
+  final RxMap<String, bool> pathsToDelete;
+  final Rx<int> totalSizeToDelete;
+  final Rx<bool> allSelected;
+
+  const NamidaClearDialogExpansionTile({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.items,
+    required this.itemBuilder,
+    required this.itemSize,
+    required this.tempFilesSize,
+    required this.tempFilesDelete,
+    required this.pathsToDelete,
+    required this.totalSizeToDelete,
+    required this.allSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final nColors = NColorsData.of(context);
+    final tempFilesSize = this.tempFilesSize;
+    final tempFilesDelete = this.tempFilesDelete;
+    return NamidaExpansionTile(
+      initiallyExpanded: true,
+      titleText: title,
+      subtitleText: subtitle,
+      icon: icon,
+      trailingBuilder: (iconWidget) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          NDecoratedBox(
+            decoration: (colors) => BoxDecoration(
+              color: colors.card,
+              borderRadius: BorderRadius.circular(6.0.multipliedRadius),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 3.0),
+              child: Text("${items.length}"),
+            ),
+          ),
+          const SizedBox(width: 6.0),
+          iconWidget,
+        ],
+      ),
+      childrenPadding: const EdgeInsetsDirectional.only(end: 8.0, top: 6.0),
+      children: [
+        ...items.map(
+          (item) {
+            final data = itemBuilder(item);
+            return SmallListTile(
+              borderRadius: 12.0,
+              icon: Broken.arrow_right_3,
+              iconSize: 20.0,
+              color: nColors.card,
+              visualDensity: const VisualDensity(horizontal: -3.0, vertical: -3.0),
+              title: data.title,
+              subtitle: data.subtitle,
+              active: false,
+              onTap: () {
+                final wasTrue = pathsToDelete[data.path] == true;
+                final willEnable = !wasTrue;
+                pathsToDelete[data.path] = willEnable;
+                if (willEnable) {
+                  totalSizeToDelete.value += itemSize(item);
+                } else {
+                  totalSizeToDelete.value -= itemSize(item);
+                }
+                allSelected.value = false;
+              },
+              trailing: Obx(
+                (context) => NamidaCheckMark(
+                  size: 16.0,
+                  active: pathsToDelete[data.path] == true,
+                ),
+              ),
+            );
+          },
+        ),
+        if (tempFilesSize != null && tempFilesDelete != null)
+          Obx(
+            (context) {
+              final size = tempFilesSize.values.fold(0, (p, e) => p + e);
+              if (size <= 0) return const SizedBox();
+              return SmallListTile(
+                borderRadius: 12.0,
+                icon: Broken.broom,
+                iconSize: 20.0,
+                color: nColors.card,
+                visualDensity: const VisualDensity(horizontal: -3.0, vertical: -3.0),
+                title: lang.deleteTempFiles,
+                subtitle: size.fileSizeFormatted,
+                active: false,
+                onTap: () {
+                  tempFilesDelete.toggle();
+                  if (tempFilesDelete.value) {
+                    totalSizeToDelete.value += size;
+                  } else {
+                    totalSizeToDelete.value -= size;
+                  }
+                },
+                trailing: ObxO(
+                  rx: tempFilesDelete,
+                  builder: (context, deletetemp) => NamidaCheckMark(
+                    size: 16.0,
+                    active: deletetemp,
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+/// Returns [AnimatedTheme] or [Theme] based on [settings.animatedTheme].
+class EnableDisablePlaylistReordering extends StatelessWidget {
+  final String playlistName;
+  final PlaylistManager playlistManager;
+
+  const EnableDisablePlaylistReordering({
+    super.key,
+    required this.playlistName,
+    required this.playlistManager,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      key: UniqueKey(), // i have no f idea why this happens.. namida ghosts are here again
+      rx: playlistManager.canReorderItems,
+      builder: (context, reorderable) => NamidaAppBarIcon(
+        tooltip: () => playlistManager.canReorderItems.value ? lang.disableReordering : lang.enableReordering,
+        icon: reorderable ? Broken.forward_item : Broken.lock_1,
+        onPressed: () {
+          final playlist = playlistManager.getPlaylist(playlistName);
+          if (playlist == null) return;
+          if (playlist.isReadOnly) {
+            snackyy(
+              isError: true,
+              title: lang.warning,
+              message: lang.readOnlyPlaylist,
+            );
+            return;
+          }
+          if (playlist.sortsType?.isNotEmpty ?? false) {
+            snackyy(
+              isError: true,
+              title: lang.warning,
+              message: lang.thisPlaylistHasActiveSortersDisableThemBeforeReordering,
+            );
+            return;
+          }
+          playlistManager.canReorderItems.toggle();
+        },
+      ),
+    );
+  }
+}
+
+class SetVideosPriorityChipController {
+  // -- worst of my creations so far
+  SetVideosPriorityChipController();
+
+  NamidaPopupWrapper? Function()? _menuWrapperFn;
+  BuildContext? _currentContext;
+
+  void showMenu() {
+    final menuWrapper = _menuWrapperFn?.call();
+    if (menuWrapper != null) {
+      menuWrapper.showPopupMenu(_currentContext!);
+    }
+  }
+}
+
+class SetVideosPriorityChip extends StatefulWidget {
+  final SetVideosPriorityChipController? controller;
+  final bool smaller;
+  final int totalCount;
+  final Iterable<String> videosId;
+  final String Function(int count) countToText;
+  final void Function(CacheVideoPriority? priority)? onInitialPriority;
+  final void Function(CacheVideoPriority priority) onChanged;
+
+  const SetVideosPriorityChip({
+    super.key,
+    this.controller,
+    this.smaller = false,
+    required this.totalCount,
+    required this.videosId,
+    required this.countToText,
+    required this.onChanged,
+    this.onInitialPriority,
+  });
+
+  @override
+  State<SetVideosPriorityChip> createState() => _SetVideosPriorityChipState();
+}
+
+class _SetVideosPriorityChipState extends State<SetVideosPriorityChip> {
+  CacheVideoPriority? cachePriority;
+
+  @override
+  void initState() {
+    _initCachePriority();
+    widget.controller?._menuWrapperFn = _getPopupWrapper;
+    super.initState();
+  }
+
+  void _initCachePriority() async {
+    if (widget.totalCount == 1) {
+      final newCP = await VideoController.inst.videosPriorityManager.getVideoPriority(widget.videosId.first);
+      refreshState(() => cachePriority = newCP);
+      widget.onInitialPriority?.call(cachePriority);
+    }
+  }
+
+  Future<bool> _confirmSetPriorityForAll(int count) async {
+    bool confirmed = false;
+    await NamidaNavigator.inst.navigateDialog(
+      dialog: CustomBlurryDialog(
+        isWarning: true,
+        normalTitleStyle: true,
+        bodyText: "${lang.update}: ${widget.countToText(count)}",
+        actions: [
+          const CancelButton(),
+          NamidaButton(
+            text: lang.confirm.toUpperCase(),
+            onTap: () async {
+              confirmed = true;
+              NamidaNavigator.inst.closeDialog();
+            },
+          ),
+        ],
+      ),
+    );
+    return confirmed;
+  }
+
+  NamidaPopupWrapper? _getPopupWrapper() {
+    return cachePriority != null || widget.totalCount > 1
+        ? NamidaPopupWrapper(
+            childrenAfterChildrenDefault: false,
+            children: () => [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Broken.info_circle,
+                      size: 16.0,
+                    ),
+                    const SizedBox(width: 6.0),
+                    Expanded(
+                      child: NamidaText(
+                        lang.priority,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: NText.small,
+                      ),
+                    ),
+                    const SizedBox(width: 6.0),
+                    NamidaIconButton(
+                      horizontalPadding: 4.0,
+                      iconSize: 14.0,
+                      icon: Broken.message_question,
+                      tooltip: () => lang.learnMore,
+                      onPressed: AppDocsLinks.YT_CACHING.launch,
+                    ),
+                  ],
+                ),
+              ),
+              const NamidaContainerDivider(),
+            ],
+            childrenDefault: () => CacheVideoPriority.values.map(
+              (e) => NamidaPopupItem(
+                icon: Broken.cpu,
+                title: e.toText(),
+                selected: e == cachePriority,
+                onTap: () async {
+                  if (widget.totalCount == 1) {
+                    VideoController.inst.videosPriorityManager.setVideoPriority(widget.videosId.first, e);
+                    setState(() => cachePriority = e);
+                    widget.onChanged(e);
+                  } else {
+                    final confirmed = await _confirmSetPriorityForAll(widget.totalCount);
+                    if (confirmed) {
+                      VideoController.inst.videosPriorityManager.setVideosPriority(widget.videosId, e);
+                      if (mounted) setState(() => cachePriority = e);
+                      widget.onChanged(e);
+                    }
+                  }
+                },
+              ),
+            ),
+            child: NamidaInkWell(
+              padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 12.0),
+              bgColor: const NColors(.card, opacity: 0.5),
+              child: Text(
+                cachePriority?.toText() ?? '?',
+                style: widget.smaller ? NText.small.of(context) : NText.medium.of(context),
+              ),
+            ),
+          )
+        : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    widget.controller?._currentContext = context;
+    return _getPopupWrapper() ?? const SizedBox();
+  }
+}
+
+class SwipeQueueAddTileInfo {
+  final QueueSourceBase queueSource;
+  final String? heroTag;
+  final String? videoTitle;
+  final Iterable<Playable>? queue;
+  final int index;
+
+  const SwipeQueueAddTileInfo({
+    required this.queueSource,
+    required this.heroTag,
+    this.videoTitle,
+    this.queue,
+    this.index = 0,
+  });
+
+  Color? get getCurrentColor =>
+      queueSource == QueueSourceYoutubeID.ytPlayerQueue || queueSource == QueueSourceYoutubeID.ytPlayerQueue ? CurrentColor.inst.miniplayerColor : CurrentColor.inst.color;
+
+  void copyToClipboard(String text) {
+    NamidaUtils.copyToClipboard(
+      content: text,
+      leftBarIndicatorColor: getCurrentColor,
+    );
+  }
+}
+
+class SwipeQueueAddTile<Q extends Playable> extends StatelessWidget {
+  final Q item;
+  final SwipeQueueAddTileInfo Function() infoCallback;
+  final Object dismissibleKey;
+  final bool allowSwipeLeft;
+  final bool allowSwipeRight;
+  final RxBaseCore<bool>? disabledRx;
+  final Widget child;
+
+  const SwipeQueueAddTile({
+    super.key,
+    required this.item,
+    required this.infoCallback,
+    required this.dismissibleKey,
+    required this.allowSwipeLeft,
+    required this.allowSwipeRight,
+    this.disabledRx,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final disabledRx = this.disabledRx;
+    if (disabledRx != null) {
+      return ObxO(
+        rx: disabledRx,
+        builder: (context, disabled) => _buildTile(disabled),
+      );
+    }
+    return _buildTile(false);
+  }
+
+  Widget _buildTile(bool disabled) {
+    return FadeDismissible(
+      key: ValueKey(dismissibleKey),
+      direction: disabled
+          ? DismissDirection.none
+          : allowSwipeLeft && allowSwipeRight
+          ? DismissDirection.horizontal
+          : allowSwipeLeft
+          ? DismissDirection.endToStart
+          : allowSwipeRight
+          ? DismissDirection.startToEnd
+          : DismissDirection.none,
+      removeOnDismiss: false,
+      dismissThreshold: 0.12,
+      friction: 0.58,
+      onDismissed: (direction) {
+        final swipedLeft = direction == DismissDirection.endToStart;
+        final action = swipedLeft ? settings.onTrackSwipeLeft.value : settings.onTrackSwipeRight.value;
+        if (action == TrackExecuteActions.none) return;
+        action.execute(
+          item,
+          info: infoCallback(),
+        );
+      },
+      leftWidget: () => _SwipeQueueActionBox(
+        isLeft: true,
+        action: settings.onTrackSwipeRight.value,
+      ),
+      rightWidget: () => _SwipeQueueActionBox(
+        isLeft: false,
+        action: settings.onTrackSwipeLeft.value,
+      ),
+      child: child,
+    );
+  }
+}
+
+class _SwipeQueueActionBox extends StatelessWidget {
+  final bool isLeft;
+  final TrackExecuteActions action;
+  const _SwipeQueueActionBox({required this.isLeft, required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = Radius.circular(8.0.multipliedRadius);
+    return NDecoratedBox(
+      decoration: (colors) => BoxDecoration(
+        borderRadius: BorderRadius.horizontal(
+          left: isLeft ? Radius.zero : radius,
+          right: isLeft ? radius : Radius.zero,
+        ),
+        color: colors.card,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: context.width * 0.25),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                action.toIcon(),
+                size: 22.0,
+              ),
+              const SizedBox(height: 4.0),
+              NamidaText(
+                action.toText(),
+                style: NText.small,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LayoutWidthProvider extends StatelessWidget {
+  final double? maxWidth;
+  final Widget Function(BuildContext context, double maxWidth) builder;
+  const LayoutWidthProvider({super.key, this.maxWidth, required this.builder});
+
+  @override
+  Widget build(BuildContext context) {
+    if (maxWidth != null) {
+      return builder(context, maxWidth!);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => builder(
+        context,
+        constraints.maxWidth.withMaximum(context.width),
+      ),
+    );
+  }
+}
+
+class LayoutWidthHeightProvider extends StatelessWidget {
+  final Widget Function(BuildContext context, double maxWidth, double maxHeight) builder;
+  const LayoutWidthHeightProvider({super.key, required this.builder});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = constraints.maxWidth.withMaximum(context.width);
+        final maxHeight = constraints.maxHeight.withMaximum(context.height);
+        return builder(
+          context,
+          maxWidth,
+          maxHeight,
+        );
+      },
+    );
+  }
+}
+
+class NamidaUpdateButton extends StatelessWidget {
+  const NamidaUpdateButton({super.key});
+
+  void onTap() {
+    void popSheet(BuildContext context) => Navigator.pop(context);
+    void onUpdateTap(BuildContext context) {
+      popSheet(context);
+      final latestVersion = VersionController.inst.latestVersion.value;
+      final link = (latestVersion?.isBeta ?? false) ? AppSocial.GITHUB_RELEASES_BETA : AppSocial.GITHUB_RELEASES;
+      NamidaLinkUtils.openLink(link);
+    }
+
+    String versionToDate(VersionWrapper? version) {
+      String buildDateText = '';
+      final buildDate = version?.buildDate;
+      if (buildDate != null) {
+        buildDateText = ' (${TimeAgoController.dateFromNow(buildDate, long: true)})';
+      }
+      return buildDateText;
+    }
+
+    final currentVersion = VersionWrapper.current;
+    final currentVersionDateText = versionToDate(currentVersion);
+
+    NamidaNavigator.inst.showSheet(
+      builder: (context, bottomPadding, maxWidth, maxHeight) {
+        return SizedBox(
+          height: maxHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 32.0),
+                ObxO(
+                  rx: VersionController.inst.latestVersion,
+                  builder: (context, latestVersion) {
+                    final buildDateText = versionToDate(latestVersion);
+
+                    return RichText(
+                      text: TextSpan(
+                        text: latestVersion?.prettyVersion ?? '',
+                        children: buildDateText.isEmpty
+                            ? null
+                            : [
+                                TextSpan(
+                                  text: buildDateText,
+                                  style: NText.medium.of(context),
+                                ),
+                              ],
+                        style: NText.large.of(context),
+                      ),
+                    );
+                  },
+                ),
+                if (currentVersion != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RotatedBox(
+                        quarterTurns: 2,
+                        child: RichText(
+                          text: TextSpan(
+                            text: '⤵ ',
+                            style: NText.small.of(context),
+                          ),
+                        ),
+                      ),
+                      RichText(
+                        text: TextSpan(
+                          text: currentVersion.prettyVersion,
+                          style: NText.small.of(context).copyWith(fontSize: 11.0),
+                          children: currentVersionDateText.isEmpty
+                              ? null
+                              : [
+                                  TextSpan(
+                                    text: currentVersionDateText,
+                                    style: NText.small.of(context).copyWith(fontSize: 10.0),
+                                  ),
+                                ],
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 12.0),
+                Expanded(
+                  child: _NamidaVersionReleasesInfoList(
+                    maxHeight: maxHeight,
+                  ),
+                ),
+                const SizedBox(height: 12.0),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: NamidaTextButton(
+                        onTap: () => popSheet(context),
+                        text: lang.cancel,
+                      ),
+                    ),
+                    const SizedBox(width: 12.0),
+                    Expanded(
+                      flex: 2,
+                      child: NamidaInkWell(
+                        onTap: () => onUpdateTap(context),
+                        borderRadius: 12.0,
+                        padding: const EdgeInsets.all(12.0),
+                        height: 48.0,
+                        bgColor: NColors.fixed(CurrentColor.inst.color.withOpacityExt(0.9)),
+                        child: Center(
+                          child: NamidaText(
+                            lang.update.toUpperCase(),
+                            style: NText.medium,
+                            color: NColors.fixed(Colors.white.withOpacityExt(0.9)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12.0),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NamidaAppBarIcon(
+      icon: Broken.send_square,
+      onPressed: onTap,
+    );
+  }
+}
+
+class _NamidaVersionReleasesInfoList extends StatefulWidget {
+  final double maxHeight;
+  const _NamidaVersionReleasesInfoList({required this.maxHeight});
+
+  @override
+  State<_NamidaVersionReleasesInfoList> createState() => _NamidaVersionReleasesInfoListState();
+}
+
+class _NamidaVersionReleasesInfoListState extends State<_NamidaVersionReleasesInfoList> {
+  final _documents = <VersionReleaseInfo, NamidaMarkdownDocument>{};
+
+  @override
+  void initState() {
+    VersionController.inst.fetchReleasesAfterCurrent();
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ObxO(
+      rx: VersionController.inst.releasesAfterCurrent,
+      builder: (context, releasesAfterCurrent) => releasesAfterCurrent == null
+          ? ShimmerWrapper(
+              shimmerEnabled: true,
+              child: SuperSmoothListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: 3,
+                itemBuilder: (context, index) {
+                  return NamidaInkWell(
+                    animationDurationMS: 200,
+                    margin: const EdgeInsets.symmetric(vertical: 4.0),
+                    width: context.width,
+                    height: widget.maxHeight * 0.5,
+                    bgColor: NColors.card,
+                  );
+                },
+              ),
+            )
+          : SuperSmoothListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: releasesAfterCurrent.length,
+              itemBuilder: (context, index) {
+                final info = releasesAfterCurrent[index];
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (index > 0)
+                      NamidaText(
+                        info.version.prettyVersion,
+                        style: NText.medium,
+                      ),
+                    const SizedBox(height: 4.0),
+                    NamidaInkWell(
+                      bgColor: NColors.card,
+                      padding: const EdgeInsets.all(8.0),
+                      child: NamidaMarkdown.document(
+                        document: _documents[info] ??= NamidaMarkdownDocument.parse(info.body),
+                        selectable: false,
+                        smallBodySize: false,
+                        smallerNestedBullets: true,
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const SizedBox(height: 12.0),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+}
+
+class NamidaArtworkExpandableToFullscreen extends StatelessWidget {
+  final Widget artwork;
+  final Object? heroTag;
+  final FutureOr<File?> Function() imageFile;
+  final FutureOr<FArtwork?> Function() fetchImage;
+  final FutureOr<String?> Function(File? imgFile, Uint8List? bytes) onSave;
+  final Color? Function()? themeColor;
+
+  const NamidaArtworkExpandableToFullscreen({
+    super.key,
+    required this.artwork,
+    required this.heroTag,
+    required this.imageFile,
+    required this.fetchImage,
+    required this.onSave,
+    required this.themeColor,
+  });
+
+  Future<void> openInFullscreen() {
+    final image = NamidaFullscreenImage(
+      imageFile: imageFile,
+      fetchImage: fetchImage,
+      onSave: onSave,
+      placeholder: artwork,
+    );
+    return NamidaArtworkFullscreen.open(
+      images: [image],
+      initialIndex: 0,
+      heroTag: heroTag,
+      themeColor: themeColor,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TapDetector(
+      onTap: openInFullscreen,
+      child: artwork,
+    );
+  }
+}
+
+class NamidaArtworkFullscreen extends StatefulWidget {
+  final List<NamidaFullscreenImage> images;
+  final int initialIndex;
+  final _ResolvedFullscreenImage _initialImage;
+  final VoidCallback? _releaseInitialImage;
+  final Object? heroTag;
+  final Color? Function()? themeColor;
+  final Future<String?> Function(BuildContext context)? onSaveCollage;
+
+  const NamidaArtworkFullscreen._({
+    required this.images,
+    required this.initialIndex,
+    required this._initialImage,
+    required this._releaseInitialImage,
+    required this.heroTag,
+    required this.themeColor,
+    required this.onSaveCollage,
+  });
+
+  static Future<void> open({
+    required List<NamidaFullscreenImage> images,
+    required int initialIndex,
+    required Object? heroTag,
+    required Color? Function()? themeColor,
+    Future<String?> Function(BuildContext context)? onSaveCollage,
+  }) async {
+    final initialImage = await images[initialIndex]._resolve();
+    if (initialImage == null) return;
+
+    final shownHeroTag = images.length == 1 ? heroTag : null;
+    final releaseInitialImage = shownHeroTag == null ? null : await ZoomableImage.preload(initialImage.provider);
+
+    NamidaNavigator.inst.navigateDialog(
+      scale: 1.0,
+      blackBg: true,
+      dialog: NamidaArtworkFullscreen._(
+        images: images,
+        initialIndex: initialIndex,
+        initialImage: initialImage,
+        releaseInitialImage: releaseInitialImage,
+        heroTag: shownHeroTag,
+        themeColor: themeColor,
+        onSaveCollage: onSaveCollage,
+      ),
+    );
+  }
+
+  @override
+  State<NamidaArtworkFullscreen> createState() => _NamidaArtworkFullscreenState();
+}
+
+class _NamidaArtworkFullscreenState extends State<NamidaArtworkFullscreen> {
+  static const _kPageAnimationDuration = Duration(milliseconds: 250);
+
+  bool _showTopBar = false;
+  double _heighestTopPadding = 0;
+
+  late final _currentIndex = widget.initialIndex.obs;
+  late final _resolvedImages = <int, _ResolvedFullscreenImage>{widget.initialIndex: widget._initialImage};
+  late final _pageController = widget.images.length > 1 ? PageController(initialPage: widget.initialIndex) : null;
+
+  @override
+  void initState() {
+    NamidaNavigator.setSystemUIImmersiveMode(true);
+    super.initState();
+    final releaseInitialImage = widget._releaseInitialImage;
+    // -- the initial page holds its own reference once this frame is built
+    if (releaseInitialImage != null) WidgetsBinding.instance.addPostFrameCallback((_) => releaseInitialImage());
+  }
+
+  @override
+  void dispose() {
+    _pageController?.dispose();
+    _currentIndex.close();
+    MiniPlayerController.inst.setImmersiveMode(null); // let that decide
+    super.dispose();
+  }
+
+  Future<_ResolvedFullscreenImage?> _resolveImage(int index) async {
+    final resolved = await widget.images[index]._resolve();
+    if (resolved != null) _resolvedImages[index] = resolved;
+    return resolved;
+  }
+
+  void _save() async {
+    final index = _currentIndex.value;
+    final resolved = _resolvedImages[index];
+    if (resolved == null) return;
+    final savePath = await widget.images[index].onSave(resolved.file, resolved.bytes);
+    NamidaOnTaps.inst.showSavedImageInSnack(savePath, widget.themeColor?.call());
+  }
+
+  void _saveCollage(Future<String?> Function(BuildContext context) onSaveCollage) async {
+    final savePath = await onSaveCollage(context);
+    NamidaOnTaps.inst.showSavedImageInSnack(savePath, widget.themeColor?.call());
+  }
+
+  void _onPageChanged(int index) {
+    _currentIndex.value = index;
+  }
+
+  void _toggleAppBars() {
+    final newShow = !_showTopBar;
+    if (newShow != _showTopBar) {
+      setState(() => _showTopBar = newShow);
+      NamidaNavigator.setSystemUIImmersiveMode(!newShow);
+    }
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+    final pageController = _pageController;
+    if (pageController == null) return KeyEventResult.ignored;
+    if (HardwareKeyboard.instance.isPrimaryModifierPressed) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    final isLeft = key == LogicalKeyboardKey.arrowLeft;
+    final isRight = key == LogicalKeyboardKey.arrowRight;
+    if (!isLeft && !isRight) return KeyEventResult.ignored;
+
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final isNext = isRight != isRtl;
+    if (isNext) {
+      pageController.nextPage(duration: _kPageAnimationDuration, curve: Curves.easeOutCubic);
+    } else {
+      pageController.previousPage(duration: _kPageAnimationDuration, curve: Curves.easeOutCubic);
+    }
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPadding = context.padding.top;
+    if (topPadding > _heighestTopPadding) _heighestTopPadding = topPadding;
+
+    final images = widget.images;
+    final count = images.length;
+    final onSaveCollage = widget.onSaveCollage;
+    final pageController = _pageController;
+    final pagingAxis = pageController == null ? null : Axis.horizontal;
+    final heroTag = widget.heroTag;
+
+    Widget buildPage(BuildContext context, int index) {
+      return _FullscreenImagePage(
+        index: index,
+        image: images[index],
+        resolved: _resolvedImages[index],
+        resolve: _resolveImage,
+        heroTag: heroTag,
+        pagingAxis: pagingAxis,
+        onTap: _toggleAppBars,
+      );
+    }
+
+    final content = pageController == null
+        ? buildPage(context, 0)
+        : Focus(
+            autofocus: true,
+            skipTraversal: true,
+            onKeyEvent: _onKeyEvent,
+            child: PageView.builder(
+              controller: pageController,
+              allowImplicitScrolling: true,
+              onPageChanged: _onPageChanged,
+              itemCount: count,
+              itemBuilder: buildPage,
+            ),
+          );
+
+    final pageIndicatorWidget = count > 1
+        ? ObxO(
+            rx: _currentIndex,
+            builder: (context, currentIndex) => NamidaText(
+              '${currentIndex + 1}/$count',
+              style: NText.medium,
+            ),
+          )
+        : null;
+
+    return Stack(
+      alignment: AlignmentGeometry.center,
+      children: [
+        LongPressDetector(
+          onLongPress: _save,
+          child: content,
+        ),
+        Positioned(
+          top: 0,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 150),
+            opacity: _showTopBar ? 1.0 : 0.0,
+            child: IgnorePointer(
+              ignoring: !_showTopBar,
+              child: SizedBox(
+                width: context.width,
+                child: NColoredBox(
+                  color: NColors.scaffold,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: 12.0 + _heighestTopPadding,
+                      bottom: 12.0,
+                      left: 8.0,
+                      right: 8.0,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: NamidaIconButton(
+                            icon: Broken.arrow_left_2,
+                            onPressed: NamidaNavigator.inst.closeDialog,
+                          ),
+                        ),
+                        Expanded(
+                          child: pageIndicatorWidget ?? const SizedBox(),
+                        ),
+                        if (onSaveCollage != null)
+                          ObxO(
+                            rx: settings.artworkCollageStyle,
+                            builder: (context, collageStyle) => NamidaIconButton(
+                              tooltip: () => '${lang.save} (${collageStyle.toText()})',
+                              icon: collageStyle.toIcon(),
+                              onPressed: () => _saveCollage(onSaveCollage),
+                            ),
+                          ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: NamidaIconButton(
+                            icon: Broken.gallery_import,
+                            onPressed: _save,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FullscreenImagePage extends StatefulWidget {
+  final int index;
+  final NamidaFullscreenImage image;
+  final _ResolvedFullscreenImage? resolved;
+  final Future<_ResolvedFullscreenImage?> Function(int index) resolve;
+  final Object? heroTag;
+  final Axis? pagingAxis;
+  final VoidCallback onTap;
+
+  const _FullscreenImagePage({
+    required this.index,
+    required this.image,
+    required this.resolved,
+    required this.resolve,
+    required this.heroTag,
+    required this.pagingAxis,
+    required this.onTap,
+  });
+
+  @override
+  State<_FullscreenImagePage> createState() => _FullscreenImagePageState();
+}
+
+class _FullscreenImagePageState extends State<_FullscreenImagePage> {
+  late _ResolvedFullscreenImage? _resolved = widget.resolved;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_resolved == null) _resolve();
+  }
+
+  Future<void> _resolve() async {
+    final resolved = await widget.resolve(widget.index);
+    if (resolved != null) refreshState(() => _resolved = resolved);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholder = widget.image.placeholder;
+    final resolved = _resolved;
+    if (resolved == null) {
+      return TapDetector(
+        onTap: widget.onTap,
+        child: Center(
+          child: placeholder,
+        ),
+      );
+    }
+    return ZoomableImage(
+      imageProvider: resolved.provider,
+      placeholder: placeholder,
+      heroTag: widget.heroTag,
+      onTap: widget.onTap,
+      pagingAxis: widget.pagingAxis,
+    );
+  }
+}
+
+class NamidaFullscreenImage {
+  final FutureOr<File?> Function() imageFile;
+  final FutureOr<FArtwork?> Function() fetchImage;
+  final FutureOr<String?> Function(File? imgFile, Uint8List? bytes) onSave;
+  final Widget? placeholder;
+
+  const NamidaFullscreenImage({
+    required this.imageFile,
+    required this.fetchImage,
+    required this.onSave,
+    this.placeholder,
+  });
+
+  Future<_ResolvedFullscreenImage?> _resolve() async {
+    final file = await imageFile();
+    if (file != null && await file.exists()) return _ResolvedFullscreenImage.file(file);
+    final res = await fetchImage();
+    final fetchedFile = res?.file;
+    if (fetchedFile != null) return _ResolvedFullscreenImage.file(fetchedFile);
+    final fetchedBytes = res?.bytes;
+    if (fetchedBytes != null) return _ResolvedFullscreenImage.bytes(fetchedBytes);
+    return null;
+  }
+}
+
+class _ResolvedFullscreenImage {
+  final File? file;
+  final Uint8List? bytes;
+  final ImageProvider provider;
+
+  _ResolvedFullscreenImage.file(File this.file) : bytes = null, provider = FileImage(file);
+  _ResolvedFullscreenImage.bytes(Uint8List this.bytes) : file = null, provider = MemoryImage(bytes);
+}
+
+class ObxPrefer<T> extends StatelessWidget {
+  final RxBaseCore<T> rx;
+  final Widget Function(BuildContext context, T? value) builder;
+  final bool enabled;
+  const ObxPrefer({required this.rx, required this.builder, required this.enabled, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return enabled ? ObxO(rx: rx, builder: builder) : builder(context, null);
+  }
+}
+
+class ObxOrNull<T> extends StatelessWidget {
+  final RxBaseCore<T>? rx;
+  final Widget Function(BuildContext context, T? value) builder;
+  const ObxOrNull({required this.rx, required this.builder, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return rx != null ? ObxO(rx: rx!, builder: builder) : builder(context, null);
+  }
+}
+
+class NamidaCoolBox extends StatelessWidget {
+  final Color colorScheme;
+  final String text;
+  final Widget Function(BuildContext context)? builder;
+  final bool extraVPadding;
+  final bool extraBorder;
+  final bool reducedColors;
+  final BorderRadius? borderRadius;
+  final double hPadding;
+  final double vPadding;
+
+  const NamidaCoolBox({
+    super.key,
+    required this.colorScheme,
+    this.text = '',
+    this.builder,
+    this.extraVPadding = false,
+    this.extraBorder = false,
+    this.reducedColors = false,
+    this.borderRadius,
+    this.hPadding = 12.0,
+    this.vPadding = 6.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    double vPadding = this.vPadding;
+    if (extraVPadding) vPadding += 4.0;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius ?? BorderRadius.circular(8.0.multipliedRadius),
+        color: colorScheme.withOpacityExt(reducedColors ? 0.06 : 0.08),
+        border: Border.all(
+          width: extraBorder ? 2.0 : 1.0,
+          color: colorScheme.withOpacityExt(reducedColors ? 0.3 : 0.4),
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
+        child:
+            builder?.call(context) ??
+            NamidaText(
+              text,
+              style: NText.small,
+            ),
+      ),
+    );
+  }
+}
+
+class NamidaMouseRegion extends StatelessWidget {
+  final bool enabled;
+  final Widget? child;
+
+  const NamidaMouseRegion({
+    super.key,
+    this.enabled = true,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (enabled && isDesktop) {
+      return MouseRegion(
+        hitTestBehavior: HitTestBehavior.translucent,
+        cursor: SystemMouseCursors.click,
+        child: child,
+      );
+    }
+    return child ?? const SizedBox();
+  }
+}
+
+class NamidaNavigatorWidget extends StatelessWidget {
+  final GlobalKey<NavigatorState> navKey;
+  final List<Page<dynamic>> pages;
+  final List<NavigatorObserver> observers;
+  final bool allowPop;
+  final String? restorationScopeId;
+  final RouteListFactory onGenerateInitialRoutes;
+
+  const NamidaNavigatorWidget({
+    super.key,
+    required this.navKey,
+    this.pages = const <Page<dynamic>>[],
+    this.observers = const <NavigatorObserver>[],
+    this.allowPop = true,
+    this.restorationScopeId,
+    this.onGenerateInitialRoutes = Navigator.defaultGenerateInitialRoutes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      key: navKey,
+      restorationScopeId: restorationScopeId,
+      requestFocus: false,
+      // ignore: deprecated_member_use
+      onPopPage: allowPop ? null : (route, result) => false,
+      observers: observers,
+      pages: pages,
+      onGenerateInitialRoutes: onGenerateInitialRoutes,
+      onUnknownRoute: (_) => MaterialPageRoute(builder: (_) => const SizedBox()),
+    );
+  }
+}
+
+class NamidaPopScope extends StatelessWidget {
+  // ignore: deprecated_member_use
+  final WillPopCallback? onWillPop;
+  final Widget child;
+
+  const NamidaPopScope({
+    super.key,
+    this.onWillPop,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // ignore: deprecated_member_use
+    return WillPopScope(
+      onWillPop: onWillPop,
+      child: child,
+    );
+  }
+}
+
+class CustomIconButtonTonal extends StatelessWidget {
+  final IconData? icon;
+  final Widget? iconWidget;
+  final double? iconSize;
+  final String? tooltip;
+  final bool dense;
+  final Color? colorScheme;
+  final void Function()? onTap;
+
+  const CustomIconButtonTonal({
+    super.key,
+    this.icon,
+    this.iconWidget,
+    this.iconSize,
+    this.tooltip,
+    this.dense = true,
+    this.colorScheme,
+    required this.onTap,
+  }) : assert(icon != null || iconWidget != null);
+
+  static const iconColor = NColors(.icon, opacity: 0.7);
+  // static NColors iconColorAlt([Color? colorScheme]) => NColors.defaultIcon(mainColor: colorScheme, opacity: 0.75);
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = NColorsData.of(context);
+    return IconButton.filledTonal(
+      padding: dense ? EdgeInsets.zero : null,
+      style: ButtonStyle(
+        tapTargetSize: dense ? MaterialTapTargetSize.shrinkWrap : null,
+        visualDensity: dense ? VisualDensity.compact : null,
+        backgroundColor: WidgetStatePropertyAll((colorScheme ?? colors.secondary).withOpacityExt(0.18)),
+      ),
+      onPressed: onTap,
+      icon:
+          iconWidget ??
+          Icon(
+            icon,
+            size: iconSize,
+            color: iconColor.resolve(colors),
+          ),
+      tooltip: tooltip,
+    );
+  }
+}
+
+class SplitPageInfo {
+  final String title;
+  final Widget page;
+  final Widget? titleIconWidget;
+  final Widget? headerTrailing;
+
+  const SplitPageInfo({
+    required this.title,
+    required this.page,
+    this.titleIconWidget,
+    this.headerTrailing,
+  });
+}
+
+class SplitPage extends StatefulWidget {
+  final int initialIndex;
+  final void Function(int index) onIndexChanged;
+  final List<SplitPageInfo> pages;
+  final bool expanded;
+  final bool joinHeaderChips;
+  final bool showDivider;
+
+  const SplitPage({
+    super.key,
+    required this.initialIndex,
+    required this.onIndexChanged,
+    required this.pages,
+    this.expanded = true,
+    this.joinHeaderChips = false,
+    this.showDivider = true,
+  });
+
+  @override
+  State<SplitPage> createState() => SplitPageState();
+}
+
+class SplitPageState extends State<SplitPage> {
+  int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    _selectedIndex = widget.initialIndex.clampInt(0, widget.pages.length - 1);
+    super.initState();
+  }
+
+  void _onButtonTap(int index) {
+    if (index == _selectedIndex) return;
+    setState(() => _selectedIndex = index);
+    widget.onIndexChanged(index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = widget.pages;
+    final selectedIndex = _selectedIndex;
+    final selectedPage = pages[selectedIndex];
+    return Column(
+      mainAxisSize: .min,
+      children: [
+        const SizedBox(height: 8.0),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ...pages
+                  .mapIndexed(
+                    (e, i) {
+                      final isSelected = i == selectedIndex;
+                      BorderRadius borderRadius;
+                      final brValue = 8.0.multipliedRadius;
+                      if (widget.joinHeaderChips) {
+                        final brValueSmall = brValue * 0.25;
+                        borderRadius = i == 0
+                            ? BorderRadius.horizontal(
+                                left: Radius.circular(brValue),
+                                right: Radius.circular(brValueSmall),
+                              )
+                            : i == pages.length - 1
+                            ? BorderRadius.horizontal(
+                                left: Radius.circular(brValueSmall),
+                                right: Radius.circular(brValue),
+                              )
+                            : BorderRadius.circular(brValueSmall);
+                      } else {
+                        borderRadius = BorderRadius.circular(brValue);
+                      }
+                      final buttonContent = Row(
+                        mainAxisAlignment: .center,
+                        children: [
+                          ?e.titleIconWidget,
+                          Flexible(
+                            fit: e.titleIconWidget == null ? FlexFit.tight : FlexFit.loose,
+                            child: NamidaText(
+                              e.title,
+                              style: NText.medium,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      );
+                      return Expanded(
+                        child: NBuilder(
+                          selfAnimated: true,
+                          builder: (context, colors) => NamidaInkWell(
+                            alignment: Alignment.center,
+                            animationDurationMS: 200,
+                            borderRadius: 8.0,
+                            bgColor: NColors.cardTheme,
+                            padding: const EdgeInsets.all(8.0),
+                            decoration: BoxDecoration(
+                              border: isSelected
+                                  ? Border.all(
+                                      color: colors.primary.withOpacityExt(0.6),
+                                      width: 1.2,
+                                    )
+                                  : null,
+                              borderRadius: borderRadius,
+                            ),
+                            onTap: () => _onButtonTap(i),
+                            child: buttonContent,
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                  .addSeparators(
+                    separator: widget.joinHeaderChips ? const SizedBox(width: 4.0) : const SizedBox(width: 8.0),
+                  ),
+              ?selectedPage.headerTrailing,
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 6.0),
+
+        if (widget.showDivider)
+          const NamidaContainerDivider(
+            margin: EdgeInsets.symmetric(horizontal: 18.0),
+          ),
+
+        Flexible(
+          fit: widget.expanded ? FlexFit.tight : FlexFit.loose,
+          child: selectedPage.page,
+        ),
+      ],
+    );
+  }
+}
+
+class PlayableTitleSubtitleWidget extends StatefulWidget {
+  final bool isYTID;
+  final Widget Function(String? title, String? artist) builder;
+
+  const PlayableTitleSubtitleWidget({
+    super.key,
+    required this.isYTID,
+    required this.builder,
+  });
+
+  @override
+  State<PlayableTitleSubtitleWidget> createState() => _PlayableTitleSubtitleWidgetState();
+}
+
+class _PlayableTitleSubtitleWidgetState extends State<PlayableTitleSubtitleWidget> {
+  String? _videoName;
+  String? _channelName;
+
+  @override
+  void initState() {
+    super.initState();
+    _onPlayableChange();
+    Player.inst.currentItem.addListener(_onPlayableChange);
+    if (widget.isYTID) {
+      YoutubeInfoController.current.currentVideoPage.addListener(_onPlayableChange);
+      YoutubeInfoController.current.currentYTStreams.addListener(_onPlayableChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    Player.inst.currentItem.removeListener(_onPlayableChange);
+    YoutubeInfoController.current.currentVideoPage.removeListener(_onPlayableChange);
+    YoutubeInfoController.current.currentYTStreams.removeListener(_onPlayableChange);
+  }
+
+  void _onPlayableChange() async {
+    final item = Player.inst.currentItem.value;
+    item?.execute(
+      selectable: _onLocalChange,
+      youtubeID: _onYTChange,
+    );
+  }
+
+  void _onLocalChange(Selectable item) async {
+    final track = item.track;
+    _videoName = track.title;
+    _channelName = track.displayArtist();
+
+    refreshState();
+  }
+
+  void _onYTChange(YoutubeID item) async {
+    final vidId = item.id;
+
+    String? videoName = YoutubeInfoController.current.currentVideoPage.value?.videoInfo?.title;
+    if (videoName == null || videoName.isEmpty) videoName = YoutubeInfoController.current.currentYTStreams.value?.info?.title;
+    if (videoName == null || videoName.isEmpty) videoName = await YoutubeInfoController.utils.getVideoName(vidId);
+
+    String? channelName = YoutubeInfoController.current.currentVideoPage.value?.channelInfo?.title;
+    if (channelName == null || channelName.isEmpty) channelName = YoutubeInfoController.current.currentYTStreams.value?.info?.channelName;
+    if (channelName == null || channelName.isEmpty) channelName = await YoutubeInfoController.utils.getVideoChannelName(vidId);
+
+    if (videoName != _videoName || channelName != _channelName) {
+      _videoName = videoName;
+      _channelName = channelName;
+      refreshState();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(_videoName, _channelName);
+  }
+}
+
+class NamidaToggleCard extends StatelessWidget {
+  /// null shows the [title] alone.
+  final IconData? icon;
+  final String title;
+  final bool showTitle;
+  final bool active;
+  final bool halfActive;
+  final VoidCallback? onTap;
+  final EdgeInsetsGeometry? padding;
+  final double iconSize;
+  final bool dense;
+
+  const NamidaToggleCard({
+    super.key,
+    this.icon,
+    required this.title,
+    this.showTitle = false,
+    required this.active,
+    this.halfActive = false,
+    required this.onTap,
+    this.padding,
+    this.iconSize = 20.0,
+    this.dense = false,
+  });
+
+  static const _kPadding = EdgeInsets.symmetric(horizontal: 4.0, vertical: 10.0);
+  static const _kDensePadding = EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0);
+
+  static SnackbarController? _latestStateSnackbar;
+
+  static String toStateText(String title, bool value) {
+    final valueText = value ? lang.yes : lang.no;
+    return '$title: $valueText';
+  }
+
+  static void showStateSnackbar({required IconData icon, required String title, required bool value}) {
+    _latestStateSnackbar?.close();
+    _latestStateSnackbar = snackyy(
+      icon: icon,
+      message: toStateText(title, value),
+      displayDuration: SnackDisplayDuration.mediumLow,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final defaultPadding = dense ? _kDensePadding : _kPadding;
+    final padding = this.padding ?? defaultPadding;
+    final titleIconSize = dense ? 18.0 : 22.0;
+    final titleIconGap = dense ? 3.0 : 4.0;
+    final colors = NColorsData.targetOf(context);
+    final tileOpacity = context.isDarkMode ? 0.02 : 0.08;
+    final inactiveColor = Color.alphaBlend(colors.onSurface.withOpacityExt(tileOpacity), colors.cardTheme);
+    final activeColor = colors.secondaryContainer;
+    final bgColor = active
+        ? activeColor
+        : halfActive
+        ? Color.alphaBlend(activeColor.withOpacityExt(0.4), inactiveColor)
+        : inactiveColor;
+    final isEnabled = onTap != null;
+    final icon = this.icon;
+    final isTitleShown = showTitle || icon == null;
+    final card = NamidaInkWell(
+      borderRadius: 10.0,
+      padding: padding,
+      animationDurationMS: 200,
+      bgColor: NColors.fixed(bgColor),
+      onTap: onTap,
+      child: isTitleShown
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: titleIconSize,
+                  ),
+                  SizedBox(
+                    height: titleIconGap,
+                  ),
+                ],
+                NamidaText(
+                  title,
+                  style: const NText(.small, size: .s12),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            )
+          : Icon(
+              icon,
+              size: iconSize,
+            ),
+    );
+    return AnimatedOpacity(
+      opacity: isEnabled ? 1.0 : 0.4,
+      duration: const Duration(milliseconds: 200),
+      child: NamidaTooltip(
+        message: isTitleShown ? null : () => title,
+        child: card,
+      ),
+    );
+  }
+}
+
+class _QueueShuffleButton extends StatelessWidget {
+  const _QueueShuffleButton();
+
+  void _onTap(BuildContext context) {
+    final mode = settings.player.shuffleButtonMode.value;
+    if (mode == null) return _showModesMenu(context);
+    Player.inst.shuffleByMode(mode);
+  }
+
+  void _showModesMenu(BuildContext context) {
+    final currentMode = settings.player.shuffleButtonMode.value;
+    final menu = NamidaPopupWrapper(
+      childrenDefault: () => ShuffleButtonMode.values.map(
+        (e) {
+          final isSelected = e == currentMode;
+          final tickIcon = isSelected
+              ? const NamidaCheckMark(
+                  active: true,
+                  size: 14.0,
+                )
+              : null;
+          return NamidaPopupItem(
+            icon: Broken.shuffle,
+            secondaryIcon: e.toSecondaryIcon(),
+            title: e.toText(),
+            selected: isSelected,
+            trailing: tickIcon,
+            onTap: () {
+              settings.player.shuffleButtonMode.save(e);
+              Player.inst.shuffleByMode(e);
+            },
+          );
+        },
+      ).toFixedList(),
+    );
+    menu.showPopupMenu(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(
+      (context) {
+        final shuffleQueue = settings.player.shuffleQueue.valueR;
+        final mode = settings.player.shuffleButtonMode.valueR;
+        final edgesPainterBuilder = mode == null || !mode.hasEdges
+            ? null
+            : (Color foregroundColor, double borderRadius) => _ShuffleModeEdgesPainter(
+                mode: mode,
+                color: foregroundColor.withOpacityExt(0.5),
+                borderRadius: borderRadius,
+              );
+        return NamidaButton(
+          text: lang.shuffle,
+          icon: Broken.shuffle,
+          colors: shuffleQueue ? NamidaButtonColors.selected : NamidaButtonColors.normal,
+          foregroundPainterBuilder: edgesPainterBuilder,
+          onTap: () => _onTap(context),
+          onLongPress: () => _showModesMenu(context),
+        );
+      },
+    );
+  }
+}
+
+// by claude
+class _ShuffleModeEdgesPainter extends CustomPainter {
+  final ShuffleButtonMode mode;
+  final Color color;
+  final double borderRadius;
+
+  const _ShuffleModeEdgesPainter({
+    required this.mode,
+    required this.color,
+    required this.borderRadius,
+  });
+
+  static const _kFirstEdgeInset = 3.0;
+  static const _kEdgesGap = 2.6;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    final halfShortestSide = size.shortestSide / 2.0;
+    final radius = borderRadius.withMaximum(halfShortestSide);
+    final fadedColor = color.withOpacityExt(0.0);
+    final fadingGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [fadedColor, color, fadedColor],
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1;
+    final edgesCount = math.max(mode.leftEdges, mode.rightEdges);
+    for (int i = 0; i < edgesCount; i++) {
+      final inset = _kFirstEdgeInset + i * _kEdgesGap;
+      final edge = bounds.deflate(inset);
+      final r = (radius - inset).withMinimum(0.0);
+      final corner = Radius.circular(r);
+      final path = Path();
+      if (i < mode.leftEdges) {
+        path
+          ..moveTo(edge.left + r, edge.top)
+          ..arcToPoint(Offset(edge.left, edge.top + r), radius: corner, clockwise: false)
+          ..lineTo(edge.left, edge.bottom - r)
+          ..arcToPoint(Offset(edge.left + r, edge.bottom), radius: corner, clockwise: false);
+      }
+      if (i < mode.rightEdges) {
+        path
+          ..moveTo(edge.right - r, edge.top)
+          ..arcToPoint(Offset(edge.right, edge.top + r), radius: corner)
+          ..lineTo(edge.right, edge.bottom - r)
+          ..arcToPoint(Offset(edge.right - r, edge.bottom), radius: corner);
+      }
+      paint.shader = fadingGradient.createShader(edge);
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ShuffleModeEdgesPainter oldDelegate) => mode != oldDelegate.mode || color != oldDelegate.color || borderRadius != oldDelegate.borderRadius;
+}
+
+typedef NamidaButtonPalette = ({Color colorScheme, Color bg, Color border, Color foreground});

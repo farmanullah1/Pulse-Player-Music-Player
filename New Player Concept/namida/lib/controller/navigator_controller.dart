@@ -1,0 +1,932 @@
+// ignore_for_file: use_build_context_synchronously
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' as material;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'package:native_device_orientation/native_device_orientation.dart';
+
+import 'package:namida/class/route.dart';
+import 'package:namida/controller/folders_controller.dart';
+import 'package:namida/controller/miniplayer_controller.dart';
+import 'package:namida/controller/playlist_controller.dart';
+import 'package:namida/controller/screenshots_driver.dart';
+import 'package:namida/controller/scroll_search_controller.dart';
+import 'package:namida/controller/settings_controller.dart';
+import 'package:namida/controller/settings_search_controller.dart';
+import 'package:namida/controller/wakelock_controller.dart';
+import 'package:namida/controller/window_controller.dart';
+import 'package:namida/core/constants.dart';
+import 'package:namida/core/dimensions.dart';
+import 'package:namida/core/enums.dart';
+import 'package:namida/core/extensions.dart';
+import 'package:namida/core/icon_fonts/broken_icons.dart';
+import 'package:namida/core/namida_converter_ext.dart';
+import 'package:namida/core/ntheme.dart';
+import 'package:namida/core/themes.dart';
+import 'package:namida/core/translations/language.dart';
+import 'package:namida/core/ui_scale.dart';
+import 'package:namida/core/utils.dart';
+import 'package:namida/ui/widgets/animated_widgets.dart';
+import 'package:namida/ui/widgets/custom_widgets.dart';
+import 'package:namida/ui/widgets/inner_drawer.dart';
+import 'package:namida/youtube/controller/youtube_playlist_controller.dart';
+import 'package:namida/youtube/widgets/yt_queue_chip.dart';
+
+part 'navigator_controller.snackbar.dart';
+
+class NamidaNavigator {
+  static NamidaNavigator get inst => _instance;
+  static final NamidaNavigator _instance = NamidaNavigator._internal();
+  NamidaNavigator._internal();
+
+  GlobalKey<NavigatorState> get _rootNav => namida.rootNavigatorKey;
+  bool get rootNavHasOpenedPages => _rootNav.currentState?.canPop() == true;
+  int get openedDialogsCount => _openedNumbersManager._currentDialogNumber;
+  int get openedSheetsCount => _openedNumbersManager._currentSheetNumber;
+  int get openedMenusCount => _openedNumbersManager._currentMenusNumber;
+
+  bool get _shouldUpdateSubpagesColors => settings.autoColor.value;
+
+  final navKey = GlobalKey<NavigatorState>();
+
+  final ytLocalSearchNavigatorKey = GlobalKey<NavigatorState>();
+
+  final ytMiniplayerCommentsPageKey = GlobalKey<NavigatorState>();
+
+  bool isytLocalSearchInFullPage = false;
+  bool isInYTCommentsSubpage = false;
+  bool isInYTCommentRepliesSubpage = false;
+  bool isInSoundControlSubpage = false;
+  bool isInWideScreenPlayerPage = false;
+  bool isQueueSheetOpen = false;
+
+  final currentWidgetStack = <NamidaRoute>[].obs;
+  NamidaRoute? get currentRoute => currentWidgetStack.value.lastOrNull;
+  // ignore: avoid_rx_value_getter_outside_obx
+  NamidaRoute? get currentRouteR => currentWidgetStack.valueR.lastOrNull;
+
+  final _openedNumbersManager = _OpenedNumbersManager();
+
+  final innerDrawerKey = GlobalKey<NamidaInnerDrawerState>();
+  final ytQueueSheetKey = GlobalKey<YTMiniplayerQueueChipState>();
+  final heroController = HeroController();
+
+  bool _isInLanscape = false;
+  bool get isInLanscape => _isInLanscape;
+
+  static const _defaultRouteAnimationDurMS = 400;
+  static const kDefaultDialogDurationMS = 300;
+  static const _kDialogDismissBlockDurationMS = 700;
+
+  Future<T?> showMenu<T>({required PopupRoute<T> route}) async {
+    ScrollSearchController.inst.unfocusKeyboard();
+    _openedNumbersManager.incrementMenus();
+
+    return _rootNav.currentState?.push(route);
+  }
+
+  void popMenu({bool handleClosing = true}) {
+    if (_openedNumbersManager._currentMenusNumber > 0) {
+      _openedNumbersManager.decrementMenus();
+      if (handleClosing) {
+        popRoot();
+      }
+    }
+  }
+
+  void popAllMenus() {
+    if (_openedNumbersManager._currentMenusNumber == 0) return;
+    while (_openedNumbersManager._currentMenusNumber > 0) {
+      _openedNumbersManager.decrementMenus();
+      popRoot();
+    }
+  }
+
+  void toggleDrawer() {
+    innerDrawerKey.currentState?.toggle();
+  }
+
+  /// hides library search and settings search pages
+  void _hideSearchMenusAndUnfocus() {
+    ScrollSearchController.inst.hideSearchMenu();
+    SettingsSearchController.inst.closeSearch();
+  }
+
+  void _minimizeMiniplayer() {
+    try {
+      MiniPlayerController.inst.snapToMini();
+      MiniPlayerController.inst.ytMiniplayerKey.currentState?.animateToState(false);
+    } catch (_) {
+      // -- could be non initialized
+    }
+  }
+
+  void hideStuff({
+    bool searchMenuAndUnfocus = true,
+    bool minimizeMiniplayers = true,
+    bool closeDialogs = true,
+  }) {
+    if (searchMenuAndUnfocus) _hideSearchMenusAndUnfocus();
+    if (minimizeMiniplayers) _minimizeMiniplayer();
+    if (closeDialogs) closeAllDialogs();
+  }
+
+  void _hideEverything() {
+    _hideSearchMenusAndUnfocus();
+    _minimizeMiniplayer();
+    closeAllDialogs();
+  }
+
+  NamidaRouteWidget? _pageAfterFirstLoad;
+
+  void openAfterFirstLoad(NamidaRouteWidget page) => _pageAfterFirstLoad = page;
+
+  void onFirstLoad() {
+    final initialTab = settings.extra.selectedLibraryTab.value;
+    final isSearchTab = initialTab == LibraryTab.search;
+    final finalTab = isSearchTab ? settings.libraryTabs.value.first : initialTab;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      navigateTo(finalTab.toWidget(), durationInMs: 0);
+      if (isSearchTab) ScrollSearchController.inst.animatePageController(initialTab);
+
+      final pageAfterFirstLoad = _pageAfterFirstLoad;
+      if (pageAfterFirstLoad != null) {
+        _pageAfterFirstLoad = null;
+        navigateTo(pageAfterFirstLoad);
+      }
+    });
+  }
+
+  Future<void> toggleFullScreen(Widget widget, {bool setOrientations = true, Future<void> Function()? onWillPop}) async {
+    if (_isInFullScreen) {
+      return await exitFullScreen();
+    } else {
+      return await enterFullScreen(widget, setOrientations: setOrientations, onWillPop: onWillPop);
+    }
+  }
+
+  static bool? _latestSystemUIImmersive;
+  static List<SystemUiOverlay>? _latestSystemUIOverlays;
+
+  // -- edgeToEdge is a no-op below android 10
+  static final _canUseEdgeToEdgeMode = !Platform.isAndroid || NamidaDeviceInfo.sdkVersion >= 29;
+
+  /// Raw access to system UI mode. For more accurate results, use [MiniPlayerController.setImmersiveMode].
+  static Future<void> setSystemUIImmersiveMode(bool immersive, {List<SystemUiOverlay> overlays = SystemUiOverlay.values}) async {
+    final isImmersive = immersive || (kScreenshotsMode && ScreenshotsDriver.inst.hidesSystemBars);
+    if (_latestSystemUIImmersive == isImmersive && !overlays.didChangeFrom(_latestSystemUIOverlays)) {
+      return;
+    }
+    _latestSystemUIImmersive = isImmersive;
+    _latestSystemUIOverlays = overlays;
+
+    if (isImmersive) return SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    if (_canUseEdgeToEdgeMode) return SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    return SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: overlays);
+  }
+
+  static void setDefaultSystemUIOverlayStyle({bool semiTransparent = false}) {
+    SystemChrome.setSystemUIOverlayStyle(
+      semiTransparent
+          ? const SystemUiOverlayStyle(
+              statusBarColor: Colors.black45,
+              statusBarIconBrightness: Brightness.light,
+              systemNavigationBarColor: Colors.black45,
+              systemNavigationBarIconBrightness: Brightness.light,
+            )
+          : const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              systemNavigationBarColor: Colors.transparent,
+              systemNavigationBarDividerColor: Colors.transparent,
+            ),
+    );
+  }
+
+  bool? _latestIsAppLight;
+
+  /// optimized to set only if its different from the previous value.
+  void setSystemUIOverlayStyleCustom(bool isAppLight, {bool forceRefresh = false}) {
+    if (_latestIsAppLight == isAppLight && !forceRefresh) return;
+    _latestIsAppLight = isAppLight;
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        systemNavigationBarContrastEnforced: false,
+        systemNavigationBarColor: const Color(0x00000000),
+        systemNavigationBarDividerColor: const Color(0x00000000),
+        systemNavigationBarIconBrightness: isAppLight ? Brightness.dark : Brightness.light,
+      ),
+    );
+  }
+
+  static const _landscapeOrientations = [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight];
+
+  Future<void> setDeviceOrientations(bool? lanscape) async {
+    if (lanscape != null) _isInLanscape = lanscape;
+
+    final orientations = lanscape == true
+        ? await _resolveLandscapeOrientations()
+        : lanscape == null
+        ? await _resolveActualOrientation()
+        : DeviceOrientation.values;
+
+    if (lanscape == null) {
+      _isInLanscape = _landscapeOrientations.any((landscape) => orientations.contains(landscape));
+    }
+
+    await SystemChrome.setPreferredOrientations(orientations);
+  }
+
+  /// prefer based on sensor, otherwise system will pick the first
+  Future<List<DeviceOrientation>> _resolveLandscapeOrientations() async {
+    if (!NamidaFeaturesVisibility.deviceOrientationSensorAvailable) return _landscapeOrientations;
+    try {
+      final communicator = NativeDeviceOrientationCommunicator();
+      final physical = (await communicator.orientation(useSensor: true).timeout(const Duration(milliseconds: 500))).deviceOrientation;
+      if (physical == null || !_landscapeOrientations.contains(physical)) return _landscapeOrientations;
+      final window = (await communicator.orientation()).deviceOrientation;
+      return physical == window ? _landscapeOrientations : [physical];
+    } catch (_) {
+      return _landscapeOrientations;
+    }
+  }
+
+  Future<List<DeviceOrientation>> _resolveActualOrientation() async {
+    if (!NamidaFeaturesVisibility.deviceOrientationSensorAvailable) return _landscapeOrientations;
+    try {
+      final communicator = NativeDeviceOrientationCommunicator();
+      final physical = (await communicator.orientation(useSensor: true).timeout(const Duration(milliseconds: 500))).deviceOrientation;
+      if (physical == null) return _landscapeOrientations;
+      return [physical];
+    } catch (_) {
+      return _landscapeOrientations;
+    }
+  }
+
+  bool get isInFullScreen => _isInFullScreen;
+  bool _isInFullScreen = false;
+  Future<void> enterFullScreen(Widget widget, {bool setOrientations = true, Future<void> Function()? onWillPop}) async {
+    if (_isInFullScreen == true) return;
+    _isInFullScreen = true;
+
+    WakelockController.inst.updateFullscreenStatus(true);
+
+    _rootNav.currentState?.pushPage(
+      NamidaPopScope(
+        onWillPop: () async {
+          if (onWillPop != null) await onWillPop();
+          exitFullScreen();
+          return false;
+        },
+        child: widget,
+      ),
+      params: const NamPackPushPageParams(
+        transition: Transition.noTransition,
+        durationInMs: 0,
+        maintainState: true,
+      ),
+    );
+
+    setDefaultSystemUIOverlayStyle(semiTransparent: true);
+    await Future.wait([
+      if (setOrientations) setDeviceOrientations(true),
+      setSystemUIImmersiveMode(true),
+    ]);
+  }
+
+  Future<void> exitFullScreen() async {
+    if (_isInFullScreen == false) return;
+    _isInFullScreen = false;
+
+    if (NamidaFeaturesVisibility.fullScreenChangesScreenSize) MiniPlayerController.inst.updateScreenValuesInitial(); // -- updates were dropped while in fullscreen
+
+    popRoot();
+
+    setDefaultSystemUIOverlayStyle();
+    await Future.wait([
+      if (isInLanscape) setDeviceOrientations(false),
+      MiniPlayerController.inst.setImmersiveMode(null), // let mp decides
+    ]);
+
+    WakelockController.inst.updateFullscreenStatus(false);
+  }
+
+  Future<void> navigateTo<W extends NamidaRouteWidget>(
+    W page, {
+    Transition transition = Transition.cupertino,
+    int durationInMs = _defaultRouteAnimationDurMS,
+  }) async {
+    _hideEverything();
+    if (currentRoute != null && page.isSameRouteAs(currentRoute!)) return;
+    currentWidgetStack.add(page);
+
+    if (_shouldUpdateSubpagesColors) page.updateColorScheme();
+
+    final themedPage = NThemeFrozenWhileHidden(
+      child: page,
+    );
+    await navKey.currentState?.pushPage(
+      themedPage,
+      params: NamPackPushPageParams(
+        durationInMs: durationInMs,
+        transition: transition,
+        maintainState: true,
+      ),
+    );
+  }
+
+  Future<T?> navigateToRoot<T>(
+    Widget page, {
+    Transition transition = Transition.cupertino,
+    int durationInMs = _defaultRouteAnimationDurMS,
+    bool opaque = true,
+  }) async {
+    return await _rootNav.currentState?.pushPage(
+      page,
+      params: NamPackPushPageParams(
+        durationInMs: durationInMs,
+        transition: transition,
+        maintainState: true,
+        opaque: opaque,
+      ),
+    );
+  }
+
+  Future<T?> navigateToRootReplacement<T>(
+    Widget page, {
+    Transition transition = Transition.cupertino,
+    int durationInMs = _defaultRouteAnimationDurMS,
+    bool opaque = true,
+  }) async {
+    currentWidgetStack.clear();
+    _hideEverything();
+
+    return await _rootNav.currentState?.pushPageReplacement(
+      page,
+      params: NamPackPushPageParams(
+        durationInMs: durationInMs,
+        transition: transition,
+        maintainState: true,
+        opaque: opaque,
+      ),
+    );
+  }
+
+  Future<void> popRoot<T>([T? result]) async {
+    final state = _rootNav.currentState;
+    if (state == null) return;
+    if (!state.canPop()) return;
+    return state.pop<T>(result);
+  }
+
+  /// Use [dialogBuilder] in case you want to acess the theme generated by [colorScheme].
+  Future<T?> navigateDialog<T>({
+    Widget? dialog,
+    Widget Function(ThemeData theme)? dialogBuilder,
+    int durationInMs = NamidaNavigator.kDefaultDialogDurationMS,
+    bool Function()? tapToDismiss,
+    FutureOr<void> Function()? onDismissing,
+    Color? colorScheme,
+    ThemeData? theme,
+    bool lighterDialogColor = true,
+    double scale = 0.96,
+    bool blackBg = false,
+    bool shouldBlockTapsOnOpen = false,
+    void Function()? onDisposing,
+  }) async {
+    ScrollSearchController.inst.unfocusKeyboard();
+    _openedNumbersManager.incrementDialogs();
+
+    final dismissBlockStopwatch = shouldBlockTapsOnOpen ? (Stopwatch()..start()) : null;
+
+    Future<bool> onWillPop() async {
+      if (tapToDismiss != null && tapToDismiss() == false) return false;
+      if (dismissBlockStopwatch != null && dismissBlockStopwatch.elapsedMilliseconds < _kDialogDismissBlockDurationMS) return false;
+
+      if (_openedNumbersManager._currentDialogNumber > 0) {
+        closeDialog();
+        if (onDismissing != null) await onDismissing(); // this can open new dialog, so we closeDialog() first.
+        return false;
+      }
+
+      return true;
+    }
+
+    theme ??= AppThemes.inst.getAppTheme(colorScheme, null, lighterDialogColor);
+
+    final dialogWithBarrier = TapDetector(
+      onTap: onWillPop,
+      child: Container(
+        color: Colors.black.withOpacityExt(blackBg ? 1.0 : 0.45),
+        child: Transform.scale(
+          scale: scale,
+          child: NTheme(
+            data: theme,
+            child: dialogBuilder == null ? dialog! : dialogBuilder(theme),
+          ),
+        ),
+      ),
+    );
+
+    final dialogPage = shouldBlockTapsOnOpen
+        ? _DialogOpenTapsBlocker(
+            durationMS: durationInMs,
+            child: dialogWithBarrier,
+          )
+        : dialogWithBarrier;
+
+    final res = await _rootNav.currentState?.pushPage<T>(
+      NamidaPopScope(
+        onWillPop: onWillPop,
+        child: material.RepaintBoundary(
+          child: NamidaBgBlur(
+            blur: 5.0,
+            enabled: _openedNumbersManager._currentDialogNumber == 1,
+            child: dialogPage,
+          ),
+        ),
+      ),
+      params: NamPackPushPageParams(
+        durationInMs: durationInMs,
+        opaque: false,
+        fullscreenDialog: true,
+        transition: Transition.fade,
+        maintainState: true,
+      ),
+    );
+    if (onDisposing != null) {
+      onDisposing.executeAfterDelay(durationMS: durationInMs * 2);
+    }
+
+    return res;
+  }
+
+  Future<bool> _confirmDiscardChanges() async {
+    bool discard = false;
+    await navigateDialog(
+      dialog: CustomBlurryDialog(
+        isWarning: true,
+        normalTitleStyle: true,
+        bodyText: lang.discardChanges,
+        actions: [
+          const CancelButton(),
+          NamidaButton(
+            colorScheme: Colors.red,
+            text: lang.discard.toUpperCase(),
+            onTap: () {
+              discard = true;
+              closeDialog();
+            },
+          ),
+        ],
+      ),
+    );
+    return discard;
+  }
+
+  Future<void> closeDialog([int count = 1]) async {
+    if (_openedNumbersManager._currentDialogNumber == 0) return;
+    int closeCount = count.withMaximum(_openedNumbersManager._currentDialogNumber);
+    while (closeCount > 0) {
+      _openedNumbersManager.decrementDialogs();
+      popRoot();
+      closeCount--;
+    }
+  }
+
+  Future<void> closeAllDialogs() async {
+    if (_openedNumbersManager._currentDialogNumber == 0) return;
+    closeDialog(_openedNumbersManager._currentDialogNumber);
+  }
+
+  Future<T?> showSheet<T>({
+    required Widget Function(BuildContext context, double bottomPadding, double maxWidth, double maxHeight) builder,
+    BoxDecoration Function(BuildContext context)? decoration,
+    double? heightPercentage,
+    bool isScrollControlled = false,
+    bool isDismissible = true,
+    bool? showDragHandle,
+    Color? backgroundColor,
+    bool Function()? hasUnsavedChanges,
+  }) async {
+    await Future.delayed(Duration.zero); // delay bcz sometimes doesnt show
+
+    final navigator = _rootNav.currentState;
+    if (navigator == null) return null;
+
+    _openedNumbersManager.incrementSheets();
+    return navigator
+        .push(
+          _CustomModalBottomSheetRoute<T>(
+            backgroundBlur: _openedNumbersManager._currentSheetNumber == 1 ? 3.0 : 0.0,
+            isScrollControlled: isScrollControlled,
+            showDragHandle: showDragHandle,
+            isDismissible: isDismissible,
+            backgroundColor: backgroundColor,
+            hasUnsavedChanges: hasUnsavedChanges,
+            builder: (context) {
+              final bottomMargin = MediaQuery.viewInsetsOf(context).bottom;
+              final bottomPadding = MediaQuery.paddingOf(context).bottom;
+              return material.Padding(
+                padding: EdgeInsets.only(bottom: bottomMargin),
+                child: DecoratedBox(
+                  decoration: decoration?.call(context) ?? const BoxDecoration(),
+                  child: SizedBox(
+                    height: heightPercentage == null ? null : (context.height * heightPercentage),
+                    width: context.width,
+                    child: material.Padding(
+                      padding: EdgeInsets.only(bottom: bottomPadding),
+                      child: LayoutWidthHeightProvider(
+                        builder: (context, maxWidth, maxHeight) => builder(
+                          context,
+                          bottomPadding,
+                          maxWidth,
+                          maxHeight,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        )
+        .whenComplete(_openedNumbersManager.decrementSheets);
+  }
+
+  Future<void> navigateOff<W extends NamidaRouteWidget>(
+    W page, {
+    Transition transition = Transition.cupertino,
+    int durationInMs = _defaultRouteAnimationDurMS,
+  }) async {
+    currentWidgetStack.execute(
+      (value) {
+        value.removeLast();
+        value.add(page);
+      },
+    );
+
+    _hideEverything();
+
+    if (_shouldUpdateSubpagesColors) page.updateColorScheme();
+
+    final themedPage = NThemeFrozenWhileHidden(
+      child: page,
+    );
+    await navKey.currentState?.pushPageReplacement(
+      themedPage,
+      params: NamPackPushPageParams(
+        durationInMs: durationInMs,
+        transition: transition,
+        maintainState: true,
+      ),
+    );
+  }
+
+  Future<void> navigateOffAll<W extends NamidaRouteWidget>(
+    W page, {
+    Transition transition = Transition.cupertino,
+    int durationMs = 500,
+  }) async {
+    currentWidgetStack.assign(page);
+    _hideEverything();
+
+    if (_shouldUpdateSubpagesColors) page.updateColorScheme();
+
+    final themedPage = NThemeFrozenWhileHidden(
+      child: page,
+    );
+    try {
+      await navKey.currentState?.pushPageReplacementAll(
+        themedPage,
+        params: NamPackPushPageParams(
+          durationInMs: durationMs,
+          transition: transition,
+          maintainState: true,
+        ),
+      );
+    } on StateError catch (_) {
+      // -- no route was there yet, simple push now
+      await navKey.currentState?.pushPage(
+        themedPage,
+        params: NamPackPushPageParams(
+          durationInMs: durationMs,
+          transition: transition,
+          maintainState: true,
+        ),
+      );
+    }
+  }
+
+  Future<void> back({bool waitForAnimation = false}) async {
+    if (this.isInFullScreen) {
+      NamidaNavigator.inst.exitFullScreen();
+      return;
+    }
+
+    if (_openedNumbersManager._currentMenusNumber > 0) {
+      this.popMenu();
+    } else if (_openedNumbersManager._currentSheetNumber > 0) {
+      _rootNav.currentState?.maybePop();
+    } else if (_openedNumbersManager._currentDialogNumber > 0) {
+      _rootNav.currentState?.maybePop();
+    } else {
+      popPage();
+    }
+  }
+
+  bool _tryPopNonMainPageLayer() {
+    if (isInSoundControlSubpage) {
+      popRoot();
+      isInSoundControlSubpage = false;
+      return true;
+    } else if (isInWideScreenPlayerPage) {
+      popRoot();
+      isInWideScreenPlayerPage = false;
+      return true;
+    }
+
+    if (innerDrawerKey.currentState?.isOpened == true) {
+      innerDrawerKey.currentState?.close();
+      return true;
+    }
+
+    if (MiniPlayerController.inst.ytMiniplayerKey.currentState?.isExpanded == true) {
+      if (isQueueSheetOpen) {
+        ytQueueSheetKey.currentState?.dismissSheet();
+        isQueueSheetOpen = false;
+        return true;
+      } else if (isInYTCommentRepliesSubpage) {
+        ytMiniplayerCommentsPageKey.currentState?.pop();
+        isInYTCommentRepliesSubpage = false;
+        return true;
+      } else if (isInYTCommentsSubpage) {
+        ytMiniplayerCommentsPageKey.currentState?.pop();
+        isInYTCommentsSubpage = false;
+        return true;
+      } else if (!Dimensions.inst.miniplayerIsWideScreen) {
+        MiniPlayerController.inst.ytMiniplayerKey.currentState?.animateToState(false);
+        return true;
+      }
+    }
+
+    final miniplayerAllowPop = MiniPlayerController.inst.onWillPop();
+    if (!miniplayerAllowPop) return true;
+
+    if (isytLocalSearchInFullPage) {
+      ytLocalSearchNavigatorKey.currentState?.pop();
+      isytLocalSearchInFullPage = false;
+      return true;
+    }
+
+    return false;
+  }
+
+  Future<void> popPage({bool fromMainPage = false, bool waitForAnimation = false}) async {
+    if (!fromMainPage && _tryPopNonMainPageLayer()) return;
+
+    if (ScrollSearchController.inst.isGlobalSearchMenuShown.value || SettingsSearchController.inst.canShowSearch.value) {
+      _hideSearchMenusAndUnfocus();
+      return;
+    }
+
+    final route = currentRoute?.route;
+    if (route != null) {
+      if (route == RouteType.PAGE_folders) {
+        final canIgoBackPls = FoldersController.tracksAndVideos.onBackButton();
+        if (!canIgoBackPls) return;
+      } else if (route == RouteType.PAGE_folders_music) {
+        final canIgoBackPls = FoldersController.tracks.onBackButton();
+        if (!canIgoBackPls) return;
+      } else if (route == RouteType.PAGE_folders_videos) {
+        final canIgoBackPls = FoldersController.videos.onBackButton();
+        if (!canIgoBackPls) return;
+      } else if (route == RouteType.SUBPAGE_playlistTracks || route == RouteType.SUBPAGE_favPlaylistTracks) {
+        PlaylistController.inst.resetCanReorder();
+      } else if (route == RouteType.YOUTUBE_PLAYLIST_SUBPAGE || route == RouteType.YOUTUBE_LIKED_SUBPAGE) {
+        YoutubePlaylistController.inst.resetCanReorder();
+      }
+    }
+
+    // pop only if not in root, otherwise show _doubleTapToExit().
+    if (currentWidgetStack.length > 1) {
+      currentWidgetStack.removeLast();
+      navKey.currentState?.pop();
+
+      if (waitForAnimation) await Future.delayed(const Duration(milliseconds: _defaultRouteAnimationDurMS));
+      if (_shouldUpdateSubpagesColors) currentRoute?.updateColorScheme();
+      _hideSearchMenusAndUnfocus();
+    } else {
+      if (!settings.extra.autoLibraryTab.value) {
+        final defaultTab = settings.extra.staticLibraryTab.value;
+        if (currentRoute?.isSameRouteAs(defaultTab.toWidget()) == false) {
+          ScrollSearchController.inst.animatePageController(defaultTab);
+          return;
+        }
+      }
+      await _doubleTapToExit();
+    }
+  }
+
+  DateTime _currentBackPressTime = DateTime(0);
+  Future<bool> _doubleTapToExit() async {
+    if (!Platform.isAndroid) return false;
+
+    final now = DateTime.now();
+    if (now.difference(_currentBackPressTime) > const Duration(seconds: 2)) {
+      _currentBackPressTime = now;
+
+      snackyy(
+        icon: Broken.logout,
+        message: lang.exitAppSubtitle,
+        top: false,
+        margin: const EdgeInsets.all(12.0),
+        animationDurationMS: 500,
+        onStatusChanged: (status) {
+          // -- resets time
+          if (status == SnackbarStatus.closing || status == SnackbarStatus.closed) {
+            _currentBackPressTime = DateTime(0);
+          }
+        },
+      );
+
+      return false;
+    }
+    SystemNavigator.pop();
+    return true;
+  }
+}
+
+class _OpenedNumbersManager {
+  int _currentDialogNumber = 0;
+  int _currentSheetNumber = 0;
+  int _currentMenusNumber = 0;
+
+  void incrementDialogs() {
+    _currentDialogNumber++;
+    // _reEvaluate();
+    if (kDebugMode) _printDialogs();
+  }
+
+  void decrementDialogs() {
+    _currentDialogNumber--;
+    // _reEvaluate();
+    if (kDebugMode) _printDialogs();
+  }
+
+  void incrementSheets() {
+    _currentSheetNumber++;
+    // _reEvaluate();
+    if (kDebugMode) _printSheets();
+  }
+
+  void decrementSheets() {
+    _currentSheetNumber--;
+    // _reEvaluate();
+    if (kDebugMode) _printSheets();
+  }
+
+  void incrementMenus() {
+    _currentMenusNumber++;
+    // _reEvaluate();
+    if (kDebugMode) _printMenus();
+  }
+
+  void decrementMenus() {
+    _currentMenusNumber--;
+    // _reEvaluate();
+    if (kDebugMode) _printMenus();
+  }
+
+  // void _reEvaluate() {
+  //   final blur = _currentDialogNumber > 0
+  //       ? 6.0
+  //       : _currentSheetNumber > 0
+  //           ? 4.0
+  //           : 0.0;
+  //   _appBlurValue.value = blur;
+  // }
+
+  void _printDialogs() => printy("|> Current Dialogs: $_currentDialogNumber");
+  void _printSheets() => printy("|> Current Sheets: $_currentSheetNumber");
+  void _printMenus() => printy("|> Current Menus: $_currentMenusNumber");
+}
+
+class _CustomModalBottomSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  final double backgroundBlur;
+  final bool Function()? hasUnsavedChanges;
+
+  _CustomModalBottomSheetRoute({
+    this.backgroundBlur = 0,
+    required super.isScrollControlled,
+    super.showDragHandle,
+    super.isDismissible,
+    super.backgroundColor,
+    this.hasUnsavedChanges,
+    required super.builder,
+  });
+
+  bool _discardConfirmed = false;
+
+  @override
+  bool didPop(T? result) {
+    if (_discardConfirmed || hasUnsavedChanges?.call() != true) return super.didPop(result);
+    controller?.forward(); // -- a drag dismiss would have already started closing the sheet
+    scheduleMicrotask(() => _confirmDiscardThenPop(result)); // -- navigator is locked during didPop
+    return false;
+  }
+
+  Future<void> _confirmDiscardThenPop(T? result) async {
+    final discard = await NamidaNavigator.inst._confirmDiscardChanges();
+    if (!discard || !isCurrent) return;
+    _discardConfirmed = true;
+    navigator?.pop(result);
+  }
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    final child = super.buildPage(context, animation, secondaryAnimation);
+    final animationCompleter = Completer<void>();
+
+    void animationStatusListener(AnimationStatus status) {
+      if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
+        animation.removeStatusListener(animationStatusListener);
+        animationCompleter.completeIfWasnt();
+      }
+    }
+
+    animationStatusListener(animation.status);
+    if (!animationCompleter.isCompleted) {
+      animation.addStatusListener(animationStatusListener);
+    }
+
+    if (backgroundBlur > 0) {
+      return FutureBuilder(
+        future: animationCompleter.future,
+        builder: (context, snapshot) {
+          final didAnimate = snapshot.connectionState == ConnectionState.done;
+          return TweenAnimationBuilder(
+            duration: const Duration(milliseconds: 300),
+            tween: DoubleTween(begin: 0, end: didAnimate ? 1 : 0),
+            builder: (context, value, _) => NamidaBgBlur(
+              enabled: true,
+              disableIfBlur0: false,
+              blur: backgroundBlur * (value ?? 0),
+              child: child,
+            ),
+          );
+        },
+      );
+    }
+    return child;
+  }
+}
+
+class _DialogOpenTapsBlocker extends StatefulWidget {
+  final int durationMS;
+  final Widget child;
+
+  const _DialogOpenTapsBlocker({
+    required this.durationMS,
+    required this.child,
+  });
+
+  @override
+  State<_DialogOpenTapsBlocker> createState() => _DialogOpenTapsBlockerState();
+}
+
+class _DialogOpenTapsBlockerState extends State<_DialogOpenTapsBlocker> {
+  bool _isBlocking = true;
+  late final Timer _unblockTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _unblockTimer = Timer(Duration(milliseconds: widget.durationMS), _unblock);
+  }
+
+  void _unblock() => refreshState(() => _isBlocking = false);
+
+  @override
+  void dispose() {
+    _unblockTimer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AbsorbPointer(
+      absorbing: _isBlocking,
+      child: widget.child,
+    );
+  }
+}
