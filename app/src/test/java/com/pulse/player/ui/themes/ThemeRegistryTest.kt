@@ -8,8 +8,8 @@ import org.junit.Test
 class ThemeRegistryTest {
 
     @Test
-    fun playerThemesContainsExactlyNineThemes() {
-        assertEquals("PlayerThemes must register exactly 9 themes", 9, PlayerThemes.size)
+    fun playerThemesContainsConceptAndAtmosphericThemes() {
+        assertEquals("PlayerThemes must register all existing and concept themes", 12, PlayerThemes.size)
     }
 
     @Test
@@ -32,7 +32,18 @@ class ThemeRegistryTest {
             "immersive"
         )
         val registeredIds = PlayerThemes.map { it.id }.toSet()
-        assertEquals(canonicalIds, registeredIds)
+        assertTrue(registeredIds.containsAll(canonicalIds))
+        assertTrue(registeredIds.contains("pixel"))
+        assertTrue(registeredIds.contains("namida"))
+        assertTrue(registeredIds.contains("atmospheric_queue"))
+    }
+
+    @Test
+    fun atmosphericQueueThemeIsRegisteredCorrectly() {
+        val atmospheric = PlayerThemes.firstOrNull { it.id == "atmospheric_queue" }
+        assertNotNull("Atmospheric Queue theme must be registered", atmospheric)
+        assertEquals("Atmospheric Queue", atmospheric!!.name)
+        assertEquals(PlayerLayout.ATMOSPHERIC_QUEUE, atmospheric.layout)
     }
 
     @Test
@@ -50,4 +61,3 @@ class ThemeRegistryTest {
         assertEquals("classic", resolved.id)
     }
 }
-

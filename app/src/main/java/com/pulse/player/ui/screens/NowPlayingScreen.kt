@@ -1,4 +1,4 @@
-package com.pulse.player.ui.screens
+﻿package com.pulse.player.ui.screens
 
 import android.content.Intent
 import android.media.RingtoneManager
@@ -95,6 +95,9 @@ import com.pulse.player.ui.components.GlowArtwork
 import com.pulse.player.ui.components.HeartButton
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.screens.layouts.AtmosphericQueuePlayerLayout
+import com.pulse.player.ui.screens.layouts.AtmosphericQueueUiState
+import com.pulse.player.ui.screens.layouts.Track as QueueTrack
 import com.pulse.player.ui.themes.AcousticDisc
 import com.pulse.player.ui.themes.MountainSunset
 import com.pulse.player.ui.themes.PlayerLayout
@@ -112,8 +115,33 @@ fun NowPlayingScreen(vm: MainViewModel) {
     val themeId by vm.playerThemeId.collectAsStateWithLifecycle()
     val theme = PlayerThemes.firstOrNull { it.id == themeId } ?: PlayerThemes[0]
 
+    if (PlayerLayoutMode.fromId(themeId) == PlayerLayoutMode.ATMOSPHERIC_QUEUE &&
+        theme.layout == PlayerLayout.ATMOSPHERIC_QUEUE
+    ) {
+        AtmosphericQueuePlayer(vm = vm, s = s, onBack = vm::closeNowPlaying)
+        return
+    }
+
     if (theme.layout == PlayerLayout.IMMERSIVE) {
         com.pulse.player.ui.theme.immersive.ImmersivePlayerLayout(
+            s = s,
+            vm = vm,
+            onBack = vm::closeNowPlaying
+        )
+        return
+    }
+
+    if (theme.layout == PlayerLayout.PIXEL) {
+        com.pulse.player.ui.theme.pixel.PixelPlayerLayout(
+            s = s,
+            vm = vm,
+            onBack = vm::closeNowPlaying
+        )
+        return
+    }
+
+    if (theme.layout == PlayerLayout.NAMIDA) {
+        com.pulse.player.ui.theme.namida.NamidaPlayerLayout(
             s = s,
             vm = vm,
             onBack = vm::closeNowPlaying
@@ -245,6 +273,91 @@ fun NowPlayingScreen(vm: MainViewModel) {
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+@Composable
+private fun AtmosphericQueuePlayer(
+    vm: MainViewModel,
+    s: PlaybackUiState,
+    onBack: () -> Unit
+) {
+    val position by vm.player.position.collectAsStateWithLifecycle()
+    val favorite by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+    val queue by vm.player.queue.collectAsStateWithLifecycle()
+    val library by vm.tracks.collectAsStateWithLifecycle()
+
+    val libraryById = remember(library) { library.associateBy { it.id } }
+    val queueTracks = remember(queue, libraryById, s.mediaId) {
+        queue.map { queued ->
+            val stored = libraryById[queued.id]
+            QueueTrack(
+                id = queued.id,
+                title = queued.title,
+                artist = queued.artist,
+                duration = when {
+                    stored != null && stored.durationMs > 0 -> formatTime(stored.durationMs)
+                    queued.durationMs > 0 -> formatTime(queued.durationMs)
+                    else -> "--:--"
+                },
+                isPlaying = queued.id == s.mediaId
+            )
+        }.ifEmpty {
+            listOfNotNull(s.mediaId?.let { id ->
+                QueueTrack(
+                    id = id,
+                    title = s.title,
+                    artist = s.artist,
+                    duration = if (s.durationMs > 0) formatTime(s.durationMs) else "--:--",
+                    isPlaying = true
+                )
+            })
+        }
+    }
+    val progress = if (s.durationMs > 0) {
+        (position.toFloat() / s.durationMs.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
+    AtmosphericQueuePlayerLayout(
+        uiState = AtmosphericQueueUiState(
+            title = s.title,
+            artist = s.artist,
+            elapsedTime = formatTime(position),
+            totalDuration = if (s.durationMs > 0) formatTime(s.durationMs) else "--:--",
+            progress = progress,
+            isPlaying = s.isPlaying,
+            isFavorite = favorite,
+            shuffleEnabled = s.shuffle,
+            repeatMode = s.repeat,
+            queue = queueTracks
+        ),
+        onPlayPauseClick = vm.player::togglePlay,
+        onPreviousClick = vm.player::previous,
+        onNextClick = vm.player::next,
+        onSeek = { fraction ->
+            if (s.durationMs > 0 && s.canSeek) vm.player.seekTo((fraction * s.durationMs).toLong())
+        },
+        onTrackSelect = { track ->
+            queue.indexOfFirst { it.id == track.id }
+                .takeIf { it >= 0 }
+                ?.let(vm.player::playAt)
+        },
+        onToggleFavorite = vm::toggleFavoriteCurrent,
+        onToggleShuffle = vm::toggleShuffle,
+        onCycleRepeat = vm::cycleRepeat,
+        onOpenTheme = { vm.go(Screen.SkinTheme) },
+        onOpenPicker = { vm.go(Screen.PlayerTheme) },
+        onCollapse = onBack,
+        onOpenMenu = vm::openTrackOptions,
+        onTrackOptions = { track ->
+            queue.firstOrNull { it.id == track.id }?.let(vm::openTrackMenu)
+        },
+        onOpenSleep = vm::openSleepSheet,
+        onAddToPlaylist = { vm.openAddToPlaylist() },
+        onOpenQueue = vm::openQueue,
+        onOpenEqualizer = { vm.go(Screen.Equalizer) }
+    )
 }
 
 @Composable

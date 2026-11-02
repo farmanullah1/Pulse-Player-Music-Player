@@ -1,4 +1,4 @@
-package com.pulse.player.ui.themes
+﻿package com.pulse.player.ui.themes
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -46,7 +46,8 @@ enum class PlayerLayout {
     STARRY,
     IMMERSIVE,
     PIXEL,
-    NAMIDA
+    NAMIDA,
+    ATMOSPHERIC_QUEUE
 }
 
 data class PlayerTheme(
@@ -68,7 +69,14 @@ val PlayerThemes = listOf(
     PlayerTheme("starry", "Starry Sky", PlayerLayout.STARRY, listOf(Color(0xFF0A1030), Color(0xFF2A3350))),
     PlayerTheme("immersive", "Immersive Artwork Player", PlayerLayout.IMMERSIVE, listOf(Color(0xFF1B1B22), Color.Black)),
     PlayerTheme("pixel", "Pixel Expressive", PlayerLayout.PIXEL, listOf(Color(0xFF295A7E), Color(0xFF132F47), Color.Black), special = true),
-    PlayerTheme("namida", "Namida Waveform", PlayerLayout.NAMIDA, listOf(Color(0xFF463E35), Color(0xFF1E1A17), Color.Black), special = true)
+    PlayerTheme("namida", "Namida Waveform", PlayerLayout.NAMIDA, listOf(Color(0xFF463E35), Color(0xFF1E1A17), Color.Black), special = true),
+    PlayerTheme(
+        "atmospheric_queue",
+        "Atmospheric Queue",
+        PlayerLayout.ATMOSPHERIC_QUEUE,
+        listOf(Color(0xFF102D2B), Color(0xFF020706)),
+        special = true
+    )
 )
 
 @Composable
@@ -96,6 +104,7 @@ fun ThemePreviewCard(
                 PlayerLayout.IMMERSIVE -> ImmersiveCardBackground(Modifier.fillMaxSize())
                 PlayerLayout.PIXEL -> PixelCardBackground(Modifier.fillMaxSize())
                 PlayerLayout.NAMIDA -> NamidaCardBackground(Modifier.fillMaxSize())
+                PlayerLayout.ATMOSPHERIC_QUEUE -> AtmosphericQueueCardBackground(Modifier.fillMaxSize())
                 else -> Unit
             }
 
@@ -220,3 +229,65 @@ private fun ImmersiveCardBackground(modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+private fun PixelCardBackground(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val barWidth = size.width * 0.12f
+        for (i in 0..6) {
+            val x = i * (size.width / 6f)
+            val h = size.height * (0.30f + (i % 3) * 0.20f)
+            drawRoundRect(
+                color = Color(0xFF295A7E).copy(alpha = 0.25f + i * 0.04f),
+                topLeft = androidx.compose.ui.geometry.Offset(x, size.height - h),
+                size = androidx.compose.ui.geometry.Size(barWidth, h),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun NamidaCardBackground(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val barCount = 12
+        val slotW = size.width / barCount.toFloat()
+        val barW = slotW * 0.6f
+        for (i in 0 until barCount) {
+            val x = i * slotW + (slotW - barW) / 2f
+            val phase = i * 0.8f
+            val sinVal = kotlin.math.sin(phase.toDouble()).toFloat()
+            val h = size.height * (0.20f + kotlin.math.abs(sinVal) * 0.60f)
+            drawRoundRect(
+                color = Color(0xFFF1D6B6).copy(alpha = 0.35f),
+                topLeft = androidx.compose.ui.geometry.Offset(x, size.height - h),
+                size = androidx.compose.ui.geometry.Size(barW, h),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AtmosphericQueueCardBackground(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        drawRect(
+            brush = Brush.verticalGradient(
+                listOf(Color(0xFF183B38), Color(0xFF071312), Color.Black)
+            )
+        )
+        for (i in 0..5) {
+            val x = size.width * (i / 5f)
+            drawLine(
+                color = Color(0xFF8EAEA0).copy(alpha = 0.18f),
+                start = androidx.compose.ui.geometry.Offset(x, size.height * 0.18f),
+                end = androidx.compose.ui.geometry.Offset(x - size.width * 0.16f, size.height),
+                strokeWidth = size.width * 0.035f
+            )
+        }
+        drawOval(
+            brush = Brush.radialGradient(listOf(Color(0xFFBBD8C8).copy(alpha = 0.18f), Color.Transparent)),
+            topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.18f, size.height * 0.10f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.65f, size.height * 0.34f)
+        )
+    }
+}

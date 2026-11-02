@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -22,9 +23,17 @@ import com.pulse.player.ui.theme.Skins
 import com.pulse.player.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.pulse.player.data.scan.audioPermission
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
+    private val firstRunPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        lifecycleScope.launch {
+            vm.settings.setAudioPermissionAsked(true)
+        }
+    }
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,12 +41,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         handleIntent(intent)
-
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
-        }
 
         // Periodic snapshot of queue & position
         lifecycleScope.launch {
@@ -66,6 +69,30 @@ class MainActivity : ComponentActivity() {
                 accent = Pulse.Cyan
             ) {
                 AppShell(vm = vm, windowSize = windowSize)
+            }
+        }
+
+        requestFirstRunPermissions()
+    }
+
+    private fun requestFirstRunPermissions() {
+        lifecycleScope.launch {
+            if (vm.settings.audioPermissionAsked()) return@launch
+
+            val permissions = buildList {
+                if (ContextCompat.checkSelfPermission(this@MainActivity, audioPermission()) != PackageManager.PERMISSION_GRANTED) {
+                    add(audioPermission())
+                }
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    add(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+            if (permissions.isEmpty()) {
+                vm.settings.setAudioPermissionAsked(true)
+            } else {
+                firstRunPermissionLauncher.launch(permissions.toTypedArray())
             }
         }
     }
