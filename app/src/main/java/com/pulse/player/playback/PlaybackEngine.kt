@@ -68,7 +68,11 @@ object PlaybackEngine {
         exo = player
         transitions = AudioTransitionController(s) { player.volume = it }
         sleep = SleepTimerEngine(s, player, transitions)
-        errors = ErrorPolicy(player)
+        errors = ErrorPolicy(player) { trackId ->
+            s.launch(Dispatchers.IO) {
+                db.tracks().markUnavailable(trackId)
+            }
+        }
         s.launch {
             errors.current.collect { errorEvents.value = it }
         }

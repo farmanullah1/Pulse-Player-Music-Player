@@ -5,7 +5,20 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
+
+data class AudioFxStatus(
+    val eqSupported: Boolean = false,
+    val bassSupported: Boolean = false,
+    val virtSupported: Boolean = false,
+    val reverbSupported: Boolean = false,
+    val sessionId: Int = 0
+)
 
 object AudioFx {
     private var eq: Equalizer? = null
@@ -17,6 +30,9 @@ object AudioFx {
     private var bassDisabled = false
     private var virtDisabled = false
     private var reverbDisabled = false
+
+    private val _status = MutableStateFlow(AudioFxStatus())
+    val status: StateFlow<AudioFxStatus> = _status.asStateFlow()
 
     var sessionId = 0
         private set
@@ -48,7 +64,15 @@ object AudioFx {
         if (!eqDisabled && isTypeAvailable(AudioEffect.EFFECT_TYPE_EQUALIZER)) {
             eq = runCatching {
                 Equalizer(0, id).apply { enabled = true }
-            }.onFailure { eqDisabled = true }.getOrNull()
+            }.onFailure {
+                eqDisabled = true
+                ErrorDispatcher.post(
+                    category = ErrorCategory.AUDIO_FX,
+                    title = "Equalizer Unsupported",
+                    message = "System hardware audio equalizer could not be initialized on this output.",
+                    technicalDetails = it.message
+                )
+            }.getOrNull()
         }
 
         if (!bassDisabled && isTypeAvailable(AudioEffect.EFFECT_TYPE_BASS_BOOST)) {
@@ -60,7 +84,15 @@ object AudioFx {
                         enabled = true
                     }
                 }
-            }.onFailure { bassDisabled = true }.getOrNull()
+            }.onFailure {
+                bassDisabled = true
+                ErrorDispatcher.post(
+                    category = ErrorCategory.AUDIO_FX,
+                    title = "Bass Boost Unsupported",
+                    message = "Hardware bass boost is not supported on this device/HAL.",
+                    technicalDetails = it.message
+                )
+            }.getOrNull()
         }
 
         if (!virtDisabled && isTypeAvailable(AudioEffect.EFFECT_TYPE_VIRTUALIZER)) {
@@ -72,7 +104,15 @@ object AudioFx {
                         enabled = true
                     }
                 }
-            }.onFailure { virtDisabled = true }.getOrNull()
+            }.onFailure {
+                virtDisabled = true
+                ErrorDispatcher.post(
+                    category = ErrorCategory.AUDIO_FX,
+                    title = "Virtualizer Unsupported",
+                    message = "Hardware audio virtualizer is not supported on this device/HAL.",
+                    technicalDetails = it.message
+                )
+            }.getOrNull()
         }
 
         if (!reverbDisabled && isTypeAvailable(AudioEffect.EFFECT_TYPE_PRESET_REVERB)) {
@@ -84,10 +124,25 @@ object AudioFx {
                         enabled = true
                     }
                 }
-            }.onFailure { reverbDisabled = true }.getOrNull()
+            }.onFailure {
+                reverbDisabled = true
+                ErrorDispatcher.post(
+                    category = ErrorCategory.AUDIO_FX,
+                    title = "Reverb Unsupported",
+                    message = "Hardware reverb is not supported on this device/HAL.",
+                    technicalDetails = it.message
+                )
+            }.getOrNull()
         }
 
         saved?.let { applySaved(it) }
+        _status.value = AudioFxStatus(
+            eqSupported = eq != null,
+            bassSupported = bass != null,
+            virtSupported = virt != null,
+            reverbSupported = reverb != null,
+            sessionId = id
+        )
     }
 
     fun release() {
@@ -97,6 +152,7 @@ object AudioFx {
         virt = null
         reverb = null
         sessionId = 0
+        _status.value = AudioFxStatus()
     }
 
     val eqSupported: Boolean get() = !eqDisabled && eq != null

@@ -11,6 +11,8 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.room.withTransaction
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.db.IdentityModel
 import com.pulse.player.data.db.PulseDb
 import com.pulse.player.data.db.ScanSeenEntity
@@ -64,7 +66,27 @@ class LibraryScanner(
 
     suspend fun scanDevice(excluded: Set<String>): ScanState = withContext(Dispatchers.IO) {
         val lastGood = settings.lastGoodScanAt()
-        fun partial(r: PartialReason) = ScanState.Partial(r, lastGood).also { _state.value = it }
+        fun partial(r: PartialReason, details: String? = null) = ScanState.Partial(r, lastGood).also {
+            _state.value = it
+            ErrorDispatcher.post(
+                category = ErrorCategory.SCAN,
+                title = when (r) {
+                    PartialReason.PermissionRevoked -> "Storage Permission Required"
+                    PartialReason.Cancelled -> "Scan Cancelled"
+                    PartialReason.QueryFailed -> "Media Scan Failed"
+                    PartialReason.EmptyResultSuspicious -> "Empty MediaScan Warning"
+                    PartialReason.StorageUnavailable -> "Storage Volume Unavailable"
+                },
+                message = when (r) {
+                    PartialReason.PermissionRevoked -> "Audio permission was not granted. Cannot scan music files."
+                    PartialReason.Cancelled -> "Media scan was cancelled."
+                    PartialReason.QueryFailed -> "Failed to query Android MediaStore."
+                    PartialReason.EmptyResultSuspicious -> "Scan found 0 tracks while tracks were previously present. Previous state retained."
+                    PartialReason.StorageUnavailable -> "External storage is not currently accessible."
+                },
+                technicalDetails = details
+            )
+        }
 
         if (ContextCompat.checkSelfPermission(ctx, audioPermission()) != PackageManager.PERMISSION_GRANTED) {
             return@withContext partial(PartialReason.PermissionRevoked)
@@ -236,13 +258,13 @@ class LibraryScanner(
             settings.setLastGoodScanAt(now)
             ScanState.Success(now, found).also { _state.value = it }
         } catch (e: CancellationException) {
-            partial(PartialReason.Cancelled)
+            partial(PartialReason.Cancelled, e.message)
             throw e
         } catch (e: SecurityException) {
-            partial(PartialReason.PermissionRevoked)
+            partial(PartialReason.PermissionRevoked, e.message)
         } catch (e: Exception) {
             Log.w("LibraryScanner", "Scan failed", e)
-            partial(PartialReason.QueryFailed)
+            partial(PartialReason.QueryFailed, e.message)
         } finally {
             withContext(NonCancellable) {
                 db.scan().clearSeen()
@@ -257,7 +279,15 @@ class LibraryScanner(
     }
 
     suspend fun scanSafTree(treeUri: Uri, minDurationMs: Long): Int = withContext(Dispatchers.IO) {
-        val root = DocumentFile.fromTreeUri(ctx, treeUri) ?: return@withContext 0
+        val root = DocumentFile.fromTreeUri(ctx, treeUri) ?: run {
+            ErrorDispatcher.post(
+                category = ErrorCategory.STORAGE,
+                title = "Folder Inaccessible",
+                message = "Could not open selected folder. Access may be revoked.",
+                technicalDetails = "TreeUri: $treeUri"
+            )
+            return@withContext 0
+        }
         var count = 0
         val batch = ArrayList<TrackEntity>()
 

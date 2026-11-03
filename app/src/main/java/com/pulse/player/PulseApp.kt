@@ -35,7 +35,6 @@ class PulseApp : Application() {
         } catch (_: Exception) {}
         db = Room.databaseBuilder(this, PulseDb::class.java, "pulse.db")
             .addMigrations(PulseDb.MIGRATION_1_2, PulseDb.MIGRATION_2_3)
-            .fallbackToDestructiveMigration()
             .build()
         settings = SettingsStore(this)
         scanner = LibraryScanner(this, db, settings)

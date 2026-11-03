@@ -21,13 +21,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Checkroom
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Widgets
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -74,8 +77,10 @@ fun SettingsScreen(vm: MainViewModel) {
     val skinId by vm.skinId.collectAsStateWithLifecycle()
     val playerThemeId by vm.playerThemeId.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
+    val missingCount by vm.missingCount.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var inputKey by remember { mutableStateOf("") }
+    var showCleanConfirmDialog by remember { mutableStateOf(false) }
 
     val safLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -375,6 +380,36 @@ fun SettingsScreen(vm: MainViewModel) {
             }
 
             item {
+                SettingsSectionHeader("System & Diagnostics")
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        SettingsActionRow(
+                            title = "Diagnostics & Error Log",
+                            subtitle = "Inspect audio hardware, effects status, permissions & error log",
+                            icon = Icons.Rounded.Build,
+                            onClick = { vm.openDiagnostics() }
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SettingsActionRow(
+                            title = "Clean Missing Tracks",
+                            subtitle = if (missingCount > 0) "$missingCount missing track(s) ready to clean" else "All tracks are reachable on storage",
+                            icon = Icons.Rounded.Delete,
+                            onClick = {
+                                if (missingCount > 0) {
+                                    showCleanConfirmDialog = true
+                                } else {
+                                    Toast.makeText(ctx, "No missing tracks found in library", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            item {
                 SettingsSectionHeader("About")
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -391,6 +426,39 @@ fun SettingsScreen(vm: MainViewModel) {
                 }
             }
         }
+    }
+
+    if (showCleanConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showCleanConfirmDialog = false },
+            title = { Text("Clean Missing Tracks?") },
+            text = {
+                Text(
+                    "This will remove $missingCount track(s) that are no longer accessible on storage from your library and playlists. Your original files on disk are not altered.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCleanConfirmDialog = false
+                        vm.cleanMissingTracks { deleted ->
+                            Toast.makeText(ctx, "Cleaned $deleted missing track(s)", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Coral)
+                ) {
+                    Text("Clean", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showCleanConfirmDialog = false }) {
+                    Text("Cancel", color = Pulse.Cyan)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     }
 }
 

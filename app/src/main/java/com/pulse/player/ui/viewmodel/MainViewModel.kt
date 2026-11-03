@@ -5,6 +5,11 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pulse.player.app
+import com.pulse.player.data.AppError
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
+import com.pulse.player.playback.AudioFx
+import com.pulse.player.playback.AudioFxStatus
 import com.pulse.player.data.backup.ArchiveBackupService
 import com.pulse.player.data.backup.ArchiveRestoreService
 import com.pulse.player.data.backup.BackupCategory
@@ -189,6 +194,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val showMissing = MutableStateFlow(false)
     fun toggleShowMissing() { showMissing.value = !showMissing.value }
+
+    // Diagnostics & Error Tracking
+    val diagnosticsOpen = MutableStateFlow(false)
+    val recentErrors: StateFlow<List<AppError>> = ErrorDispatcher.recentErrors
+    val fxStatus: StateFlow<AudioFxStatus> = AudioFx.status
+
+    fun openDiagnostics() { diagnosticsOpen.value = true }
+    fun closeDiagnostics() { diagnosticsOpen.value = false }
+    fun clearErrorLog() { ErrorDispatcher.clearLog() }
+
+    fun cleanMissingTracks(onDone: ((Int) -> Unit)? = null) = viewModelScope.launch(Dispatchers.IO) {
+        val purgedPlaylists = db.playlists().purgeMissingFromPlaylists()
+        val deleted = db.tracks().deleteMissingTracks()
+        ErrorDispatcher.post(
+            category = ErrorCategory.STORAGE,
+            title = "Missing Tracks Cleaned",
+            message = "Removed $deleted unavailable track(s) from library and $purgedPlaylists from playlists."
+        )
+        withContext(Dispatchers.Main) {
+            onDone?.invoke(deleted)
+        }
+    }
 
     // Sorting
     val sortField = MutableStateFlow(SortField.TITLE)
@@ -603,6 +630,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 inProgress = false,
                 errorMessage = "Export failed: $err"
             )
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Export Failed", "Could not export backup: $err", res.exceptionOrNull()?.stackTraceToString())
         }
     }
 
@@ -611,7 +639,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val sniffed = sniff(app, uri)
         when (sniffed) {
             Sniffed.REAL_WAV -> {
-                archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "This is a real audio file, not a backup.")
+                val msg = "This is a real audio file, not a backup."
+                archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = msg)
+                ErrorDispatcher.post(ErrorCategory.BACKUP, "Invalid Backup Format", msg, "Sniffed: REAL_WAV")
             }
             Sniffed.JSON -> {
                 archiveOperation.value = BackupOperationState(inProgress = false)
@@ -624,7 +654,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     try {
                         val sz = SafeZip(temp)
                         if (!sz.isRecognizedBackup()) {
-                            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "This ZIP is not a recognised backup.")
+                            val msg = "This ZIP is not a recognised backup."
+                            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = msg)
+                            ErrorDispatcher.post(ErrorCategory.BACKUP, "Invalid Backup Archive", msg)
                             return@launch
                         }
                         val staged = stage(app, sz)
@@ -636,11 +668,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         temp.delete()
                     }
                 } catch (e: Exception) {
-                    archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = e.message ?: "Failed to read backup archive.")
+                    val msg = e.message ?: "Failed to read backup archive."
+                    archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = msg)
+                    ErrorDispatcher.post(ErrorCategory.BACKUP, "Backup Archive Error", msg, e.stackTraceToString())
                 }
             }
             Sniffed.OTHER -> {
-                archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "This file is not a recognised backup.")
+                val msg = "This file is not a recognised backup."
+                archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = msg)
+                ErrorDispatcher.post(ErrorCategory.BACKUP, "Invalid Backup Format", msg)
             }
         }
     }
@@ -658,7 +694,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val uri = Uri.fromFile(tempFile)
             smartInspect(uri, "ManualBackup_20261028_172204175.wav")
         } catch (e: Exception) {
-            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "Could not open reference backup: ${e.message}")
+            val msg = "Could not open reference backup: ${e.message}"
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = msg)
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Sample Backup Error", msg, e.stackTraceToString())
         }
     }
 
@@ -671,7 +709,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             compatReport.value = report
             refreshStats()
         } catch (e: Exception) {
-            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = "Restore failed: ${e.message}")
+            val msg = "Restore failed: ${e.message}"
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = msg)
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Restore Failed", msg, e.stackTraceToString())
         }
     }
 

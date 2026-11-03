@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Checkroom
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Favorite
@@ -51,10 +52,17 @@ import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import com.pulse.player.data.ErrorDispatcher
+import com.pulse.player.ui.components.DiagnosticsDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,6 +96,22 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val wallpaperPath by vm.wallpaperPath.collectAsStateWithLifecycle()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val diagnosticsOpen by vm.diagnosticsOpen.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        ErrorDispatcher.events.collect { err ->
+            val result = snackbarHostState.showSnackbar(
+                message = "${err.title}: ${err.message}",
+                actionLabel = if (err.actionable) "Diagnostics" else null,
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                vm.openDiagnostics()
+            }
+        }
+    }
+
     // Sheet states
     val queueOpen by vm.queueOpen.collectAsStateWithLifecycle()
     val sleepOpen by vm.sleepOpen.collectAsStateWithLifecycle()
@@ -114,7 +138,10 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
             Box(Modifier.weight(1f)) {
                 ModalNavigationDrawer(
                     drawerContent = {
-                        PulseDrawer(vm::go) { scope.launch { drawer.close() } }
+                        PulseDrawer(
+                            onNavigate = vm::go,
+                            onDiagnostics = vm::openDiagnostics
+                        ) { scope.launch { drawer.close() } }
                     },
                     drawerState = drawer,
                     gesturesEnabled = !wide
@@ -159,6 +186,22 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                             .align(Alignment.BottomCenter)
                             .navigationBarsPadding()
                             .padding(bottom = 8.dp)
+                    )
+                }
+
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = if (ps.mediaId != null && !dock) 76.dp else 16.dp)
+                ) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        containerColor = Pulse.SurfaceCard,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        actionColor = Pulse.Cyan,
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             }
@@ -206,12 +249,16 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
         if (playerLayoutPickerOpen) {
             PlayerLayoutBottomSheet(vm)
         }
+        if (diagnosticsOpen) {
+            DiagnosticsDialog(vm = vm, onDismiss = vm::closeDiagnostics)
+        }
     }
 }
 
 @Composable
 fun PulseDrawer(
     onNavigate: (Screen) -> Unit,
+    onDiagnostics: () -> Unit = {},
     onClose: () -> Unit
 ) {
     ModalDrawerSheet(
@@ -243,6 +290,7 @@ fun PulseDrawer(
                 DrawerItemData("Monthly Recap", Icons.Rounded.History, Screen.Recap),
                 DrawerItemData("Favourites", Icons.Rounded.Favorite, Screen.Detail("system", "favorites")),
                 DrawerItemData("Backup & Transfer", Icons.Rounded.Backup, Screen.Backup),
+                DrawerItemData("Diagnostics", Icons.Rounded.Build, null) { onDiagnostics() },
                 DrawerItemData("Skin Theme", Icons.Rounded.Checkroom, Screen.SkinTheme),
                 DrawerItemData("Transcribe Audio", Icons.Rounded.Mic, Screen.Transcribe),
                 DrawerItemData("AI Music Studio", Icons.Rounded.AutoAwesome, Screen.GenerateMusic),

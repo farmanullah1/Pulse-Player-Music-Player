@@ -44,12 +44,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.playback.AudioFx
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
 
 @Composable
 fun EqualizerScreen(vm: MainViewModel) {
+    val fxStatus by vm.fxStatus.collectAsStateWithLifecycle()
     var enabled by remember { mutableStateOf(AudioFx.eqSupported) }
     var selectedPreset by remember { mutableStateOf("Normal") }
     var bassVal by remember { mutableFloatStateOf(0f) }
@@ -79,17 +81,34 @@ fun EqualizerScreen(vm: MainViewModel) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            if (!AudioFx.eqSupported && !AudioFx.bassSupported && !AudioFx.virtSupported) {
+            if (!fxStatus.eqSupported && !fxStatus.bassSupported && !fxStatus.virtSupported && !fxStatus.reverbSupported) {
                 item {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Text(
-                            text = "Audio effects are not supported on this device/emulator.",
-                            color = Pulse.TextMid,
-                            modifier = Modifier.padding(24.dp)
-                        )
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "Audio effects are unavailable on this device output or emulator HAL.",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Playback continues normally without DSP processing. You can check detailed effect status and logs in System Diagnostics.",
+                                color = Pulse.TextMid,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Button(
+                                onClick = { vm.openDiagnostics() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                            ) {
+                                Text("Open Diagnostics", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
                 return@LazyColumn
