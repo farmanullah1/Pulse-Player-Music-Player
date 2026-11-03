@@ -8,6 +8,7 @@ import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.os.Build
+import com.pulse.player.BuildConfig
 
 /**
  * Runtime capabilities registry.
@@ -105,9 +106,19 @@ class Capabilities(ctx: Context) {
      * Returns [CapabilityState.NeedsOnlineSwitch] in the `full` flavor when the master switch is OFF.
      */
     val onlineFeaturesAvailable: CapabilityState
-        // In the offline flavor, INTERNET permission is absent — online features are not in this build.
-        get() = CapabilityState.NotInBuild("offline")
-    // Note: in the `full` flavor, this is overridden to check the NetworkGateway master switch.
+        get() = if (BuildConfig.NETWORK_FEATURES_INCLUDED) {
+            CapabilityState.NeedsOnlineSwitch
+        } else {
+            CapabilityState.NotInBuild("offline")
+        }
+
+    /** Evaluate the online gate for a particular settings snapshot. */
+    fun onlineFeaturesState(onlineEnabled: Boolean, offlineOnly: Boolean): CapabilityState = when {
+        !BuildConfig.NETWORK_FEATURES_INCLUDED -> CapabilityState.NotInBuild("offline")
+        offlineOnly -> CapabilityState.Unsupported("Offline-only mode is enabled")
+        !onlineEnabled -> CapabilityState.NeedsOnlineSwitch
+        else -> CapabilityState.Available
+    }
 
     /** Crossfade engine — experimental, default OFF. */
     val crossfadeAvailable: CapabilityState =
@@ -132,7 +143,11 @@ class Capabilities(ctx: Context) {
         CapabilityState.Unsupported("Android Auto integration is not yet implemented")
 
     /** Google Cast — requires Play Services and full flavor. */
-    val castAvailable: CapabilityState = CapabilityState.NotInBuild("offline")
+    val castAvailable: CapabilityState = if (BuildConfig.NETWORK_FEATURES_INCLUDED) {
+        CapabilityState.Unsupported("Cast integration is not yet implemented")
+    } else {
+        CapabilityState.NotInBuild("offline")
+    }
 
     private fun checkAudioFx(@Suppress("SameParameterValue") contentType: Int): CapabilityState {
         return runCatching {

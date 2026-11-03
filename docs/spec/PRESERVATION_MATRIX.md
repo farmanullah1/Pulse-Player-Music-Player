@@ -98,7 +98,7 @@
 | P90 | `docs/spec/SPEC_INDEX.md` | `docs/spec/SPEC_INDEX.md` | WORKING | Updated with M0–M14 phases | Low |
 | P91 | `brain.md` development log | `brain.md` | WORKING | Updated after each phase | Low |
 | P92 | Grep gates (9 confirmed gates) | Code / CI | WORKING | Preserved and extended | Low |
-| P93 | `BNO INTERNET permission` (offline build) | `AndroidManifest.xml` | WORKING | Preserved in `offline` flavor; `full` flavor adds INTERNET (C1) | Medium (flavor split needed) |
+| P93 | `NO INTERNET permission` (offline build) | `AndroidManifest.xml` | WORKING | Preserved in `offline` flavor; `full` flavor adds INTERNET (C1) | Low (variant build still needs SDK verification) |
 | P94 | No destructive migrations | Room schema | WORKING | Preserved; schema v4 migration uses `ALTER TABLE ADD COLUMN ... DEFAULT` | Low |
 | P95 | `AudioSignalPathBadge` | `AudioSignalPathBadge.kt` | WORKING | Preserved | Low |
 | P96 | `WaveformSeekBar` component | `WaveformSeekBar.kt` | PARTIAL | Extended with full PCM decode pipeline | Medium |

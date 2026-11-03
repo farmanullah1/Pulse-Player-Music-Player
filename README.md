@@ -12,7 +12,7 @@ Built with **Kotlin**, **Jetpack Compose**, **Material 3**, **Media3**, **Room**
   <img src="https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android">
   <img src="https://img.shields.io/badge/Kotlin-2.1%2B-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin">
   <img src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
-  <img src="https://img.shields.io/badge/privacy-100%25%20offline-00C3FF?style=flat-square" alt="Offline">
+  <img src="https://img.shields.io/badge/privacy-local--first-00C3FF?style=flat-square" alt="Local first">
 </p>
 
 </div>
@@ -21,12 +21,20 @@ Built with **Kotlin**, **Jetpack Compose**, **Material 3**, **Media3**, **Room**
 
 Pulse Player combines a fast local library with expressive player screens inspired by modern Android music-player patterns. It keeps the original Pulse experience while adding selectable layouts, atmospheric visuals, powerful queue controls, and portable backups.
 
-- **No internet permission, ads, tracking, or cloud account**
+- **Offline flavor:** no internet permission, ads, tracking, or cloud account
+- **Full flavor:** optional online integrations, disabled by default; no ads or tracking
 - **Material 3 light, dark, AMOLED, and system appearance modes**
 - **Responsive phone, foldable, tablet, and large-screen layouts**
 - **Safe library scanning with MediaStore and Storage Access Framework support**
 
 ## 🎵 Features at a Glance
+
+### Build flavors
+
+| Flavor | Network behavior | Intended use |
+| --- | --- | --- |
+| `offline` | No `INTERNET` permission and no network client dependency | Complete local playback and library use |
+| `full` | Adds `INTERNET` and `ACCESS_NETWORK_STATE`; gateway and Online features switch are required before requests | Optional provider integrations |
 
 | Area | Included |
 | --- | --- |

@@ -6,6 +6,7 @@ import android.util.Log
 import com.pulse.player.data.settings.SettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -107,7 +108,13 @@ class FullNetworkGateway(
         if (settings.offlineOnlyMode.first()) {
             return Result.failure(IllegalStateException("Offline-only mode is enabled. No network request was made."))
         }
-        return runCatching { block() }
+        return try {
+            Result.success(block())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            Result.failure(failure)
+        }
     }
 
     private fun executeGenerateContent(model: String, jsonBody: String, apiKey: String): Result<String> =

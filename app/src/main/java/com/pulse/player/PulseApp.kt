@@ -42,8 +42,11 @@ open class PulseApp : Application() {
             Log.w("PulseApp", "Could not create the pre-migration database backup", e)
         }
         db = Room.databaseBuilder(this, PulseDb::class.java, "pulse.db")
-            .addMigrations(PulseDb.MIGRATION_1_2, PulseDb.MIGRATION_2_3)
-            .fallbackToDestructiveMigration()
+            .addMigrations(
+                PulseDb.MIGRATION_1_2,
+                PulseDb.MIGRATION_2_3,
+                PulseDb.MIGRATION_3_4
+            )
             .build()
         settings = SettingsStore(this)
         networkGateway = NetworkGatewayFactory.create(this, settings)
