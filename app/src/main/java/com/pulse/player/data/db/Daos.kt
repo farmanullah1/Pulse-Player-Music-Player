@@ -41,6 +41,12 @@ interface TrackDao {
     @Query("SELECT COUNT(*) FROM tracks WHERE available = 0")
     fun observeMissingCount(): Flow<Int>
 
+    @Query("UPDATE tracks SET available = 0 WHERE id = :id")
+    suspend fun markUnavailable(id: String)
+
+    @Query("DELETE FROM tracks WHERE available = 0")
+    suspend fun deleteMissingTracks(): Int
+
     @Query("SELECT * FROM tracks WHERE id IN (:ids)")
     suspend fun byIds(ids: List<String>): List<TrackEntity>
 
@@ -287,6 +293,9 @@ interface PlaylistDao {
 
     @Query("SELECT trackId FROM playlist_tracks WHERE playlistId = :id ORDER BY position")
     suspend fun trackIds(id: Long): List<String>
+
+    @Query("DELETE FROM playlist_tracks WHERE trackId IN (SELECT id FROM tracks WHERE available = 0)")
+    suspend fun purgeMissingFromPlaylists(): Int
 
     @Transaction
     suspend fun delete(id: Long) {

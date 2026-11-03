@@ -2,10 +2,15 @@ package com.pulse.player.playback
 
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class ErrorPolicy(private val raw: Player) {
+class ErrorPolicy(
+    private val raw: Player,
+    private val onMarkUnavailable: ((String) -> Unit)? = null
+) {
     enum class Category { MISSING_FILE, NO_PERMISSION, UNSUPPORTED, OTHER }
     data class TrackError(val mediaId: String?, val title: String, val category: Category, val message: String)
 
@@ -27,6 +32,7 @@ class ErrorPolicy(private val raw: Player) {
     fun onError(e: PlaybackException) {
         val item = raw.currentMediaItem
         val id = item?.mediaId ?: "?"
+        val title = item?.mediaMetadata?.title?.toString().orEmpty().ifBlank { "Current track" }
         val cat = category(e)
         val n = retries.getOrDefault(id, 0)
 
@@ -37,18 +43,33 @@ class ErrorPolicy(private val raw: Player) {
             return
         }
 
+        val userMessage = when (cat) {
+            Category.MISSING_FILE -> "This file can't be found. It may have been moved or removed."
+            Category.NO_PERMISSION -> "Pulse Player can't read this file. Check audio permission."
+            Category.UNSUPPORTED -> "This format can't be played on this device."
+            Category.OTHER -> "This track failed to play (${e.message ?: "Playback error"})."
+        }
+
+        // Mark unavailable in database
+        if (cat == Category.MISSING_FILE || cat == Category.UNSUPPORTED) {
+            onMarkUnavailable?.invoke(id)
+        }
+
+        // Dispatch app-wide error
+        ErrorDispatcher.post(
+            category = ErrorCategory.PLAYBACK,
+            title = if (cat == Category.MISSING_FILE) "Track Missing" else "Playback Error",
+            message = "$title: $userMessage",
+            technicalDetails = "Code: ${PlaybackException.getErrorCodeName(e.errorCode)} (${e.errorCode}) - ${e.message}"
+        )
+
         raw.pause()
         if (PlaybackEngine.isAttached()) PlaybackEngine.transitions.restore()
         _current.value = TrackError(
             mediaId = id,
-            title = item?.mediaMetadata?.title?.toString().orEmpty(),
+            title = title,
             category = cat,
-            message = when (cat) {
-                Category.MISSING_FILE -> "This file can't be found. It may have been moved or the SD card removed."
-                Category.NO_PERMISSION -> "Pulse Player can't read this file. Check the audio permission."
-                Category.UNSUPPORTED -> "This format can't be played on this device."
-                Category.OTHER -> "This track failed to play."
-            }
+            message = userMessage
         )
     }
 
