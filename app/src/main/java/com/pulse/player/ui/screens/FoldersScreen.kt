@@ -65,11 +65,11 @@ fun FoldersScreen(vm: MainViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${folders.size} Folders", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("${folders.size} Folders", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Button(
                     onClick = { safLauncher.launch(null) },
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Elevated, contentColor = Pulse.Cyan)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = Pulse.Cyan)
                 ) {
                     Icon(Icons.Rounded.FolderOpen, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -114,7 +114,7 @@ fun FoldersScreen(vm: MainViewModel) {
                         Text(
                             text = folderName.substringAfterLast('/'),
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "$count songs · $folderName",

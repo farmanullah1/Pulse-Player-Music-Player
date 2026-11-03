@@ -80,7 +80,7 @@ fun QueueSheet(vm: MainViewModel) {
     ModalBottomSheet(
         onDismissRequest = { vm.closeQueue() },
         sheetState = sheetState,
-        containerColor = Pulse.Surface
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             Modifier
@@ -95,7 +95,7 @@ fun QueueSheet(vm: MainViewModel) {
                 Text(
                     text = "Play Queue (${queue.size})",
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 if (queue.isNotEmpty()) {
                     TextButton(onClick = { vm.player.clearQueue() }) {
@@ -180,7 +180,7 @@ fun SleepSheet(vm: MainViewModel) {
     ModalBottomSheet(
         onDismissRequest = { vm.closeSleepSheet() },
         sheetState = sheetState,
-        containerColor = Pulse.Surface
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             Modifier
@@ -188,7 +188,7 @@ fun SleepSheet(vm: MainViewModel) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Sleep Timer", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Sleep Timer", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             if (ps.sleepRemainingMs > 0) {
                 Text(
                     text = "Timer active: ${formatTime(ps.sleepRemainingMs)} remaining",
@@ -227,7 +227,7 @@ fun SleepSheet(vm: MainViewModel) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Start Timer (${customMin.toInt()} min)", fontWeight = FontWeight.Bold)
                 }
@@ -240,7 +240,7 @@ fun SleepSheet(vm: MainViewModel) {
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Elevated, contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = Color.White)
             ) {
                 Text("Stop after this track")
             }
@@ -272,7 +272,7 @@ fun AddToPlaylistSheet(vm: MainViewModel, track: Track) {
     ModalBottomSheet(
         onDismissRequest = { vm.closeAddToPlaylist() },
         sheetState = sheetState,
-        containerColor = Pulse.Surface
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             Modifier
@@ -284,7 +284,7 @@ fun AddToPlaylistSheet(vm: MainViewModel, track: Track) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Add to Playlist", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Add to Playlist", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 TextButton(onClick = {
                     vm.closeAddToPlaylist()
                     vm.createPlaylistOpen.value = true
@@ -312,7 +312,7 @@ fun AddToPlaylistSheet(vm: MainViewModel, track: Track) {
                         ) {
                             Icon(Icons.Rounded.PlaylistAdd, null, tint = Pulse.Cyan)
                             Spacer(Modifier.width(16.dp))
-                            Text(p.name, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                            Text(p.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -330,7 +330,7 @@ fun TrackMenuSheet(vm: MainViewModel, track: Track) {
     ModalBottomSheet(
         onDismissRequest = { vm.closeTrackMenu() },
         sheetState = sheetState,
-        containerColor = Pulse.Surface
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             Modifier
@@ -341,7 +341,7 @@ fun TrackMenuSheet(vm: MainViewModel, track: Track) {
                 Artwork(track.uri, 48.dp, radius = 10.dp, px = 128)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Text("${track.artist} · ${track.album}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                 }
             }
@@ -391,9 +391,9 @@ fun TrackMenuSheet(vm: MainViewModel, track: Track) {
                         .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(16.dp))
-                    Text(label, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -405,8 +405,8 @@ fun CreatePlaylistDialog(vm: MainViewModel) {
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = { vm.createPlaylistOpen.value = false },
-        containerColor = Pulse.Surface,
-        title = { Text("New Playlist", color = Color.White) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = { Text("New Playlist", color = MaterialTheme.colorScheme.onSurface) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -421,7 +421,7 @@ fun CreatePlaylistDialog(vm: MainViewModel) {
                     vm.createPlaylist(name)
                     vm.createPlaylistOpen.value = false
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 Text("Create")
             }
@@ -443,12 +443,12 @@ fun ImportPreviewDialog(vm: MainViewModel, preview: FavoritesRepository.Preview)
 
     AlertDialog(
         onDismissRequest = { vm.importPreview.value = null },
-        containerColor = Pulse.Surface,
-        title = { Text("Import Favourites", color = Color.White) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = { Text("Import Favourites", color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("File: ${preview.fileName}", color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall)
-                Text("Total items in file: ${preview.results.size}", color = Color.White)
+                Text("Total items in file: ${preview.results.size}", color = MaterialTheme.colorScheme.onSurface)
                 Text("• Ready to match: $confidentCount", color = Pulse.Cyan)
                 if (alreadyCount > 0) Text("• Already favourite: $alreadyCount", color = Pulse.TextMid)
                 if (missingCount > 0) Text("• Not found on device: $missingCount", color = Pulse.TextLow)
@@ -456,14 +456,14 @@ fun ImportPreviewDialog(vm: MainViewModel, preview: FavoritesRepository.Preview)
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.Checkbox(checked = replace, onCheckedChange = { replace = it })
-                    Text("Replace existing favourites", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                    Text("Replace existing favourites", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = { vm.applyImport(preview, emptyMap(), replace) },
-                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
             ) {
                 Text("Apply Import")
             }
@@ -480,11 +480,11 @@ fun ImportPreviewDialog(vm: MainViewModel, preview: FavoritesRepository.Preview)
 fun SongDetailsDialog(track: Track, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Pulse.Surface,
-        title = { Text("Song Details", color = Color.White) },
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = { Text("Song Details", color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Title: ${track.title}", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Title: ${track.title}", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                 Text("Artist: ${track.artist}", color = Pulse.TextMid)
                 Text("Album: ${track.album}", color = Pulse.TextMid)
                 if (track.durationMs > 0) Text("Duration: ${formatTime(track.durationMs)}", color = Pulse.TextMid)

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -161,7 +162,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                 NowPlayingPanel(
                     vm = vm,
                     modifier = Modifier
-                        .width(380.dp)
+                        .widthIn(min = 320.dp, max = 420.dp)
                         .fillMaxHeight()
                 )
             }
@@ -206,7 +207,7 @@ fun PulseDrawer(
     onClose: () -> Unit
 ) {
     ModalDrawerSheet(
-        drawerContainerColor = Pulse.Surface,
+        drawerContainerColor = MaterialTheme.colorScheme.surface,
         drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
     ) {
         Column(
@@ -222,7 +223,7 @@ fun PulseDrawer(
                     "Pulse Player",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Spacer(Modifier.height(24.dp))
@@ -242,7 +243,7 @@ fun PulseDrawer(
 
             items.forEach { item ->
                 NavigationDrawerItem(
-                    label = { Text(item.label, color = Color.White) },
+                    label = { Text(item.label, color = MaterialTheme.colorScheme.onSurface) },
                     icon = { Icon(item.icon, null, tint = Pulse.Cyan) },
                     selected = false,
                     onClick = {
@@ -250,7 +251,9 @@ fun PulseDrawer(
                         item.screen?.let(onNavigate) ?: item.customAction?.invoke()
                     },
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = Color.Transparent
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unselectedIconColor = Pulse.Cyan
                     )
                 )
             }
@@ -271,8 +274,8 @@ fun PulseRail(
     onNavigate: (Screen) -> Unit
 ) {
     NavigationRail(
-        containerColor = Pulse.Surface,
-        contentColor = Color.White
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Spacer(Modifier.height(16.dp))
         NavigationRailItem(

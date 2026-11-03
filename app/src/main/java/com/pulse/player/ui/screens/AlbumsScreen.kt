@@ -53,7 +53,7 @@ fun AlbumsScreen(vm: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
-            Text("${albums.size} Albums", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("${albums.size} Albums", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         }
 
         if (albums.isEmpty()) {
@@ -89,7 +89,7 @@ fun AlbumsScreen(vm: MainViewModel) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "${album.artist} · ${album.count} songs",

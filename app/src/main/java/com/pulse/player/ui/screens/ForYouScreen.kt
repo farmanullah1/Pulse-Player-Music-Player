@@ -247,7 +247,7 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = track.artist,
@@ -261,13 +261,13 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(Color.White),
+                     .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,
                     contentDescription = "Play",
-                    tint = Color.Black,
+                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -319,7 +319,7 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
             Text(
                 text = if (scanning) "Scanning your music library…" else "Your music library is empty",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
             Text(
@@ -345,7 +345,10 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
                 enabled = !scanning,
-                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
                 Icon(Icons.Rounded.PlayArrow, null)
                 Spacer(Modifier.width(8.dp))
@@ -363,7 +366,10 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
                 enabled = !scanning,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
             ) {
                 Icon(Icons.Rounded.Refresh, null)
                 Spacer(Modifier.width(8.dp))
@@ -377,7 +383,7 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
             ) {
                 Icon(Icons.Rounded.FolderOpen, null, tint = Pulse.Cyan)
                 Spacer(Modifier.width(8.dp))
-                Text("Choose Music Folder", color = Color.White)
+                Text("Choose Music Folder", color = MaterialTheme.colorScheme.onSurface)
             }
         }
     }

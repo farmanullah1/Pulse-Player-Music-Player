@@ -78,7 +78,7 @@ fun LyricsContent(
             ) {
                 Text(
                     text = "No lyrics for this song",
-                    color = Color.White.copy(0.8f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(0.8f),
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(Modifier.height(16.dp))
@@ -112,7 +112,7 @@ fun LyricsContent(
                             .fillMaxWidth()
                             .padding(horizontal = 28.dp, vertical = 8.dp),
                         textAlign = TextAlign.Center,
-                        color = if (i == active) Color.White else Color.White.copy(0.45f),
+                        color = if (i == active) Color.White else MaterialTheme.colorScheme.onSurface.copy(0.45f),
                         fontSize = if (i == active) 22.sp else 18.sp,
                         fontWeight = if (i == active) FontWeight.Bold else FontWeight.Normal
                     )
@@ -124,7 +124,7 @@ fun LyricsContent(
                 item {
                     Text(
                         text = lyrics.text,
-                        color = Color.White.copy(0.9f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(0.9f),
                         lineHeight = 26.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -153,7 +153,7 @@ fun ErrorCard(
         ) {
             Text(
                 text = error,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
@@ -202,8 +202,8 @@ fun Foreground(
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Pulse.Orange,
                     selectedLabelColor = Color.White,
-                    containerColor = Color.White.copy(0.12f),
-                    labelColor = Color.White.copy(0.8f)
+                    containerColor = MaterialTheme.colorScheme.onSurface.copy(0.12f),
+                    labelColor = MaterialTheme.colorScheme.onSurface.copy(0.8f)
                 )
             )
             FilterChip(
@@ -213,8 +213,8 @@ fun Foreground(
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Pulse.Orange,
                     selectedLabelColor = Color.White,
-                    containerColor = Color.White.copy(0.12f),
-                    labelColor = Color.White.copy(0.8f)
+                    containerColor = MaterialTheme.colorScheme.onSurface.copy(0.12f),
+                    labelColor = MaterialTheme.colorScheme.onSurface.copy(0.8f)
                 )
             )
         }

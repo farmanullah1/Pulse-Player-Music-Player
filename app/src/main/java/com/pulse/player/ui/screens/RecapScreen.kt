@@ -120,10 +120,10 @@ fun RecapScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = vm::back) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
-            Text("Monthly Recap", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Monthly Recap", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         }
 
         Row(
@@ -134,7 +134,7 @@ fun RecapScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { currentMonth = currentMonth.minusMonths(1) }) {
-                Icon(Icons.Rounded.ChevronLeft, "Previous month", tint = Color.White)
+                Icon(Icons.Rounded.ChevronLeft, "Previous month", tint = MaterialTheme.colorScheme.onSurface)
             }
             Text(
                 text = currentMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
@@ -143,7 +143,7 @@ fun RecapScreen(vm: MainViewModel) {
                 color = Pulse.Cyan
             )
             IconButton(onClick = { currentMonth = currentMonth.plusMonths(1) }) {
-                Icon(Icons.Rounded.ChevronRight, "Next month", tint = Color.White)
+                Icon(Icons.Rounded.ChevronRight, "Next month", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
 
@@ -171,7 +171,7 @@ fun RecapScreen(vm: MainViewModel) {
                     Text(
                         "No listening history for this month",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center
                     )
                     Text(
@@ -190,7 +190,7 @@ fun RecapScreen(vm: MainViewModel) {
             ) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
@@ -208,7 +208,7 @@ fun RecapScreen(vm: MainViewModel) {
                                 text = if (hours > 0) "$hours h $minutes min" else "$minutes minutes",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             if (streak > 0) {
                                 Spacer(Modifier.height(8.dp))
@@ -225,7 +225,7 @@ fun RecapScreen(vm: MainViewModel) {
 
                 if (r.badges.isNotEmpty()) {
                     item {
-                        Text("Badges Earned", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Badges Earned", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             r.badges.forEach { badge ->
@@ -236,9 +236,9 @@ fun RecapScreen(vm: MainViewModel) {
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Rounded.WorkspacePremium, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Rounded.WorkspacePremium, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text(badge, style = MaterialTheme.typography.bodySmall, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text(badge, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -248,7 +248,7 @@ fun RecapScreen(vm: MainViewModel) {
 
                 if (r.topTracks.isNotEmpty()) {
                     item {
-                        Text("Top Songs", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Top Songs", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                     itemsIndexed(r.topTracks) { idx, (track, plays) ->
                         Row(
@@ -261,7 +261,7 @@ fun RecapScreen(vm: MainViewModel) {
                             Artwork(track.uri, 44.dp, radius = 8.dp, px = 128)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(track.title, maxLines = 1, color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(track.title, maxLines = 1, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                                 Text("${track.artist} · $plays plays", maxLines = 1, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -270,7 +270,7 @@ fun RecapScreen(vm: MainViewModel) {
 
                 if (r.topArtists.isNotEmpty()) {
                     item {
-                        Text("Top Artists", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Top Artists", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
                     itemsIndexed(r.topArtists) { idx, artistStat ->
                         Row(
@@ -281,7 +281,7 @@ fun RecapScreen(vm: MainViewModel) {
                         ) {
                             Text("${idx + 1}", fontWeight = FontWeight.Bold, color = Pulse.Cyan, modifier = Modifier.width(28.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(artistStat.artist, maxLines = 1, color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(artistStat.artist, maxLines = 1, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                                 Text("${artistStat.plays} plays", maxLines = 1, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -316,7 +316,7 @@ fun RecapScreen(vm: MainViewModel) {
                             .fillMaxWidth()
                             .padding(vertical = 12.dp),
                         shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
                     ) {
                         Icon(Icons.Rounded.Share, null)
                         Spacer(Modifier.width(8.dp))

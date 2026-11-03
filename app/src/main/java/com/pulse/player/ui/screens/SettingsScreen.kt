@@ -93,10 +93,10 @@ fun SettingsScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { vm.back() }) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
-            Text("Settings", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Settings", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         }
 
         LazyColumn(
@@ -107,11 +107,11 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("Appearance")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Theme Mode", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Theme Mode", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ThemeMode.entries.forEach { mode ->
                                 FilterChip(
@@ -139,7 +139,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Reduced Motion", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Reduced Motion", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text("Disables spinning disc, visualizer bars, and infinite animations", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                             }
                             Switch(
@@ -155,7 +155,7 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("Library")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -175,7 +175,7 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("Playback")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -185,7 +185,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Audio Fades", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Audio Fades", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text("Smooth volume ramp on play/pause", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                             }
                             Switch(
@@ -202,7 +202,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Playback Speed", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Playback Speed", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text(
                                     "%.2fx".format(playerState.speed),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -233,7 +233,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Lock Pitch", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Lock Pitch", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text("Preserve natural voice pitch when altering speed", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                             }
                             Switch(
@@ -250,7 +250,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Stop After Current Track", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Stop After Current Track", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text("Pause playback automatically when current song finishes", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                             }
                             Switch(
@@ -269,7 +269,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Skip Silence", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Skip Silence", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text("Skip silent passages seamlessly during playback", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                             }
                             Switch(
@@ -289,7 +289,7 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("Backup & Transfer")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp)) {
@@ -303,14 +303,14 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("Widgets")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Widgets, null, tint = Pulse.Cyan)
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text("Home Screen Widget", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Home Screen Widget", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             Text("Long-press home screen → Widgets → Pulse Player. Supports 2x2, 4x1, and 4x2 responsive layouts.", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                         }
                     }
@@ -320,7 +320,7 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("AI Features & Studio")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -332,7 +332,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         }
 
                         Spacer(Modifier.height(4.dp))
-                        Text("Gemini API Key", style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Gemini API Key", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                         Text(
                             "Required for audio transcription and Lyria music generation. Can also be set as GEMINI_API_KEY in the AI Studio Secrets panel.",
                             style = MaterialTheme.typography.bodySmall,
@@ -377,14 +377,14 @@ fun SettingsScreen(vm: MainViewModel) {
             item {
                 SettingsSectionHeader("About")
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Info, null, tint = Pulse.Cyan)
                             Spacer(Modifier.width(12.dp))
-                            Text("Pulse Player v1.0.0", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Pulse Player v1.0.0", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         }
                         Text("100% Offline Music Player for Android. Zero internet permission, zero tracking, zero ads. Built with Jetpack Compose & Media3.", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                     }
@@ -409,9 +409,9 @@ fun SettingsNavRow(title: String, icon: ImageVector, onClick: () -> Unit) {
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
-        Text(title, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -425,10 +425,10 @@ fun SettingsActionRow(title: String, subtitle: String, icon: ImageVector, onClic
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
         Column {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
         }
     }

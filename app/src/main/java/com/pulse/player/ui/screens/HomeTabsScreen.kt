@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
@@ -50,7 +51,7 @@ fun HomeTabsScreen(
         ) {
             if (showMenu) {
                 IconButton(onClick = onMenu) {
-                    Icon(Icons.Rounded.Menu, "Open navigation menu", tint = Color.White)
+                    Icon(Icons.Rounded.Menu, "Open navigation menu", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
             ScrollableTabRow(
@@ -74,7 +75,7 @@ fun HomeTabsScreen(
                             Text(
                                 text = tabTitle,
                                 fontWeight = if (pager.currentPage == index) FontWeight.Bold else FontWeight.Medium,
-                                color = if (pager.currentPage == index) Color.White else Pulse.TextMid
+                                 color = if (pager.currentPage == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     )
@@ -82,13 +83,13 @@ fun HomeTabsScreen(
             }
 
             IconButton(onClick = { vm.go(Screen.SkinTheme) }) {
-                Icon(Icons.Rounded.AutoAwesome, "Skin theme", tint = Color.White)
+                Icon(Icons.Rounded.AutoAwesome, "Skin theme", tint = MaterialTheme.colorScheme.onSurface)
             }
             IconButton(onClick = { vm.go(Screen.Search) }) {
-                Icon(Icons.Rounded.Search, "Search", tint = Color.White)
+                Icon(Icons.Rounded.Search, "Search", tint = MaterialTheme.colorScheme.onSurface)
             }
             IconButton(onClick = { vm.go(Screen.Settings) }) {
-                Icon(Icons.Rounded.Settings, "Settings", tint = Color.White)
+                Icon(Icons.Rounded.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
 

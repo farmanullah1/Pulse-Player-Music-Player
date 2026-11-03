@@ -74,6 +74,7 @@ fun Modifier.interactionSource(s: MutableInteractionSource): Modifier =
 
 fun Modifier.pressScale(enabled: Boolean = true): Modifier = composed {
     val reduced = LocalReducedMotion.current
+    val scrim = Color.Black.copy(alpha = 0.85f)
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val s by animateFloatAsState(
@@ -97,6 +98,7 @@ fun AuroraBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val reduced = LocalReducedMotion.current
+    val scrim = Color.Black.copy(alpha = 0.85f)
     val t by if (reduced) {
         remember { mutableFloatStateOf(0f) }
     } else {
@@ -115,7 +117,7 @@ fun AuroraBackground(
 
     Box(
         modifier = modifier
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.background)
             .drawBehind {
                 val w = size.width
                 val h = size.height
@@ -138,7 +140,7 @@ fun AuroraBackground(
                     )
                     drawRect(
                         brush = Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black),
+                            colors = listOf(Color.Transparent, scrim),
                             startY = h * 0.55f
                         )
                     )
@@ -197,9 +199,9 @@ fun GradientPill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        Icon(icon, null, tint = Color.White)
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimary)
         Spacer(Modifier.width(8.dp))
-        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(text, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -273,8 +275,8 @@ fun PillButton(
         modifier = modifier.height(48.dp),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color.White,
-            contentColor = Color.Black
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         )
     ) {
         Icon(icon, null, Modifier.size(20.dp))
@@ -305,7 +307,7 @@ fun WidgetTile(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.9f),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(24.dp)
@@ -314,18 +316,18 @@ fun WidgetTile(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.85f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
             )
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White
+                color = MaterialTheme.colorScheme.onSurface
             )
             subtitle?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = Color.White.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                 )
             }
         }
@@ -351,7 +353,7 @@ fun SquareCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = t.artist,
@@ -371,7 +373,7 @@ fun SectionHeader(
     onAction: () -> Unit = {}
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text, style = MaterialTheme.typography.titleLarge, color = Color.White)
+        Text(text, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         badge?.let {
             Spacer(Modifier.width(8.dp))
             Box(
@@ -380,7 +382,7 @@ fun SectionHeader(
                     .background(Pulse.Magenta)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
             }
         }
         Spacer(Modifier.weight(1f))

@@ -52,7 +52,7 @@ fun ArtistsScreen(vm: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text("${artists.size} Artists", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("${artists.size} Artists", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         }
 
         if (artists.isEmpty()) {
@@ -87,7 +87,7 @@ fun ArtistsScreen(vm: MainViewModel) {
                             text = initial.toString(),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     Spacer(Modifier.width(16.dp))
@@ -95,7 +95,7 @@ fun ArtistsScreen(vm: MainViewModel) {
                         Text(
                             text = artist.name,
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "${artist.trackCount} songs · ${artist.albumCount} albums",

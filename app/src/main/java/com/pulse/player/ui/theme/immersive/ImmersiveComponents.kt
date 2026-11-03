@@ -129,17 +129,17 @@ fun PlayerTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-            Icon(PulseIcons.ChevronDown, contentDescription = "Close player", tint = Color.White)
+            Icon(PulseIcons.ChevronDown, contentDescription = "Close player", tint = MaterialTheme.colorScheme.onSurface)
         }
         Text(
             text = "Now playing",
             modifier = Modifier.weight(1f),
-            color = Color.White.copy(0.85f),
+            color = MaterialTheme.colorScheme.onSurface.copy(0.85f),
             style = MaterialTheme.typography.labelLarge,
             textAlign = TextAlign.Center
         )
         IconButton(onClick = onMore, modifier = Modifier.size(48.dp)) {
-            Icon(PulseIcons.MoreVert, contentDescription = "More options", tint = Color.White)
+            Icon(PulseIcons.MoreVert, contentDescription = "More options", tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -163,7 +163,7 @@ fun SongInformation(
                 Icon(
                     PulseIcons.Shuffle,
                     contentDescription = if (s.shuffle) "Shuffle on" else "Shuffle off",
-                    tint = if (s.shuffle) Pulse.Orange else Color.White.copy(0.8f)
+                    tint = if (s.shuffle) Pulse.Orange else MaterialTheme.colorScheme.onSurface.copy(0.8f)
                 )
             }
             Text(
@@ -178,7 +178,7 @@ fun SongInformation(
                             velocity = 36.dp
                         )
                     ),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 maxLines = 1,
                 overflow = if (reducedMotion) TextOverflow.Ellipsis else TextOverflow.Clip,
@@ -188,13 +188,13 @@ fun SongInformation(
                 Icon(
                     if (s.repeat == Player.REPEAT_MODE_ONE) PulseIcons.RepeatOne else PulseIcons.Repeat,
                     contentDescription = "Repeat ${repeatLabel(s.repeat)}",
-                    tint = if (s.repeat != Player.REPEAT_MODE_OFF) Pulse.Orange else Color.White.copy(0.8f)
+                    tint = if (s.repeat != Player.REPEAT_MODE_OFF) Pulse.Orange else MaterialTheme.colorScheme.onSurface.copy(0.8f)
                 )
             }
         }
         Text(
             text = listOf(s.artist, s.album).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Unknown artist" },
-            color = Color.White.copy(0.7f),
+            color = MaterialTheme.colorScheme.onSurface.copy(0.7f),
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -227,9 +227,9 @@ fun PlaybackSeekBar(
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
                 activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(0.25f),
-                disabledThumbColor = Color.White.copy(0.5f),
-                disabledActiveTrackColor = Color.White.copy(0.35f)
+                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(0.25f),
+                disabledThumbColor = MaterialTheme.colorScheme.onSurface.copy(0.5f),
+                disabledActiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(0.35f)
             ),
             modifier = Modifier.semantics {
                 stateDescription = "${fmt(p)} of ${if (dur > 0) fmt(dur) else "unknown length"}"
@@ -238,13 +238,13 @@ fun PlaybackSeekBar(
         Row(Modifier.fillMaxWidth()) {
             Text(
                 text = fmt(((drag ?: frac) * dur).toLong().takeIf { dur > 0 } ?: p),
-                color = Color.White.copy(0.8f),
+                color = MaterialTheme.colorScheme.onSurface.copy(0.8f),
                 style = MaterialTheme.typography.labelMedium
             )
             Spacer(Modifier.weight(1f))
             Text(
                 text = if (dur > 0) fmt(dur) else "--:--",
-                color = Color.White.copy(0.8f),
+                color = MaterialTheme.colorScheme.onSurface.copy(0.8f),
                 style = MaterialTheme.typography.labelMedium
             )
         }
@@ -270,10 +270,10 @@ fun PrimaryPlaybackControls(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onPrev, modifier = Modifier.size(56.dp)) {
-            Icon(PulseIcons.SkipPrevious, contentDescription = "Previous song", modifier = Modifier.size(34.dp), tint = Color.White)
+            Icon(PulseIcons.SkipPrevious, contentDescription = "Previous song", modifier = Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = onBack10, modifier = Modifier.size(48.dp), enabled = canSeek) {
-            Icon(PulseIcons.Replay10, contentDescription = "Back 10 seconds", modifier = Modifier.size(28.dp), tint = Color.White.copy(if (canSeek) 0.9f else 0.35f))
+            Icon(PulseIcons.Replay10, contentDescription = "Back 10 seconds", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurface.copy(if (canSeek) 0.9f else 0.35f))
         }
         Box(
             modifier = Modifier
@@ -304,10 +304,10 @@ fun PrimaryPlaybackControls(
             }
         }
         IconButton(onClick = onFwd10, modifier = Modifier.size(48.dp), enabled = canSeek) {
-            Icon(PulseIcons.Forward10, contentDescription = "Forward 10 seconds", modifier = Modifier.size(28.dp), tint = Color.White.copy(if (canSeek) 0.9f else 0.35f))
+            Icon(PulseIcons.Forward10, contentDescription = "Forward 10 seconds", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurface.copy(if (canSeek) 0.9f else 0.35f))
         }
         IconButton(onClick = onNext, modifier = Modifier.size(56.dp)) {
-            Icon(PulseIcons.SkipNext, contentDescription = "Next song", modifier = Modifier.size(34.dp), tint = Color.White)
+            Icon(PulseIcons.SkipNext, contentDescription = "Next song", modifier = Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -344,19 +344,19 @@ fun SecondaryPlayerActions(
         ActionIcon(
             icon = PulseIcons.PlaylistAdd,
             label = "Add to playlist",
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onSurface,
             onClick = onAddToPlaylist
         )
         ActionIcon(
             icon = PulseIcons.Queue,
             label = "Open queue",
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onSurface,
             onClick = onQueue
         )
         ActionIcon(
             icon = PulseIcons.Tune,
             label = "Equalizer and sound",
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onSurface,
             onClick = onTune
         )
     }

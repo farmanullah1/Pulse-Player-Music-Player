@@ -70,10 +70,10 @@ fun PlayerThemeScreen(vm: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = vm::back) {
-                    Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 Spacer(Modifier.width(8.dp))
-                Text("Player theme", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Player theme", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             }
 
             HorizontalPager(
@@ -105,7 +105,7 @@ fun PlayerThemeScreen(vm: MainViewModel) {
                     .widthIn(min = 220.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isUsing) Color.White.copy(0.18f) else Pulse.Orange,
+                    containerColor = if (isUsing) MaterialTheme.colorScheme.onSurface.copy(0.18f) else Pulse.Orange,
                     contentColor = Color.White
                 )
             ) {

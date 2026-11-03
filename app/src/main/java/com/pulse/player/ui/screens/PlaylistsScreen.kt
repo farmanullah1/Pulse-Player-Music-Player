@@ -63,7 +63,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             item {
-                Text("System Playlists", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("System Playlists", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             }
 
             item {
@@ -114,7 +114,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
             val hasSmart = neverPlayed.isNotEmpty() || forgottenFavs.isNotEmpty() || longTracks.isNotEmpty()
             if (hasSmart) {
                 item {
-                    Text("Smart Playlists", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                    Text("Smart Playlists", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 }
 
                 item {
@@ -162,7 +162,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("My Playlists (${playlists.size})", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                    Text("My Playlists (${playlists.size})", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
@@ -199,7 +199,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(playlist.name, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                            Text(playlist.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                             Text("Playlist", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                         }
                         IconButton(onClick = { vm.deletePlaylist(playlist.id) }) {
@@ -216,7 +216,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 76.dp, end = 20.dp),
             containerColor = Pulse.Cyan,
-            contentColor = Color.Black
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
             Icon(Icons.Rounded.Add, "New playlist")
         }
@@ -243,14 +243,14 @@ fun SystemPlaylistCard(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(28.dp)
         )
         Column(Modifier.align(Alignment.BottomStart)) {
-            Text(title, fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.85f))
+            Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(0.85f))
         }
     }
 }

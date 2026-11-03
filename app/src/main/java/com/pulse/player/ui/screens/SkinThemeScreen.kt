@@ -90,10 +90,10 @@ fun SkinThemeScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = vm::back) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
-            Text("Skin & Wallpaper", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Skin & Wallpaper", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
         }
 
         LazyColumn(
@@ -102,7 +102,7 @@ fun SkinThemeScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
-                Text("Color Skins", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Color Skins", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(12.dp))
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(64.dp),
@@ -128,7 +128,7 @@ fun SkinThemeScreen(vm: MainViewModel) {
                             contentAlignment = Alignment.Center
                         ) {
                             if (isSelected) {
-                                Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -136,7 +136,7 @@ fun SkinThemeScreen(vm: MainViewModel) {
             }
 
             item {
-                Text("Procedural Wallpapers", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Procedural Wallpapers", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -170,7 +170,7 @@ fun SkinThemeScreen(vm: MainViewModel) {
             }
 
             item {
-                Text("Custom Wallpaper", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Custom Wallpaper", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(12.dp))
                 Card(
                     modifier = Modifier
@@ -180,7 +180,7 @@ fun SkinThemeScreen(vm: MainViewModel) {
                         .clickable {
                             picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         },
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Row(
                         modifier = Modifier
@@ -199,7 +199,7 @@ fun SkinThemeScreen(vm: MainViewModel) {
                         }
                         Spacer(Modifier.width(16.dp))
                         Column {
-                            Text("Choose from gallery", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Choose from gallery", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             Text("Applies as backdrop with AMOLED dimming", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
                         }
                     }
@@ -248,6 +248,6 @@ fun WallpaperThumb(
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text(name, style = MaterialTheme.typography.bodySmall, color = Color.White)
+        Text(name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
     }
 }

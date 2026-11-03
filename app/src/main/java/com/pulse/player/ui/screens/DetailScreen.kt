@@ -94,10 +94,10 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { vm.back() }) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
-            Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, maxLines = 1)
+            Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
         }
 
         LazyColumn(
@@ -113,7 +113,7 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                 ) {
                     Artwork(list.firstOrNull()?.uri, 180.dp, radius = 20.dp, px = 512)
                     Spacer(Modifier.height(16.dp))
-                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Pulse.TextMid)
                     Spacer(Modifier.height(20.dp))
 

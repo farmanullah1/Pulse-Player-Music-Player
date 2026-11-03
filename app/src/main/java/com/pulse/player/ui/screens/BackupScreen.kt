@@ -185,11 +185,11 @@ fun BackupScreen(vm: MainViewModel) {
                 onClick = vm::back,
                 modifier = Modifier.testTag("backup_back_button")
             ) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
             Column {
-                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Text("Dual System: Favourites JSON & Full Reference Backup", style = MaterialTheme.typography.labelSmall, color = Pulse.TextMid)
             }
         }
@@ -203,7 +203,7 @@ fun BackupScreen(vm: MainViewModel) {
             if (archiveOp.inProgress) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Elevated),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -214,7 +214,7 @@ fun BackupScreen(vm: MainViewModel) {
                                     color = Pulse.Cyan
                                 )
                                 Spacer(Modifier.width(12.dp))
-                                Text(archiveOp.stage, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Text(archiveOp.stage, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
                             }
                             if (archiveOp.progressFraction > 0f) {
                                 LinearProgressIndicator(
@@ -279,12 +279,12 @@ fun BackupScreen(vm: MainViewModel) {
             if (exportStatus != null) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Elevated),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Text(
                             text = exportStatus.orEmpty(),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(16.dp),
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -298,14 +298,14 @@ fun BackupScreen(vm: MainViewModel) {
                     val lastRecord = runCatching { JSONObject(lastBackupJson!!) }.getOrNull()
                     if (lastRecord != null) {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = Pulse.Elevated),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(18.dp)
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Rounded.History, null, tint = Pulse.Mint, modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Last Verified Backup", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                                    Text("Last Verified Backup", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                                 }
                                 val stamp = lastRecord.optString("backupTime", "")
                                 val sizeBytes = lastRecord.optLong("sizeBytes", 0L)
@@ -324,7 +324,7 @@ fun BackupScreen(vm: MainViewModel) {
             // ==========================================
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Elevated),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -351,7 +351,7 @@ fun BackupScreen(vm: MainViewModel) {
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Full Backup (Reference Format)", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                    Text("Full Backup (Reference Format)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                 }
                                 Text("Reference archive layout", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan)
                             }
@@ -365,14 +365,14 @@ fun BackupScreen(vm: MainViewModel) {
 
                         // Bundled Reference Fixture Inspection Button (Prompt 12 & 13)
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Rounded.Info, null, tint = Pulse.Mint, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Bundled Reference Archive Fixture", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                                    Text("Bundled Reference Archive Fixture", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                                 }
                                 Text(
                                     "Inspect the included reference archive: ManualBackup_20261028_172204175.wav (13,509 songs, 41 playlists, settings, history).",
@@ -386,7 +386,7 @@ fun BackupScreen(vm: MainViewModel) {
                                         .fillMaxWidth()
                                         .testTag("compat_inspect_sample_button"),
                                     shape = CircleShape,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Mint, contentColor = Color.Black)
+                                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Mint, contentColor = MaterialTheme.colorScheme.onPrimary)
                                 ) {
                                     Icon(Icons.Rounded.Unarchive, null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
@@ -406,14 +406,14 @@ fun BackupScreen(vm: MainViewModel) {
                         ) {
                             Icon(Icons.Rounded.Download, null, tint = Pulse.Cyan)
                             Spacer(Modifier.width(8.dp))
-                            Text("Restore Full Backup (SAF)", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Restore Full Backup (SAF)", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(Modifier.height(4.dp))
                         Text(
                             "Full Backup Categories:",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold
                         )
 
@@ -458,7 +458,7 @@ fun BackupScreen(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Save as .zip instead", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                                Text("Save as .zip instead", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                                 Text(
                                     if (compatExportAsZip) "Will create standard .zip" else "Default .wav (reference naming)",
                                     style = MaterialTheme.typography.labelSmall,
@@ -494,7 +494,7 @@ fun BackupScreen(vm: MainViewModel) {
                                 .fillMaxWidth()
                                 .testTag("compat_create_backup_button"),
                             shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
                         ) {
                             Icon(Icons.Rounded.Upload, null)
                             Spacer(Modifier.width(8.dp))
@@ -515,7 +515,7 @@ fun BackupScreen(vm: MainViewModel) {
             // ==========================================
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -542,7 +542,7 @@ fun BackupScreen(vm: MainViewModel) {
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                     Spacer(Modifier.width(8.dp))
-                        Text("Classic Backup (Favourites + Music)", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Classic Backup (Favourites + Music)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                 }
                                 Text("pulseplayer.favorites JSON format", style = MaterialTheme.typography.labelSmall, color = Pulse.Violet)
                             }
@@ -579,7 +579,7 @@ fun BackupScreen(vm: MainViewModel) {
                             ) {
                                 Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = Pulse.Violet)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Import Folder", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("Import Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                             }
                             Button(
                                 onClick = {
@@ -590,7 +590,7 @@ fun BackupScreen(vm: MainViewModel) {
                                     .weight(1f)
                                     .testTag("legacy_import_button_secondary"),
                                 shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Surface, contentColor = Color.White)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = Color.White)
                             ) {
                                 Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -609,14 +609,14 @@ fun BackupScreen(vm: MainViewModel) {
             // Dedicated Music Folder (SAF)
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.FolderOpen, null, tint = Pulse.Mint, modifier = Modifier.size(24.dp))
                             Spacer(Modifier.width(10.dp))
-                            Text("Dedicated Music Folder", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                            Text("Dedicated Music Folder", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         }
                         Text(
                             text = "Select a folder (SAF) where you store copied music files. Pulse Player scans and indexes it for offline playback.",
@@ -630,7 +630,7 @@ fun BackupScreen(vm: MainViewModel) {
                                 .testTag("choose_folder_button"),
                             shape = CircleShape
                         ) {
-                            Text("Choose Music Folder", color = Color.White)
+                            Text("Choose Music Folder", color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -653,7 +653,7 @@ fun BackupScreen(vm: MainViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Unarchive, null, tint = Pulse.Cyan, modifier = Modifier.size(28.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("Backup Restore Preview", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Backup Restore Preview", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
 
                     // Metadata banner
@@ -665,7 +665,7 @@ fun BackupScreen(vm: MainViewModel) {
 
                     // Resolution Stats Breakdown
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -691,7 +691,7 @@ fun BackupScreen(vm: MainViewModel) {
                     }
 
                     // Category selection checkboxes
-                    Text("Categories to restore:", style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Categories to restore:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Column {
                         CompatCategoryCheckbox(
                             label = "Playlists & Favourites (${preview.staged.playlists.size} playlists)",
@@ -720,21 +720,21 @@ fun BackupScreen(vm: MainViewModel) {
                     }
 
                     // Conflict resolution
-                    Text("Conflict Mode:", style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Conflict Mode:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(
                             selected = !replaceMode,
                             onClick = { vm.setCompatReplaceMode(false) },
                             colors = RadioButtonDefaults.colors(selectedColor = Pulse.Cyan)
                         )
-                        Text("Merge (default)", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                        Text("Merge (default)", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.width(16.dp))
                         RadioButton(
                             selected = replaceMode,
                             onClick = { vm.setCompatReplaceMode(true) },
                             colors = RadioButtonDefaults.colors(selectedColor = Pulse.Coral)
                         )
-                        Text("Replace selected", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                        Text("Replace selected", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
                     }
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -742,7 +742,7 @@ fun BackupScreen(vm: MainViewModel) {
                             onClick = vm::dismissCompatPreview,
                             modifier = Modifier.testTag("compat_restore_cancel_button")
                         ) {
-                            Text("Cancel", color = Color.White)
+                            Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
                         }
                         Spacer(Modifier.width(8.dp))
                         Button(
@@ -756,7 +756,7 @@ fun BackupScreen(vm: MainViewModel) {
                             modifier = Modifier.testTag("compat_restore_confirm_button"),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (replaceMode) Pulse.Coral else Pulse.Cyan,
-                                contentColor = Color.Black
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
                             Text(if (replaceMode) "Replace & Restore" else "Apply Restore", fontWeight = FontWeight.Bold)
@@ -789,10 +789,10 @@ fun BackupScreen(vm: MainViewModel) {
                 },
                 dismissButton = {
                     TextButton(onClick = { showReplaceConfirmDialog = false }) {
-                        Text("Cancel", color = Color.White)
+                        Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
                     }
                 },
-                containerColor = Pulse.Elevated,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 titleContentColor = Pulse.Coral,
                 textContentColor = Color.White
             )
@@ -813,7 +813,7 @@ fun BackupScreen(vm: MainViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     report.lines.forEach { line ->
-                        Text("• $line", style = MaterialTheme.typography.bodySmall, color = Color.White)
+                        Text("• $line", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
                     }
                     if (report.unmatchedPaths.isNotEmpty()) {
                         Spacer(Modifier.height(4.dp))
@@ -830,7 +830,7 @@ fun BackupScreen(vm: MainViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("compat_save_unmatched_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Surface, contentColor = Pulse.Cyan)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = Pulse.Cyan)
                         ) {
                             Icon(Icons.Rounded.Download, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
@@ -842,12 +842,12 @@ fun BackupScreen(vm: MainViewModel) {
             confirmButton = {
                 Button(
                     onClick = vm::dismissCompatReport,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
+                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Done", fontWeight = FontWeight.Bold)
                 }
             },
-            containerColor = Pulse.Elevated,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             titleContentColor = Color.White,
             textContentColor = Color.White
         )
@@ -878,6 +878,6 @@ private fun CompatCategoryCheckbox(
             )
         )
         Spacer(Modifier.width(4.dp))
-        Text(label, style = MaterialTheme.typography.bodySmall, color = Color.White)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
     }
 }

@@ -103,17 +103,17 @@ fun PixelPlayerLayout(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, "Back", tint = Color.White)
+                    Icon(Icons.Rounded.KeyboardArrowDown, "Back", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 Text(
                     text = "Pixel Expressive",
                     modifier = Modifier.weight(1f),
-                    color = Color.White.copy(0.8f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(0.8f),
                     style = MaterialTheme.typography.titleSmall,
                     textAlign = TextAlign.Center
                 )
                 IconButton(onClick = vm::openTrackOptions, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Rounded.MoreVert, "More", tint = Color.White)
+                    Icon(Icons.Rounded.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
 
@@ -126,7 +126,7 @@ fun PixelPlayerLayout(
                     .aspectRatio(1f)
                     .shadow(24.dp, RoundedCornerShape(32.dp)),
                 shape = RoundedCornerShape(32.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(0.06f))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(0.06f))
             ) {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
                     Artwork(uri = s.artworkUri, size = 300.dp, radius = 32.dp, px = 512)
@@ -144,14 +144,14 @@ fun PixelPlayerLayout(
                     Text(
                         text = s.title.ifBlank { "Unknown Title" },
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         modifier = Modifier.basicMarquee()
                     )
                     Text(
                         text = s.artist.ifBlank { "Unknown Artist" },
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -178,7 +178,7 @@ fun PixelPlayerLayout(
                 enabled = canSeek,
                 isPlaying = s.isPlaying,
                 activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(alpha = 0.25f),
+                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
                 thumbColor = Color.White
             )
 
@@ -190,12 +190,12 @@ fun PixelPlayerLayout(
                 Text(
                     text = formatTime(pos),
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.75f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                 )
                 Text(
                     text = if (s.durationMs > 0) formatTime(s.durationMs) else "--:--",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.75f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
                 )
             }
 
@@ -211,11 +211,11 @@ fun PixelPlayerLayout(
                     Icon(
                         Icons.Rounded.Shuffle,
                         "Shuffle",
-                        tint = if (s.shuffle) Pulse.Orange else Color.White.copy(0.7f)
+                        tint = if (s.shuffle) Pulse.Orange else MaterialTheme.colorScheme.onSurface.copy(0.7f)
                     )
                 }
                 IconButton(onClick = vm.player::previous, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
+                    Icon(Icons.Rounded.SkipPrevious, "Previous", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(36.dp))
                 }
 
                 // Center Play/Pause 76dp button
@@ -223,8 +223,8 @@ fun PixelPlayerLayout(
                     onClick = vm.player::togglePlay,
                     modifier = Modifier.size(76.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF0F172A)
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     ),
                     shape = CircleShape
                 ) {
@@ -236,13 +236,13 @@ fun PixelPlayerLayout(
                 }
 
                 IconButton(onClick = vm.player::next, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(36.dp))
+                    Icon(Icons.Rounded.SkipNext, "Next", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(36.dp))
                 }
                 IconButton(onClick = vm::cycleRepeat) {
                     Icon(
                         if (s.repeat == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                         "Repeat",
-                        tint = if (s.repeat != Player.REPEAT_MODE_OFF) Pulse.Orange else Color.White.copy(0.7f)
+                        tint = if (s.repeat != Player.REPEAT_MODE_OFF) Pulse.Orange else MaterialTheme.colorScheme.onSurface.copy(0.7f)
                     )
                 }
             }
@@ -253,14 +253,14 @@ fun PixelPlayerLayout(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                     .clickable { vm.openQueue() }
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.QueueMusic, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.QueueMusic, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(8.dp))
-                    Text("Up Next in Queue", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    Text("Up Next in Queue", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelMedium)
                 }
             }
 

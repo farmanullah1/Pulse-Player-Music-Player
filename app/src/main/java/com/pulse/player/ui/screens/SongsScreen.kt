@@ -83,7 +83,7 @@ fun SongsScreen(vm: MainViewModel) {
                         Text(
                             text = if (showMissing) "$missingCount Missing Songs" else "${tracks.size} Songs",
                             style = MaterialTheme.typography.titleLarge,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         if (scanning) {
                             Spacer(Modifier.width(8.dp))
@@ -116,7 +116,7 @@ fun SongsScreen(vm: MainViewModel) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = if (scanProgress > 0) "Scanning your library" else "Finishing library scan",
-                                        color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                     Spacer(Modifier.weight(1f))
@@ -228,10 +228,10 @@ fun SongsScreen(vm: MainViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${selected.size} selected", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("${selected.size} selected", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Row {
                         IconButton(onClick = { vm.selectAll(displayTracks.map { it.id }) }) {
-                            Icon(Icons.Rounded.SelectAll, "Select all", tint = Color.White)
+                            Icon(Icons.Rounded.SelectAll, "Select all", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         IconButton(onClick = { vm.playSelectedNext() }, enabled = selected.isNotEmpty()) {
                             Icon(Icons.Rounded.QueueMusic, "Play next", tint = if (selected.isNotEmpty()) Pulse.Cyan else Pulse.TextLow)
@@ -257,7 +257,7 @@ fun SortMenu(vm: MainViewModel) {
 
     Box {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Rounded.Sort, "Sort options", tint = Color.White)
+            Icon(Icons.Rounded.Sort, "Sort options", tint = MaterialTheme.colorScheme.onSurface)
         }
         DropdownMenu(
             expanded = expanded,

@@ -148,7 +148,7 @@ fun NamidaPlayerLayout(
                                 .aspectRatio(1f)
                                 .shadow(24.dp, RoundedCornerShape(28.dp)),
                             shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(0.06f))
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(0.06f))
                         ) {
                             Artwork(uri = s.artworkUri, size = 320.dp, radius = 28.dp, px = 512)
                         }
@@ -189,7 +189,7 @@ fun NamidaPlayerLayout(
                         .align(Alignment.CenterHorizontally)
                         .shadow(20.dp, RoundedCornerShape(24.dp)),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(0.06f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(0.06f))
                 ) {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Artwork(uri = s.artworkUri, size = 300.dp, radius = 24.dp, px = 512)
@@ -352,7 +352,7 @@ private fun PlaybackControls(
             modifier = Modifier.size(72.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = accentColor,
-                contentColor = Color(0xFF1E1A17)
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             shape = CircleShape
         ) {

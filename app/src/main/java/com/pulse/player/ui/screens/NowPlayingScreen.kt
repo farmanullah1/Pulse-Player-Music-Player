@@ -179,7 +179,7 @@ fun NowPlayingScreen(vm: MainViewModel) {
                     Icon(
                         imageVector = Icons.Rounded.KeyboardArrowDown,
                         contentDescription = "Collapse player",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -219,7 +219,7 @@ fun NowPlayingScreen(vm: MainViewModel) {
             Text(
                 text = s.title.ifBlank { "No track selected" },
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -256,16 +256,16 @@ fun NowPlayingScreen(vm: MainViewModel) {
                     onToggle = { vm.toggleFavoriteCurrent() }
                 )
                 IconButton(onClick = { vm.openSleepSheet() }) {
-                    Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
+                    Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 IconButton(onClick = { vm.openAddToPlaylist() }) {
-                    Icon(Icons.Rounded.PlaylistAdd, "Add to playlist", tint = Color.White)
+                    Icon(Icons.Rounded.PlaylistAdd, "Add to playlist", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 IconButton(onClick = { vm.openQueue() }) {
-                    Icon(Icons.Rounded.QueueMusic, "Queue", tint = Color.White)
+                    Icon(Icons.Rounded.QueueMusic, "Queue", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 IconButton(onClick = { vm.go(Screen.Equalizer) }) {
-                    Icon(Icons.Rounded.Equalizer, "Equalizer", tint = Color.White)
+                    Icon(Icons.Rounded.Equalizer, "Equalizer", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -374,7 +374,7 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Now Playing", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Now Playing", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.height(24.dp))
             Box(Modifier.weight(1f), Alignment.Center) {
                 PlayerThemeHost(vm, s, Pulse.Cyan)
@@ -383,7 +383,7 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
             Text(
                 text = s.title,
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -400,10 +400,10 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
             ) {
                 HeartButton(fav, { vm.toggleFavoriteCurrent() })
                 IconButton(onClick = { vm.openQueue() }) {
-                    Icon(Icons.Rounded.QueueMusic, "Queue", tint = Color.White)
+                    Icon(Icons.Rounded.QueueMusic, "Queue", tint = MaterialTheme.colorScheme.onSurface)
                 }
                 IconButton(onClick = { vm.go(Screen.Equalizer) }) {
-                    Icon(Icons.Rounded.Equalizer, "Equalizer", tint = Color.White)
+                    Icon(Icons.Rounded.Equalizer, "Equalizer", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -572,7 +572,7 @@ fun LyricsView(
                         onClick = { lrcPicker.launch(arrayOf("*/*", "text/*")) },
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Pulse.Elevated,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = Pulse.Cyan
                         )
                     ) {
@@ -586,7 +586,7 @@ fun LyricsView(
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Pulse.Cyan,
-                            contentColor = Color.Black
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
                         Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(16.dp))
@@ -631,7 +631,7 @@ fun PlayerTopMenu(vm: MainViewModel) {
 
     Box {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Rounded.MoreVert, "More actions", tint = Color.White)
+            Icon(Icons.Rounded.MoreVert, "More actions", tint = MaterialTheme.colorScheme.onSurface)
         }
         DropdownMenu(
             expanded = expanded,
@@ -698,7 +698,7 @@ fun SeekBar(position: StateFlow<Long>, duration: Long, onSeek: (Long) -> Unit) {
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
                 activeTrackColor = Color.White,
-                inactiveTrackColor = Color.White.copy(0.25f)
+                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(0.25f)
             )
         )
         Row(
@@ -739,7 +739,7 @@ fun TransportRow(s: PlaybackUiState, p: PlayerController) {
             Icon(
                 imageVector = Icons.Rounded.SkipPrevious,
                 contentDescription = "Previous",
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(36.dp)
             )
         }
@@ -748,7 +748,7 @@ fun TransportRow(s: PlaybackUiState, p: PlayerController) {
             modifier = Modifier.size(76.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = Color.White,
-                contentColor = Color.Black
+                contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
             AnimatedContent(
@@ -767,7 +767,7 @@ fun TransportRow(s: PlaybackUiState, p: PlayerController) {
             Icon(
                 imageVector = Icons.Rounded.SkipNext,
                 contentDescription = "Next",
-                tint = Color.White,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(36.dp)
             )
         }

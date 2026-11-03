@@ -29,8 +29,10 @@ import com.pulse.player.ui.themes.WavesCanvas
 import java.io.File
 
 private val DarkScheme = darkColorScheme(
-    primary = Color.White,
+    primary = Pulse.Cyan,
     onPrimary = Color.Black,
+    primaryContainer = Pulse.Elevated,
+    onPrimaryContainer = Color.White,
     secondary = Pulse.Cyan,
     background = Pulse.Bg,
     surface = Pulse.Surface,
@@ -42,8 +44,10 @@ private val DarkScheme = darkColorScheme(
 )
 
 private val LightScheme = lightColorScheme(
-    primary = Color(0xFF1A1625),
+    primary = Color(0xFF006782),
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFB9E9FF),
+    onPrimaryContainer = Color(0xFF001F29),
     secondary = Color(0xFF0077A8),
     background = Color(0xFFFAF7FF),
     surface = Color.White,
@@ -102,7 +106,7 @@ fun AppBackground(
     val bgBrush = when {
         mode == ThemeMode.AMOLED -> Brush.verticalGradient(listOf(Color.Black, Color.Black))
         mode == ThemeMode.LIGHT || (mode == ThemeMode.SYSTEM && !isSystemInDarkTheme()) ->
-            Brush.verticalGradient(listOf(Color(0xFFFAF7FF), Color(0xFFF0EBFA)))
+            Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceVariant))
         else -> Brush.verticalGradient(skin.colors)
     }
 

@@ -103,13 +103,13 @@ fun DuplicatesScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { vm.back() }) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
             Text(
                 "Duplicate Finder",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -138,7 +138,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                     Text(
                         "No duplicate songs found",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
@@ -156,7 +156,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
             ) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(
@@ -174,7 +174,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                 Text(
                                     "Found ${groups.size} groups of possible duplicates",
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -189,7 +189,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
 
                 items(groups) { group ->
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Column(
@@ -208,7 +208,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                         text = group.title,
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = group.artist,
@@ -245,7 +245,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                             text = track.displayName,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Spacer(Modifier.height(2.dp))
                                         Text(
@@ -283,7 +283,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                                 Toast.makeText(ctx, "Path copied", Toast.LENGTH_SHORT).show()
                                             }
                                         ) {
-                                            Icon(Icons.Rounded.ContentCopy, "Copy path", tint = Color.White)
+                                            Icon(Icons.Rounded.ContentCopy, "Copy path", tint = MaterialTheme.colorScheme.onSurface)
                                         }
 
                                         IconButton(
@@ -298,7 +298,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                                 }
                                             }
                                         ) {
-                                            Icon(Icons.Rounded.Share, "Share", tint = Color.White)
+                                            Icon(Icons.Rounded.Share, "Share", tint = MaterialTheme.colorScheme.onSurface)
                                         }
                                     }
                                 }

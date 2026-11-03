@@ -47,7 +47,7 @@ fun SearchScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { vm.back() }) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             OutlinedTextField(
                 value = query,
@@ -60,7 +60,7 @@ fun SearchScreen(vm: MainViewModel) {
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { vm.searchQuery.value = "" }) {
-                            Icon(Icons.Rounded.Clear, "Clear search", tint = Color.White)
+                            Icon(Icons.Rounded.Clear, "Clear search", tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 },

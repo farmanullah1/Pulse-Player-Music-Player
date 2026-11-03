@@ -68,7 +68,7 @@ fun MiniPlayer(
             .height(64.dp)
             .clickable(onClick = onExpand),
         shape = RoundedCornerShape(32.dp),
-        color = Color(0xCC1B1829),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         tonalElevation = 6.dp
     ) {
         Box {
@@ -90,14 +90,14 @@ fun MiniPlayer(
                         maxLines = 1,
                         modifier = Modifier.basicMarquee(),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = s.artist.ifBlank { "Select a song to start" },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(onClick = onToggle) {
@@ -105,7 +105,7 @@ fun MiniPlayer(
                         Icon(
                             imageVector = if (p) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = if (p) "Pause" else "Play",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -114,7 +114,7 @@ fun MiniPlayer(
                     Icon(
                         imageVector = Icons.Rounded.QueueMusic,
                         contentDescription = "Queue",
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

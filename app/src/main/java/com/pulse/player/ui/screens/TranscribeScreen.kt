@@ -132,14 +132,14 @@ fun TranscribeScreen(vm: MainViewModel) {
                 onClick = { vm.back() },
                 modifier = Modifier.testTag("transcribe_back_button")
             ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = "Audio & Lyrics Transcribe",
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
@@ -166,7 +166,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(
                         modifier = Modifier
@@ -178,7 +178,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                             text = if (isRecording) "Recording Audio..." else "Record Speech or Song",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -245,7 +245,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                 Icon(
                                     imageVector = if (isRecording) Icons.Rounded.Stop else Icons.Rounded.Mic,
                                     contentDescription = if (isRecording) "Stop Recording" else "Start Recording",
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(44.dp)
                                 )
                             }
@@ -354,13 +354,13 @@ fun TranscribeScreen(vm: MainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Pulse.Surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
                             "Transcription Guidance (Optional)",
                             style = MaterialTheme.typography.titleSmall,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(8.dp))
@@ -396,7 +396,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = Pulse.Surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(
                                 modifier = Modifier
@@ -409,7 +409,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                 Text(
                                     s.progressText,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = TextAlign.Center
                                 )
                                 Spacer(Modifier.height(4.dp))
@@ -437,7 +437,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                     Text(
                                         "Transcription Failed",
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         style = MaterialTheme.typography.titleSmall
                                     )
                                 }
@@ -453,10 +453,10 @@ fun TranscribeScreen(vm: MainViewModel) {
                                         onClick = { showApiKeyDialog = true },
                                         colors = ButtonDefaults.buttonColors(containerColor = Pulse.Magenta)
                                     ) {
-                                        Text("Check API Key", color = Color.White)
+                                        Text("Check API Key", color = MaterialTheme.colorScheme.onSurface)
                                     }
                                     TextButton(onClick = { vm.resetTranscriptionState() }) {
-                                        Text("Dismiss", color = Color.White)
+                                        Text("Dismiss", color = MaterialTheme.colorScheme.onSurface)
                                     }
                                 }
                             }
@@ -469,7 +469,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = Pulse.Surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(Modifier.padding(20.dp)) {
                                 Row(
@@ -483,7 +483,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                         Text(
                                             "Transcription Complete",
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.titleMedium
                                         )
                                     }
@@ -510,7 +510,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                     Text(
                                         text = s.result.text,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(16.dp)
@@ -596,7 +596,7 @@ fun TranscribeScreen(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { showTrackPicker = false },
             title = {
-                Text("Select Song to Transcribe", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Select Song to Transcribe", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(Modifier.height(320.dp)) {
@@ -624,7 +624,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                 Icon(Icons.Rounded.LibraryMusic, null, tint = Pulse.Cyan, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(t.title, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(t.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(t.artist, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                                 }
                             }
@@ -637,7 +637,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                     Text("Close", color = Pulse.Cyan)
                 }
             },
-            containerColor = Pulse.Surface
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
@@ -646,7 +646,7 @@ fun TranscribeScreen(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { showApiKeyDialog = false },
             title = {
-                Text("Gemini API Key", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Gemini API Key", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
@@ -687,10 +687,10 @@ fun TranscribeScreen(vm: MainViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = { showApiKeyDialog = false }) {
-                    Text("Cancel", color = Color.White)
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
                 }
             },
-            containerColor = Pulse.Surface
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }

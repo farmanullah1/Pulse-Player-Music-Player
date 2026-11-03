@@ -62,10 +62,10 @@ fun EqualizerScreen(vm: MainViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = vm::back) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = Color.White)
+                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             Spacer(Modifier.width(8.dp))
-            Text("Equalizer", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text("Equalizer", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.weight(1f))
             Switch(
                 checked = enabled,
@@ -82,7 +82,7 @@ fun EqualizerScreen(vm: MainViewModel) {
             if (!AudioFx.eqSupported && !AudioFx.bassSupported && !AudioFx.virtSupported) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
@@ -97,7 +97,7 @@ fun EqualizerScreen(vm: MainViewModel) {
 
             if (AudioFx.eqSupported) {
                 item {
-                    Text("Presets", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text("Presets", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(AudioFx.presets.keys.toList()) { preset ->
@@ -115,11 +115,11 @@ fun EqualizerScreen(vm: MainViewModel) {
 
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("Bands", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                            Text("Bands", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                             Spacer(Modifier.height(16.dp))
                             val bandCount = AudioFx.bandCount.coerceAtLeast(5)
                             val (minLevel, maxLevel) = AudioFx.levelRange
@@ -155,7 +155,7 @@ fun EqualizerScreen(vm: MainViewModel) {
                                     Text(
                                         text = "${(level / 100).toInt()} dB",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.width(52.dp),
                                         textAlign = TextAlign.End
                                     )
@@ -169,14 +169,14 @@ fun EqualizerScreen(vm: MainViewModel) {
             if (AudioFx.bassSupported || AudioFx.virtSupported) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             if (AudioFx.bassSupported) {
                                 Column {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Bass Boost", fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("Bass Boost", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                         Text("${(bassVal / 10).toInt()}%", color = Pulse.Cyan)
                                     }
                                     Slider(
@@ -193,7 +193,7 @@ fun EqualizerScreen(vm: MainViewModel) {
                             if (AudioFx.virtSupported) {
                                 Column {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("Virtualizer (3D Surround)", fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("Virtualizer (3D Surround)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                         Text("${(virtVal / 10).toInt()}%", color = Pulse.Cyan)
                                     }
                                     Slider(
@@ -214,7 +214,7 @@ fun EqualizerScreen(vm: MainViewModel) {
 
             if (AudioFx.reverbSupported) {
                 item {
-                    Text("3D Reverb", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text("3D Reverb", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(AudioFx.reverbNames.indices.toList()) { index ->
@@ -245,7 +245,7 @@ fun EqualizerScreen(vm: MainViewModel) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Elevated, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = Color.White)
                 ) {
                     Icon(Icons.Rounded.RestartAlt, null)
                     Spacer(Modifier.width(8.dp))

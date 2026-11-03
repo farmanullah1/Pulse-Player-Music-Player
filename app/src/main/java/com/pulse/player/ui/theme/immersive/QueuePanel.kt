@@ -129,7 +129,7 @@ fun QueueTrackRow(
             )
             Text(
                 text = t.artist,
-                color = Color.White.copy(0.65f),
+                color = MaterialTheme.colorScheme.onSurface.copy(0.65f),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -140,7 +140,7 @@ fun QueueTrackRow(
         } else {
             Text(
                 text = fmt(t.durationMs),
-                color = Color.White.copy(0.6f),
+                color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -149,7 +149,7 @@ fun QueueTrackRow(
                 Icon(
                     PulseIcons.Close,
                     contentDescription = "Remove ${t.title} from queue",
-                    tint = Color.White.copy(0.6f)
+                    tint = MaterialTheme.colorScheme.onSurface.copy(0.6f)
                 )
             }
         }
@@ -189,21 +189,21 @@ fun QueuePanel(
             ) {
                 Text(
                     text = "Queue · ${queue.size} songs",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
                     imageVector = if (expanded) PulseIcons.ChevronDown else PulseIcons.ChevronUp,
                     contentDescription = if (expanded) "Collapse queue" else "Expand queue",
-                    tint = Color.White
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
             if (queue.isEmpty()) {
                 Text(
                     text = "The queue is empty",
                     modifier = Modifier.padding(24.dp),
-                    color = Color.White.copy(0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(0.6f)
                 )
             } else {
                 LazyColumn(state = listState) {

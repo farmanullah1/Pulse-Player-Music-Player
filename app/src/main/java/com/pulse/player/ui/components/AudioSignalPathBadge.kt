@@ -66,7 +66,7 @@ fun AudioSignalPathBadge(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.10f))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
             .clickable { showDetails = true }
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
@@ -85,7 +85,7 @@ fun AudioSignalPathBadge(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 ),
-                color = Color.White.copy(alpha = 0.85f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
             )
         }
     }
@@ -121,7 +121,7 @@ fun AudioSignalPathBadge(
 private fun SignalPathStep(title: String, detail: String) {
     Column {
         Text(title, style = MaterialTheme.typography.labelMedium, color = Pulse.Cyan, fontWeight = FontWeight.SemiBold)
-        Text(detail, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(0.75f))
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(0.75f))
     }
 }
 
