@@ -1,5 +1,20 @@
 # Pulse Player — Development Log (`brain.md`)
 
+## Current audit — 2026-11-03
+- The prompt pack's Phase 9 audit was completed against the actual working tree before further implementation.
+- Reference repositories inspected remotely: Namida commit `10123d91e2527682efc...` uses a restrictive EULA; PixelPlayer commit `63cb59b97aff1d60c...` uses a proprietary personal/non-commercial license with an older MIT contribution notice. No source or assets were copied.
+- The working tree intentionally contains uncommitted schema/theme/feature work and prompt-file changes from the owner workflow.
+- `assembleDebug` and `testDebugUnitTest` were attempted with the configured temporary Android SDK and both stopped before compilation because SDK 35/build-tools licenses were not accepted.
+- Audit blockers recorded: `.fallbackToDestructiveMigration()` remains in `PulseApp.kt`; `RECORD_AUDIO` remains in the manifest and transcription flow; `offline`/`full` flavors and `NetworkGateway` are absent; the layout default is still `modern_art`; Classic Backup v2 audio-copy workflow is not complete.
+- No implementation task was started during this audit, as required by the master prompt's first-action rule.
+
+## Phase 9b foundation slice — 2026-11-03
+- Added `offline` and `full` Gradle network flavors. The offline source set has no network permissions; the full source set adds `INTERNET` and `ACCESS_NETWORK_STATE`.
+- Removed `fallbackToDestructiveMigration()` from the Room builder. Pre-migration backup failures now go to logcat instead of being silently swallowed.
+- Added `AppError`, `ErrorReporter`, and `UiEvents` under `core.error` for safe transient UI error delivery.
+- Verification: `git diff --check` passed. `compileOfflineDebugKotlin`, `compileFullDebugKotlin`, and `testOfflineDebugUnitTest` were attempted; each was blocked before compilation because SDK 35/build-tools licenses are not accepted in the configured SDK.
+- Not done in this slice: NetworkGateway routing, full Settings IA, RECORD_AUDIO cleanup, Classic Backup v2, and flavor-specific online client isolation.
+
 ## 1. Done
 - [x] Phase 0: Setup Spec Index & Temp Code
   - Created `docs/spec/SPEC_INDEX.md` mapping all 9 phases (Phase 0–8) to required files
@@ -120,10 +135,22 @@
 - `./gradlew assembleDebug` / `testDebugUnitTest`: NOT RUN (local host CLI lacks Android SDK / `ANDROID_HOME`).
 
 ## 3. Not Done (Next Steps)
-- None (All phases 0 through 8 and prompts 14 through 29 fully completed).
+- [x] Phase M0 (Audit): CURRENT_INVENTORY.md, PRESERVATION_MATRIX.md, FEATURE_GAP_MATRIX.md, PARITY_INVENTORY.md, DECISIONS.md, THIRD_PARTY_NOTICES.md, SPEC_INDEX.md updated
+- [x] Phase M1 (Schema v4): Migration 3→4 with all new columns/tables; `Migration3To4Test`; `PulseDb` updated to version 4; all new entity/DAO classes; `LibraryScanner` updated with v4 fields + `guessCodecFromMime`
+- [x] Phase M2 (Theme architecture): `ColorSource` enum + 5-axis customization; `PulseTokens` design token system; `LocalPulseTokens` CompositionLocal; new skins (Dark Plum, Light Warm, Expressive Material, Monochrome); Material You / dynamic color; `cornerRadiusDp` setting; `AmberContrastTest`; `MainActivity` updated (removed RECORD_AUDIO first-launch request — C13/§10.1)
+- [x] Phase M4 (Button arrangements): `ButtonPreset`, `ButtonLayout`, `ButtonPresets`, `ButtonPresetRegistry`; 12 preset composables in `ButtonArrangement.kt`; `ButtonPresetPickerSheet`; `ButtonPresetTest`
+- [x] Phase M5/M6 (Library/Indexing + Metadata): `ArtistParser` (artist/genre splitting, feat. extraction — NAM-L2, NAM-L8); genre/language DAOs in `TrackDao`; `SmartPlaylistEngine` (rule engine + built-in collections — META-05, META-06); `ArtistParserTest`
+- [x] Phase M7 (Search): `SearchIndex` (typo-tolerant ranked search with trigram similarity — SRCH-01)
+- [x] Phase M9 (History foundations): `HistoryWriter` (C5 gate — sole non-live writer of `play_events`; `IMPORT_*` and `MANUAL` origins); `HistoryWriterTest`
+- [x] Phase M13 (Capabilities registry): `Capabilities` object (runtime evaluation of all feature availability — SEC-03, Annex A §5.3)
+- Remaining phases: M3 (layout registry polish — `PlayerLayoutMode` improvements), M8 (audio enhancements — ReplayGain, per-track sound), M10 (visualizer, waveform pipeline), M11 (product flavors offline/full), M12 (backup hardening), M13 (full permissions onboarding, Settings IA restructuring), M14 (final acceptance)
 
 ## 4. Known Limits & Honest Constraints
 - Local host environment does not have the Android SDK (`ANDROID_HOME` / `sdk.dir`) configured, so Gradle cannot compile APKs or run Android unit tests on this CLI machine; the project must be compiled/tested inside Android Studio or with an installed Android SDK.
 - Hardware audio effects depend on Android OS audiofx engine availability; unsupported features are cleanly hidden.
 - Ringtone setting requires the user to grant `WRITE_SETTINGS` in system settings.
 - Restoring archive metadata reconciles tracks against the receiving device's library; it does not fabricate missing audio files.
+- Namida license not yet verified (likely GPL-3.0); all Namida-inspired features are independently re-implemented.
+- PixelPlayer license not yet verified; all PixelPlayer-inspired features are independently re-implemented.
+- TagLib Android binding selection is deferred to Phase M6 (pending license/compatibility evaluation).
+- `./gradlew testDebugUnitTest` — NOT RUN (no local Android SDK); `Migration3To4Test`, `ButtonPresetTest`, `AmberContrastTest` are new tests added in this session.

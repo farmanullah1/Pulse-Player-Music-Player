@@ -18,6 +18,9 @@ val Context.dataStore by preferencesDataStore("pulse_settings")
 
 enum class ThemeMode { SYSTEM, DARK, AMOLED, LIGHT }
 
+/** Controls where the accent/seed color comes from. */
+enum class ColorSource { PULSE_PALETTE, MATERIAL_YOU, ARTWORK_DRIVEN, CUSTOM_SEED }
+
 class SettingsStore(private val ctx: Context) {
     private object K {
         val theme = stringPreferencesKey("theme_mode")
@@ -43,6 +46,17 @@ class SettingsStore(private val ctx: Context) {
         val geminiApiKey = stringPreferencesKey("gemini_api_key")
         val lastGoodScanAt = longPreferencesKey("last_good_scan_at")
         val audioAsked = booleanPreferencesKey("audio_permission_asked")
+        // Schema v4 / Phase M2 additions
+        val colorSource = stringPreferencesKey("color_source")
+        val seedColor = intPreferencesKey("seed_color")           // ARGB int for custom seed
+        val cornerRadius = intPreferencesKey("corner_radius_dp")  // 0–32 dp
+        val buttonPreset = stringPreferencesKey("button_preset_id")
+        val onlineFeaturesEnabled = booleanPreferencesKey("online_features_enabled")
+        val offlineOnlyMode = booleanPreferencesKey("offline_only_mode")
+        val animationIntensity = intPreferencesKey("animation_intensity") // 0=off, 1=reduced, 2=full
+        val listDensity = intPreferencesKey("list_density")               // 0=compact, 1=normal, 2=comfortable
+        val albumGridColumns = intPreferencesKey("album_grid_columns")    // 2..4
+        val minFileSizeKb = intPreferencesKey("min_file_size_kb")         // 0 = no filter
     }
 
     val themeMode: Flow<ThemeMode> = ctx.dataStore.data.map {
@@ -51,7 +65,7 @@ class SettingsStore(private val ctx: Context) {
 
     val skinId: Flow<String> = ctx.dataStore.data.map { it[K.skin] ?: "plum" }
     val playerThemeId: Flow<String> = ctx.dataStore.data.map { it[K.player] ?: "classic" }
-    val playerLayoutId: Flow<String> = ctx.dataStore.data.map { it[K.playerLayout] ?: "modern_art" }
+    val playerLayoutId: Flow<String> = ctx.dataStore.data.map { it[K.playerLayout] ?: "atmospheric_queue" }
     val wallpaperPath: Flow<String?> = ctx.dataStore.data.map { it[K.wallpaper] }
     val reducedMotion: Flow<Boolean> = ctx.dataStore.data.map { it[K.reduced] ?: false }
     val dynamicAccent: Flow<Boolean> = ctx.dataStore.data.map { it[K.dynamic] ?: true }
@@ -80,7 +94,7 @@ class SettingsStore(private val ctx: Context) {
     suspend fun effectiveGeminiApiKey(): String {
         val custom = geminiApiKey.first()?.trim().orEmpty()
         if (custom.isNotBlank()) return custom
-        return com.pulse.player.BuildConfig.GEMINI_API_KEY.trim()
+        return ""
     }
 
     suspend fun setTheme(m: ThemeMode) = ctx.dataStore.edit { it[K.theme] = m.name }
@@ -174,6 +188,34 @@ class SettingsStore(private val ctx: Context) {
             }
         }
     }
+
+    // ─── Phase M2 new settings flows ─────────────────────────────────────────
+
+    val colorSource: Flow<ColorSource> = ctx.dataStore.data.map {
+        runCatching { ColorSource.valueOf(it[K.colorSource] ?: "PULSE_PALETTE") }
+            .getOrDefault(ColorSource.PULSE_PALETTE)
+    }
+    /** Custom seed color as ARGB int; 0 means "use default Cyan". */
+    val seedColor: Flow<Int> = ctx.dataStore.data.map { it[K.seedColor] ?: 0 }
+    val cornerRadiusDp: Flow<Int> = ctx.dataStore.data.map { (it[K.cornerRadius] ?: 16).coerceIn(0, 32) }
+    val buttonPresetId: Flow<String> = ctx.dataStore.data.map { it[K.buttonPreset] ?: "centered" }
+    val onlineFeaturesEnabled: Flow<Boolean> = ctx.dataStore.data.map { it[K.onlineFeaturesEnabled] ?: false }
+    val offlineOnlyMode: Flow<Boolean> = ctx.dataStore.data.map { it[K.offlineOnlyMode] ?: false }
+    val animationIntensity: Flow<Int> = ctx.dataStore.data.map { (it[K.animationIntensity] ?: 2).coerceIn(0, 2) }
+    val listDensity: Flow<Int> = ctx.dataStore.data.map { (it[K.listDensity] ?: 1).coerceIn(0, 2) }
+    val albumGridColumns: Flow<Int> = ctx.dataStore.data.map { (it[K.albumGridColumns] ?: 2).coerceIn(2, 4) }
+    val minFileSizeKb: Flow<Int> = ctx.dataStore.data.map { (it[K.minFileSizeKb] ?: 0).coerceAtLeast(0) }
+
+    suspend fun setColorSource(s: ColorSource) = ctx.dataStore.edit { it[K.colorSource] = s.name }
+    suspend fun setSeedColor(argb: Int) = ctx.dataStore.edit { it[K.seedColor] = argb }
+    suspend fun setCornerRadius(dp: Int) = ctx.dataStore.edit { it[K.cornerRadius] = dp.coerceIn(0, 32) }
+    suspend fun setButtonPreset(id: String) = ctx.dataStore.edit { it[K.buttonPreset] = id }
+    suspend fun setOnlineFeaturesEnabled(v: Boolean) = ctx.dataStore.edit { it[K.onlineFeaturesEnabled] = v }
+    suspend fun setOfflineOnlyMode(v: Boolean) = ctx.dataStore.edit { it[K.offlineOnlyMode] = v }
+    suspend fun setAnimationIntensity(v: Int) = ctx.dataStore.edit { it[K.animationIntensity] = v.coerceIn(0, 2) }
+    suspend fun setListDensity(v: Int) = ctx.dataStore.edit { it[K.listDensity] = v.coerceIn(0, 2) }
+    suspend fun setAlbumGridColumns(v: Int) = ctx.dataStore.edit { it[K.albumGridColumns] = v.coerceIn(2, 4) }
+    suspend fun setMinFileSizeKb(v: Int) = ctx.dataStore.edit { it[K.minFileSizeKb] = v.coerceAtLeast(0) }
 
     fun sortFor(screen: String, raw: Map<String, Any?>?): Pair<String, Int> {
         val o = raw?.get(screen) as? Map<*, *>

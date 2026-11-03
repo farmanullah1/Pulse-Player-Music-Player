@@ -589,7 +589,7 @@ fun GenerateMusicScreen(vm: MainViewModel) {
             text = {
                 Column {
                     Text(
-                        "Set your Google API key to generate music with Lyria. You can also configure GEMINI_API_KEY in the Secrets panel in AI Studio.",
+                        "Set your Google API key in Pulse Settings to generate music with Lyria.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Pulse.TextMid
                     )

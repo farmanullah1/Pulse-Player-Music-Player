@@ -1,9 +1,7 @@
 package com.pulse.player
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.pulse.player.data.settings.ColorSource
 import com.pulse.player.ui.screens.AppShell
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.theme.PulseTheme
@@ -65,13 +64,21 @@ class MainActivity : ComponentActivity() {
             val themeMode by vm.themeMode.collectAsStateWithLifecycle()
             val skinId by vm.skinId.collectAsStateWithLifecycle()
             val reducedMotion by vm.reducedMotion.collectAsStateWithLifecycle()
+            val colorSource by vm.colorSource.collectAsStateWithLifecycle()
+            val seedColor by vm.seedColor.collectAsStateWithLifecycle()
+            val cornerRadius by vm.cornerRadiusDp.collectAsStateWithLifecycle()
+            val artworkAccent by vm.artworkAccent.collectAsStateWithLifecycle()
             val activeSkin = Skins.firstOrNull { it.id == skinId } ?: Skins[0]
 
             PulseTheme(
                 mode = themeMode,
                 skin = activeSkin,
                 reducedMotion = reducedMotion,
-                accent = Pulse.Cyan
+                accent = Pulse.Cyan,
+                colorSource = colorSource,
+                seedColor = seedColor,
+                artworkAccent = artworkAccent,
+                cornerRadiusDp = cornerRadius
             ) {
                 AppShell(vm = vm, windowSize = windowSize)
             }
@@ -84,24 +91,19 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val audioPerm = audioPermission()
             val hasAudio = ContextCompat.checkSelfPermission(this@MainActivity, audioPerm) == PackageManager.PERMISSION_GRANTED
-            val hasNotification = Build.VERSION.SDK_INT < 33 ||
-                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-            val hasRecord = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-            if (hasAudio && hasNotification && hasRecord) {
+            if (hasAudio) {
                 vm.settings.setAudioPermissionAsked(true)
                 vm.scan()
                 return@launch
             }
 
+            // Just-in-time: request only the minimum audio permission needed to build the library.
+            // Microphone capture is not requested at launch; visualizers use
+            // playback-side analysis rather than microphone input.
+            // POST_NOTIFICATIONS is requested when a feature that needs it is first used.
             val permissions = buildList {
                 if (!hasAudio) add(audioPerm)
-                if (Build.VERSION.SDK_INT >= 33 && !hasNotification) {
-                    add(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                if (!hasRecord) {
-                    add(Manifest.permission.RECORD_AUDIO)
-                }
             }
 
             if (permissions.isNotEmpty()) {

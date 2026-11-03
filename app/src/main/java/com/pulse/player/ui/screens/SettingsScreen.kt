@@ -334,7 +334,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         Spacer(Modifier.height(4.dp))
                         Text("Gemini API Key", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                         Text(
-                            "Required for audio transcription and Lyria music generation. Can also be set as GEMINI_API_KEY in the AI Studio Secrets panel.",
+                            "Used only for optional online transcription and Lyria music generation in the full build.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Pulse.TextMid
                         )

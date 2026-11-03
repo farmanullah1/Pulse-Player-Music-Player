@@ -2,6 +2,7 @@ package com.pulse.player
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.room.Room
 import com.pulse.player.data.db.PulseDb
 import com.pulse.player.data.favorites.FavoritesRepository
@@ -11,8 +12,10 @@ import com.pulse.player.data.settings.SettingsStore
 import com.pulse.player.playback.PlayerController
 import com.pulse.player.data.backup.ArchiveBackupService
 import com.pulse.player.data.backup.ArchiveRestoreService
+import com.pulse.player.net.NetworkGateway
+import com.pulse.player.net.NetworkGatewayFactory
 
-class PulseApp : Application() {
+open class PulseApp : Application() {
     lateinit var db: PulseDb
         private set
     lateinit var settings: SettingsStore
@@ -27,17 +30,26 @@ class PulseApp : Application() {
         private set
     lateinit var archiveRestore: ArchiveRestoreService
         private set
+    lateinit var networkGateway: NetworkGateway
+        private set
 
     override fun onCreate() {
         super.onCreate()
+        // Back up before any migration runs; covers both 3→4 and any future path.
         try {
-            PulseDb.backupDatabaseBeforeMigration(this, 2)
-        } catch (_: Exception) {}
+            PulseDb.backupDatabaseBeforeMigration(this, 3)
+        } catch (e: Exception) {
+            Log.w("PulseApp", "Could not create the pre-migration database backup", e)
+        }
         db = Room.databaseBuilder(this, PulseDb::class.java, "pulse.db")
-            .addMigrations(PulseDb.MIGRATION_1_2, PulseDb.MIGRATION_2_3)
-            .fallbackToDestructiveMigration()
+            .addMigrations(
+                PulseDb.MIGRATION_1_2,
+                PulseDb.MIGRATION_2_3,
+                PulseDb.MIGRATION_3_4
+            )
             .build()
         settings = SettingsStore(this)
+        networkGateway = NetworkGatewayFactory.create(this, settings)
         scanner = LibraryScanner(this, db, settings)
         player = PlayerController(this)
         favoritesRepo = FavoritesRepository(this, db)

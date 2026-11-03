@@ -200,7 +200,20 @@ class LibraryScanner(
                         sourceType = "MEDIASTORE",
                         stableId = id.toString(),
                         volumeId = volumeName,
-                        folderUri = null
+                        folderUri = null,
+                        // Schema v4 fields populated from MediaStore where available
+                        genre = "",              // MediaStore genre requires separate query; populated post-scan
+                        genresRaw = "",
+                        albumArtistNorm = norm(null), // albumArtist not directly in Audio.Media projection; populated post-scan
+                        bitrate = 0,             // Not available from MediaStore without opening the file
+                        sampleRate = 0,
+                        bitDepth = 0,
+                        codec = c.getString(iM)?.let { guessCodecFromMime(it) } ?: "",
+                        replayGainTrackDb = 0f,
+                        replayGainAlbumDb = 0f,
+                        bpm = 0f,
+                        language = "",
+                        hasEmbeddedLyrics = false
                     )
 
                     rows += track
@@ -307,7 +320,13 @@ class LibraryScanner(
                         sourceType = "SAF",
                         stableId = docId,
                         volumeId = "external_primary",
-                        folderUri = treeUri.toString()
+                        folderUri = treeUri.toString(),
+                        // Schema v4 defaults for SAF tracks (no metadata reader yet)
+                        genre = "", genresRaw = "", albumArtistNorm = "",
+                        bitrate = 0, sampleRate = 0, bitDepth = 0,
+                        codec = file.type?.let { guessCodecFromMime(it) } ?: "",
+                        replayGainTrackDb = 0f, replayGainAlbumDb = 0f,
+                        bpm = 0f, language = "", hasEmbeddedLyrics = false
                     )
                     count++
                     if (batch.size >= 500) {
@@ -324,4 +343,21 @@ class LibraryScanner(
         }
         count
     }
+}
+
+/** Best-effort codec name from a MIME type without opening the file. */
+internal fun guessCodecFromMime(mime: String): String = when {
+    mime.contains("flac",  ignoreCase = true) -> "FLAC"
+    mime.contains("mp3",   ignoreCase = true) -> "MP3"
+    mime.contains("mpeg",  ignoreCase = true) -> "MP3"
+    mime.contains("m4a",   ignoreCase = true) -> "AAC"
+    mime.contains("mp4",   ignoreCase = true) -> "AAC"
+    mime.contains("aac",   ignoreCase = true) -> "AAC"
+    mime.contains("ogg",   ignoreCase = true) -> "OGG"
+    mime.contains("opus",  ignoreCase = true) -> "OPUS"
+    mime.contains("wav",   ignoreCase = true) -> "WAV"
+    mime.contains("x-ms-wma") -> "WMA"
+    mime.contains("aiff",  ignoreCase = true) -> "AIFF"
+    mime.contains("alac",  ignoreCase = true) -> "ALAC"
+    else -> ""
 }

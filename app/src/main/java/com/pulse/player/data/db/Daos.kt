@@ -97,6 +97,67 @@ interface TrackDao {
         "ORDER BY sizeBytes DESC"
     )
     suspend fun dupMembers(t: String, a: String): List<TrackEntity>
+
+    // ─── Schema v4: genre queries ────────────────────────────────────────────
+
+    /** All distinct non-empty genres with track count and total duration. */
+    @Query(
+        "SELECT genre AS genre, COUNT(*) AS trackCount, SUM(durationMs) AS totalMs " +
+        "FROM tracks WHERE available = 1 AND genre != '' " +
+        "GROUP BY genre ORDER BY genre COLLATE NOCASE"
+    )
+    fun observeGenres(): Flow<List<GenreStat>>
+
+    /** Tracks in a specific genre. */
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
+        "LEFT JOIN favorites f ON f.trackId = t.id " +
+        "WHERE t.available = 1 AND t.genre = :genre " +
+        "ORDER BY t.title COLLATE NOCASE"
+    )
+    fun observeForGenre(genre: String): Flow<List<TrackWithFav>>
+
+    /** All distinct non-empty languages with track count. */
+    @Query(
+        "SELECT language, COUNT(*) AS cnt FROM tracks " +
+        "WHERE available = 1 AND language != '' " +
+        "GROUP BY language ORDER BY language COLLATE NOCASE"
+    )
+    suspend fun allLanguages(): List<LanguageCount>
+
+    /** Tracks with a specific language. */
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
+        "LEFT JOIN favorites f ON f.trackId = t.id " +
+        "WHERE t.available = 1 AND t.language = :lang " +
+        "ORDER BY t.title COLLATE NOCASE"
+    )
+    fun tracksForLanguage(lang: String): Flow<List<TrackWithFav>>
+
+    /** Update track metadata fields written by tag-editor or post-scan enrichment. */
+    @Query(
+        "UPDATE tracks SET genre = :genre, genresRaw = :genresRaw, albumArtist = :albumArtist, " +
+        "albumArtistNorm = :albumArtistNorm, bitrate = :bitrate, sampleRate = :sampleRate, " +
+        "bitDepth = :bitDepth, codec = :codec, replayGainTrackDb = :rgTrack, " +
+        "replayGainAlbumDb = :rgAlbum, bpm = :bpm, language = :lang, " +
+        "hasEmbeddedLyrics = :hasLyrics WHERE id = :id"
+    )
+    suspend fun updateMetadata(
+        id: String,
+        genre: String,
+        genresRaw: String,
+        albumArtist: String?,
+        albumArtistNorm: String,
+        bitrate: Int,
+        sampleRate: Int,
+        bitDepth: Int,
+        codec: String,
+        rgTrack: Float,
+        rgAlbum: Float,
+        bpm: Float,
+        lang: String,
+        hasLyrics: Boolean
+    )
 }
 
 @Dao
@@ -331,4 +392,185 @@ interface LyricsDao {
 
     @Query("DELETE FROM lyrics WHERE trackId = :id")
     suspend fun remove(id: String)
+}
+
+// ─── Schema v4 DAOs ───────────────────────────────────────────────────────────
+
+@Dao
+interface TrackMetaDao {
+    @Query("SELECT * FROM track_meta WHERE trackId = :id")
+    fun observe(id: String): Flow<TrackMetaEntity?>
+
+    @Upsert
+    suspend fun upsert(m: TrackMetaEntity)
+
+    @Query("DELETE FROM track_meta WHERE trackId = :id")
+    suspend fun remove(id: String)
+
+    /** All tracks with a rating of at least 1. */
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite " +
+        "FROM track_meta m JOIN tracks t ON t.id = m.trackId " +
+        "LEFT JOIN favorites f ON f.trackId = t.id " +
+        "WHERE m.rating >= :minRating AND t.available = 1 " +
+        "ORDER BY m.rating DESC"
+    )
+    fun ratedTracks(minRating: Int = 1): Flow<List<TrackWithFav>>
+}
+
+@Dao
+interface TrackTagDao {
+    @Query("SELECT tag FROM track_tags WHERE trackId = :id")
+    fun tagsFor(id: String): Flow<List<String>>
+
+    @Query("SELECT DISTINCT tag FROM track_tags ORDER BY tag COLLATE NOCASE")
+    fun allTags(): Flow<List<String>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun add(t: TrackTagEntity)
+
+    @Query("DELETE FROM track_tags WHERE trackId = :id AND tag = :tag")
+    suspend fun remove(id: String, tag: String)
+
+    @Query("DELETE FROM track_tags WHERE trackId = :id")
+    suspend fun removeAll(id: String)
+
+    @Query(
+        "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite " +
+        "FROM track_tags tt JOIN tracks t ON t.id = tt.trackId " +
+        "LEFT JOIN favorites f ON f.trackId = t.id " +
+        "WHERE tt.tag = :tag AND t.available = 1 " +
+        "ORDER BY t.title COLLATE NOCASE"
+    )
+    fun tracksForTag(tag: String): Flow<List<TrackWithFav>>
+}
+
+@Dao
+interface SavedQueueDao {
+    @Query("SELECT * FROM saved_queues ORDER BY createdAtMs DESC")
+    fun allQueues(): Flow<List<SavedQueueEntity>>
+
+    @Query("SELECT * FROM saved_queues WHERE id = :id")
+    suspend fun queueById(id: Long): SavedQueueEntity?
+
+    @Insert
+    suspend fun insertQueue(q: SavedQueueEntity): Long
+
+    @Query("UPDATE saved_queues SET name = :name WHERE id = :id")
+    suspend fun rename(id: Long, name: String)
+
+    @Query("DELETE FROM saved_queues WHERE id = :id")
+    suspend fun deleteQueue(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertItems(items: List<SavedQueueItemEntity>)
+
+    @Query("DELETE FROM saved_queue_items WHERE queueId = :id")
+    suspend fun clearItems(id: Long)
+
+    @Query("SELECT trackId FROM saved_queue_items WHERE queueId = :id ORDER BY position")
+    suspend fun trackIds(id: Long): List<String>
+
+    @Transaction
+    suspend fun save(name: String, trackIds: List<String>, currentIndex: Int, positionMs: Long): Long {
+        val queueId = insertQueue(SavedQueueEntity(
+            name = name,
+            createdAtMs = System.currentTimeMillis(),
+            currentIndex = currentIndex,
+            positionMs = positionMs
+        ))
+        val items = trackIds.mapIndexed { i, id -> SavedQueueItemEntity(queueId, i, id) }
+        insertItems(items)
+        return queueId
+    }
+
+    @Transaction
+    suspend fun delete(id: Long) {
+        clearItems(id)
+        deleteQueue(id)
+    }
+}
+
+@Dao
+interface SmartPlaylistDao {
+    @Query("SELECT * FROM smart_playlists ORDER BY createdAtMs DESC")
+    fun all(): Flow<List<SmartPlaylistEntity>>
+
+    @Query("SELECT * FROM smart_playlists WHERE id = :id")
+    suspend fun byId(id: Long): SmartPlaylistEntity?
+
+    @Insert
+    suspend fun insert(sp: SmartPlaylistEntity): Long
+
+    @Query("UPDATE smart_playlists SET name = :name, rulesJson = :rulesJson, sortKey = :sortKey, sortOrder = :sortOrder, limitCount = :limitCount WHERE id = :id")
+    suspend fun update(id: Long, name: String, rulesJson: String, sortKey: String?, sortOrder: Int?, limitCount: Int?)
+
+    @Query("UPDATE smart_playlists SET name = :name WHERE id = :id")
+    suspend fun rename(id: Long, name: String)
+
+    @Query("DELETE FROM smart_playlists WHERE id = :id")
+    suspend fun delete(id: Long)
+}
+
+@Dao
+interface ArtistImageDao {
+    @Query("SELECT * FROM artist_images WHERE artistNorm = :norm")
+    suspend fun get(norm: String): ArtistImageEntity?
+
+    @Upsert
+    suspend fun upsert(img: ArtistImageEntity)
+
+    @Query("DELETE FROM artist_images WHERE artistNorm = :norm")
+    suspend fun remove(norm: String)
+
+    @Query("DELETE FROM artist_images WHERE source = 'DEEZER'")
+    suspend fun clearOnlineCache()
+}
+
+@Dao
+interface SourceDao {
+    @Query("SELECT * FROM sources ORDER BY name COLLATE NOCASE")
+    fun all(): Flow<List<SourceEntity>>
+
+    @Query("SELECT * FROM sources WHERE id = :id")
+    suspend fun byId(id: String): SourceEntity?
+
+    @Upsert
+    suspend fun upsert(s: SourceEntity)
+
+    @Query("DELETE FROM sources WHERE id = :id")
+    suspend fun remove(id: String)
+
+    @Query("UPDATE sources SET enabled = :enabled WHERE id = :id")
+    suspend fun setEnabled(id: String, enabled: Boolean)
+}
+
+@Dao
+interface WaveformDao {
+    @Query("SELECT * FROM waveforms WHERE trackKey = :key")
+    suspend fun get(key: String): WaveformEntity?
+
+    @Upsert
+    suspend fun upsert(w: WaveformEntity)
+
+    @Query("DELETE FROM waveforms WHERE trackKey = :key")
+    suspend fun remove(key: String)
+
+    @Query("DELETE FROM waveforms")
+    suspend fun clearAll()
+}
+
+@Dao
+interface BookmarkDao {
+    @Query("SELECT * FROM bookmarks WHERE trackId = :trackId ORDER BY positionMs")
+    fun forTrack(trackId: String): Flow<List<BookmarkEntity>>
+
+    @Insert
+    suspend fun add(b: BookmarkEntity): Long
+
+    @Query("DELETE FROM bookmarks WHERE id = :id")
+    suspend fun remove(id: Long)
+
+    @Query("DELETE FROM bookmarks WHERE trackId = :trackId")
+    suspend fun removeAll(trackId: String)
 }

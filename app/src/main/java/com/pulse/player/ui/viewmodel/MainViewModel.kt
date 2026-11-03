@@ -33,10 +33,12 @@ import com.pulse.player.data.favorites.FavItem
 import com.pulse.player.data.backup.classic.FavoritesRepository
 import com.pulse.player.data.scan.SampleMusicHelper
 import com.pulse.player.data.settings.ThemeMode
+import com.pulse.player.data.settings.ColorSource
 import com.pulse.player.playback.Track
 import com.pulse.player.playback.toTrack
 import com.pulse.player.ui.screens.PlayerLayoutMode
 import com.pulse.player.ui.screens.Screen
+import com.pulse.player.ui.theme.Pulse as PulseColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,10 +52,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.pulse.player.data.ai.AudioRecorderHelper
-import com.pulse.player.data.ai.GeminiAudioClient
-import com.pulse.player.data.ai.GeneratedMusicResult
-import com.pulse.player.data.ai.TranscriptionResult
+import com.pulse.player.net.GeneratedMusicResult
+import com.pulse.player.net.NetworkGateway
+import com.pulse.player.net.TranscriptionResult
 import com.pulse.player.data.scan.norm
 import java.io.File
 import java.util.ArrayDeque
@@ -81,6 +82,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val player = app.player
     val db = app.db
     val settings = app.settings
+    private val networkGateway: NetworkGateway = app.networkGateway
     private val scanner = app.scanner
     val favoritesRepo = app.favoritesRepo
     val archiveBackup: ArchiveBackupService = app.archiveBackup
@@ -148,6 +150,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val wallpaperPath: StateFlow<String?> = settings.wallpaperPath.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val reducedMotion: StateFlow<Boolean> = settings.reducedMotion.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val fadeEnabled: StateFlow<Boolean> = settings.fadeEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    // Phase M2: new customization axes
+    val colorSource: StateFlow<ColorSource> =
+        settings.colorSource.stateIn(viewModelScope, SharingStarted.Eagerly, ColorSource.PULSE_PALETTE)
+    val seedColor: StateFlow<Int> = settings.seedColor.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val cornerRadiusDp: StateFlow<Int> = settings.cornerRadiusDp.stateIn(viewModelScope, SharingStarted.Eagerly, 16)
+    val buttonPresetId: StateFlow<String> = settings.buttonPresetId.stateIn(viewModelScope, SharingStarted.Eagerly, "centered")
+    val onlineFeaturesEnabled: StateFlow<Boolean> = settings.onlineFeaturesEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val offlineOnlyMode: StateFlow<Boolean> = settings.offlineOnlyMode.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val animationIntensity: StateFlow<Int> = settings.animationIntensity.stateIn(viewModelScope, SharingStarted.Eagerly, 2)
+    val listDensity: StateFlow<Int> = settings.listDensity.stateIn(viewModelScope, SharingStarted.Eagerly, 1)
+    val albumGridColumns: StateFlow<Int> = settings.albumGridColumns.stateIn(viewModelScope, SharingStarted.Eagerly, 2)
+    val minFileSizeKb: StateFlow<Int> = settings.minFileSizeKb.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    // Dynamic accent driven by current artwork — updated by player layouts when art changes
+    val artworkAccent = MutableStateFlow(PulseColors.Cyan)
 
     fun setThemeMode(m: ThemeMode) = viewModelScope.launch { settings.setTheme(m) }
     fun setSkin(id: String) = viewModelScope.launch { settings.setSkin(id) }
@@ -169,6 +185,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settings.setFade(v)
         com.pulse.player.playback.PlaybackEngine.fadeEnabled = v
     }
+    // Phase M2: new setter delegates
+    fun setColorSource(s: ColorSource) = viewModelScope.launch { settings.setColorSource(s) }
+    fun setSeedColor(argb: Int) = viewModelScope.launch { settings.setSeedColor(argb) }
+    fun setCornerRadius(dp: Int) = viewModelScope.launch { settings.setCornerRadius(dp) }
+    fun setButtonPreset(id: String) = viewModelScope.launch { settings.setButtonPreset(id) }
+    fun setOnlineFeaturesEnabled(v: Boolean) = viewModelScope.launch { settings.setOnlineFeaturesEnabled(v) }
+    fun setOfflineOnlyMode(v: Boolean) = viewModelScope.launch { settings.setOfflineOnlyMode(v) }
+    fun setAnimationIntensity(v: Int) = viewModelScope.launch { settings.setAnimationIntensity(v) }
+    fun setListDensity(v: Int) = viewModelScope.launch { settings.setListDensity(v) }
+    fun setAlbumGridColumns(v: Int) = viewModelScope.launch { settings.setAlbumGridColumns(v) }
+    fun setMinFileSizeKb(v: Int) = viewModelScope.launch { settings.setMinFileSizeKb(v) }
 
     // Scanning & Tracks
     val scanning: StateFlow<Boolean> = scanner.scanning
@@ -812,53 +839,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // AI Audio Transcription & Lyria Music Generation
-    private val audioRecorder = AudioRecorderHelper(viewModelScope)
-    val isRecording = audioRecorder.isRecording
-    val recordingDurationSec = audioRecorder.durationSec
-    val recordingAmplitude = audioRecorder.maxAmplitude
-    private var currentRecordedFile: File? = null
-
     val transcriptionState = MutableStateFlow<TranscriptionState>(TranscriptionState.Idle)
     val musicGenState = MutableStateFlow<MusicGenState>(MusicGenState.Idle)
-
-    fun startAudioRecording(): Boolean {
-        val res = audioRecorder.start(getApplication())
-        return if (res.isSuccess) {
-            currentRecordedFile = res.getOrNull()
-            transcriptionState.value = TranscriptionState.Recording
-            true
-        } else {
-            val err = res.exceptionOrNull()?.message ?: "Failed to start microphone recording"
-            transcriptionState.value = TranscriptionState.Error(err)
-            false
-        }
-    }
-
-    fun stopAndTranscribeAudio(customPrompt: String? = null) {
-        val file = audioRecorder.stop() ?: currentRecordedFile
-        if (file == null || !file.exists() || file.length() == 0L) {
-            transcriptionState.value = TranscriptionState.Error("No audio was recorded.")
-            return
-        }
-        viewModelScope.launch {
-            transcriptionState.value = TranscriptionState.Transcribing("Transcribing audio with gemini-3.5-transcribe...")
-            val apiKey = settings.effectiveGeminiApiKey()
-            val result = GeminiAudioClient.transcribeAudio(file, apiKey, customPrompt)
-            if (result.isSuccess) {
-                transcriptionState.value = TranscriptionState.Success(result.getOrThrow(), file)
-            } else {
-                val err = result.exceptionOrNull()?.message ?: "Transcription failed"
-                transcriptionState.value = TranscriptionState.Error(err)
-            }
-        }
-    }
-
-    fun cancelAudioRecording() {
-        audioRecorder.cancel()
-        currentRecordedFile = null
-        transcriptionState.value = TranscriptionState.Idle
-    }
 
     fun resetTranscriptionState() {
         transcriptionState.value = TranscriptionState.Idle
@@ -883,7 +865,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return@launch
         }
 
-        val res = GeminiAudioClient.transcribeAudio(tempFile, apiKey, customPrompt)
+        val res = networkGateway.transcribeAudio(tempFile, apiKey, customPrompt)
         if (res.isSuccess) {
             transcriptionState.value = TranscriptionState.Success(res.getOrThrow(), tempFile)
         } else {
@@ -905,7 +887,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         musicGenState.value = MusicGenState.Generating(prompt, model)
         val apiKey = settings.effectiveGeminiApiKey()
         val ctx = getApplication<Application>()
-        val res = GeminiAudioClient.generateMusic(ctx, prompt, model, apiKey)
+        val res = networkGateway.generateMusic(ctx, prompt, model, apiKey)
         if (res.isSuccess) {
             val genResult = res.getOrThrow()
             val mmr = android.media.MediaMetadataRetriever()
