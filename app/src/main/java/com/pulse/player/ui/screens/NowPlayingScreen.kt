@@ -151,19 +151,17 @@ fun NowPlayingScreen(vm: MainViewModel) {
 
     val ctx = LocalContext.current
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
-    var dominant by remember { mutableIntStateOf(0xFF2A0826.toInt()) }
+    var dominantColor by remember { mutableIntStateOf(0xFF2A0826.toInt()) }
     var showLyrics by remember { mutableStateOf(false) }
 
     LaunchedEffect(s.mediaId) {
         s.artworkUri?.let { u ->
-            ArtworkLoader.load(ctx, u, 128)?.let {
-                dominant = ArtworkLoader.dominant(it)
-            }
+            ArtworkLoader.load(ctx, u, 128)
         }
     }
 
     AuroraBackground(
-        accent = Color(dominant),
+        accent = Color(dominantColor),
         modifier = Modifier.fillMaxSize()
     ) {
         Column(
@@ -212,7 +210,7 @@ fun NowPlayingScreen(vm: MainViewModel) {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    PlayerThemeHost(vm, s, Color(dominant))
+                    PlayerThemeHost(vm, s, Color(dominantColor))
                 }
             }
 

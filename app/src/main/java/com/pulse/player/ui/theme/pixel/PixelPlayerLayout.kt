@@ -220,7 +220,7 @@ fun PixelPlayerLayout(
 
                 // Center Play/Pause 76dp button
                 FilledIconButton(
-                    onClick = vm.player::togglePlayPause,
+                    onClick = vm.player::togglePlay,
                     modifier = Modifier.size(76.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = Color.White,

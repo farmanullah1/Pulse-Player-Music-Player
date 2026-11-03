@@ -125,7 +125,8 @@ suspend fun stage(ctx: Context, zip: SafeZip): StagedBackup = withContext(Dispat
     for (n in snapEntries) {
         val stream = runCatching { zip.open(n) }.getOrNull()
         if (stream != null) {
-            val valid = checkSnapshotStream(stream, zip.size(n))
+            val entrySize = zip.zip.getEntry(n)?.size ?: -1L
+            val valid = checkSnapshotStream(stream, entrySize)
             if (valid) {
                 ok++
             } else {
@@ -154,4 +155,3 @@ suspend fun stage(ctx: Context, zip: SafeZip): StagedBackup = withContext(Dispat
         warnings = warnings
     )
 }
-

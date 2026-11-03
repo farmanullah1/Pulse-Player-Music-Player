@@ -1,5 +1,6 @@
 package com.pulse.player.data.favorites
 
+import com.pulse.player.data.backup.classic.FavoritesCodec
 import com.pulse.player.data.db.TrackEntity
 import com.pulse.player.data.scan.norm
 import org.junit.Assert.assertEquals

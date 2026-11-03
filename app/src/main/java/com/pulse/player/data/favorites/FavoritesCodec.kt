@@ -1,4 +1,4 @@
 package com.pulse.player.data.favorites
 
-typealias FavItem = com.pulse.player.data.backup.classic.FavItem
+/** Backward-compatible package facade for the classic favorites codec. */
 typealias FavoritesCodec = com.pulse.player.data.backup.classic.FavoritesCodec

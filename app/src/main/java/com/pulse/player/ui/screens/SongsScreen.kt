@@ -60,7 +60,7 @@ fun SongsScreen(vm: MainViewModel) {
     val missingCount by vm.missingCount.collectAsStateWithLifecycle()
     val showMissing by vm.showMissing.collectAsStateWithLifecycle()
     val ps by vm.player.state.collectAsStateWithLifecycle()
-    val scanning by vm.scanning.collectAsStateWithLifecycle()
+    val scanning by vm.scanning.collectAsStateWithLifecycle(initialValue = false)
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -138,14 +138,14 @@ fun SongsScreen(vm: MainViewModel) {
                         )
                         if (showMissing) {
                             Surface(
-                                color = Pulse.SurfaceCard,
+                                color = Pulse.Surface,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = "These files weren't found on the last scan. Your favourites and playlists keep them.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextSecondary,
+                                    color = Pulse.TextMid,
                                     modifier = Modifier.padding(12.dp)
                                 )
                             }

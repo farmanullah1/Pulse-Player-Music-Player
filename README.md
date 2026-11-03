@@ -7,7 +7,9 @@ A fast, colorful, 100% offline music player for Android. Built with Kotlin, Jetp
 ## Highlights
 - **100% Offline**: No network permission, no tracking, no ads, no cloud accounts.
 - **Top Tabs**: For you, Songs, Playlists, Folders, Albums, Artists, plus global debounced search.
-- **9 Custom Player Themes**: Interactive carousel featuring Classic, Mountain Horizon, Mesh Glass, Minimal Mood, Acoustic, Vinyl (with spinning arm and vinyl grooves), Coastal Ocean, Starry Sky, and Immersive Artwork Player.
+- **12 Custom Player Themes & Layouts**: Switchable Classic, Mountain Horizon, Mesh Glass, Minimal Mood, Acoustic, Vinyl (with spinning arm and vinyl grooves), Coastal Ocean, Starry Sky, Immersive Artwork, Pixel Expressive, Namida Waveform, and Atmospheric Queue players.
+- **Atmospheric Queue Player**: Forest-and-mist artwork, live queue preview, animated equalizer, favorites, shuffle, repeat, sleep timer, playlist actions, and responsive playback controls.
+- **Expressive Playback Controls**: Pixel-style wavy seeking, Namida-inspired waveform seeking, queue management, animated visualizers, and state-hoisted controls connected to the live Media3 player.
 - **Skin Themes & Procedural Wallpapers**: Plum, Aurora, Afterglow, Ocean, Sunrise, Forest, Mono, Pure Black AMOLED, Neon, Candy, and Lava, plus custom photo backdrops.
 - **Equalizer & Effects**: Real hardware-backed equalizer sliders, bass boost, 3D virtualizer, and reverb presets (capability-checked).
 - **Sleep Timer & Fades**: Sleep timer with automatic 10-second volume fade-out and "stop after this track" option.
@@ -19,6 +21,7 @@ A fast, colorful, 100% offline music player for Android. Built with Kotlin, Jetp
 - **Monthly Recap**: On-device listening statistics, top songs and artists, badges, and shareable card.
 - **Adaptive Layout**: Supports handheld phones with floating mini player and tablets with NavigationRail and docked Now Playing panel.
 - **Accessibility & Motion**: Complies with M3 touch target guidelines; includes reduced motion mode.
+- **First-Run Setup**: Requests the required audio-library permission and Android notification permission when needed, with SAF folder access available for restricted libraries.
 
 ## Backup & Restore
 
@@ -49,5 +52,15 @@ Pulse Player provides two independent, secure backup & restore methods under **S
 ### Running Unit Tests
 To run local JVM unit tests for archive validation, track reconciliation, and JSON codecs:
 ```bash
-gradle :app:testDebugUnitTest
+./gradlew :app:testDebugUnitTest
+```
+
+On Windows PowerShell, use:
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+```
+
+### Compile the Debug Build
+```bash
+./gradlew :app:compileDebugKotlin
 ```

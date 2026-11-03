@@ -122,7 +122,7 @@ object SafScanner {
         val seenEntities = ArrayList<ScanSeenEntity>()
         val rows = ArrayList<TrackEntity>()
 
-        fun walk(docId: String, display: String) {
+        suspend fun walk(docId: String, display: String) {
             val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
             val cols = arrayOf(
                 Document.COLUMN_DOCUMENT_ID,
@@ -178,4 +178,3 @@ object SafScanner {
         }
     }
 }
-

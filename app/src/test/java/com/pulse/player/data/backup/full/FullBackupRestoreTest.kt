@@ -26,7 +26,7 @@ class FullBackupRestoreTest {
         path: String = "/storage/emulated/0/Music/$title.mp3"
     ) = TrackEntity(
         id = id,
-        mediaStoreId = id.hashCode().toLong(),
+        uri = "content://media/external/audio/media/${id.hashCode()}",
         title = title,
         artist = artist,
         album = album,
@@ -34,13 +34,11 @@ class FullBackupRestoreTest {
         durationMs = 180_000L,
         year = 2024,
         trackNumber = 1,
-        discNumber = 1,
-        genre = "Rock",
-        dateAddedSec = 1700000000L,
-        dateModifiedSec = 1700000000L,
+        dateAddedMs = 1700000000000L,
+        dateModifiedMs = 1700000000000L,
         sizeBytes = 5_000_000L,
         mimeType = "audio/mpeg",
-        relativeDir = "Music",
+        folderPath = "Music",
         displayName = "$title.mp3",
         dataPath = path,
         available = true,
@@ -128,14 +126,16 @@ class FullBackupRestoreTest {
 
         val json = FavoritesCodec.encode(tracks, addedMap)
         assertNotNull(json)
-        assertTrue(json.contains("pulse-favorites-1"))
+        assertTrue(json.contains("pulseplayer.favorites"))
         assertTrue(json.contains("Fav1"))
         assertTrue(json.contains("Fav2"))
 
         // Decode roundtrip verification
         val decoded = FavoritesCodec.decode(json)
-        assertEquals(2, decoded.items.size)
-        assertEquals("Fav1", decoded.items[0].title)
+        assertTrue(decoded is FavoritesCodec.Decoded.Ok)
+        val items = (decoded as FavoritesCodec.Decoded.Ok).items
+        assertEquals(2, items.size)
+        assertEquals("Fav1", items[0].title)
     }
 
     @Test
@@ -158,4 +158,3 @@ class FullBackupRestoreTest {
         assertTrue(customPlaylist.name.lowercase() !in favNames)
     }
 }
-

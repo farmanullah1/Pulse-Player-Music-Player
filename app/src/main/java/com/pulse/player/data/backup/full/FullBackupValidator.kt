@@ -21,6 +21,7 @@ object BackupLimits {
     val ALLOWED_NAMES = setOf(
         "metadata.inf",
         "pulse.manifest.json",
+        "Playlists.json",
         "settings.bak",
         "Covers/MusicCoversBackupConfig.conf",
         "Covers/AlbumCoversBackupConfig.conf",
@@ -277,4 +278,3 @@ object FullBackupValidator {
         }
     }
 }
-

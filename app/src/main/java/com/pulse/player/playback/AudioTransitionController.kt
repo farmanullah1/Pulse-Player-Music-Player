@@ -51,8 +51,8 @@ class AudioTransitionController(
             return
         }
         activeReason = reason
+        val start = clock()
         job = scope.launch {
-            val start = clock()
             while (true) {
                 val t = ((clock() - start) / durationMs.toFloat()).coerceIn(0f, 1f)
                 fadeMultiplier = from + (to - from) * (t * t * (3 - 2 * t)) // smoothstep
@@ -75,4 +75,3 @@ class AudioTransitionController(
     /** Call on completion, cancel, error, pause, stop, focus loss, service destroy. Always leaves effective == userVolume. */
     fun restore() = snapTo(1f)
 }
-

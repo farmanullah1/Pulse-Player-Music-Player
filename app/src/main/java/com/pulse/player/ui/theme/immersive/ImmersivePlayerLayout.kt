@@ -289,7 +289,7 @@ fun Controls(
             canSeek = canSeek,
             onPrev = vm.player::previous,
             onBack10 = { vm.player.skipBy(-10_000L) },
-            onToggle = vm.player::togglePlayPause,
+            onToggle = vm.player::togglePlay,
             onFwd10 = { vm.player.skipBy(10_000L) },
             onNext = vm.player::next
         )
@@ -343,7 +343,7 @@ fun ImmersivePlayerLayout(
             val themeColors = PlayerThemes.firstOrNull { it.id == "immersive" }?.colors
                 ?: listOf(Color(0xFF1B1B22), Color.Black)
             ArtworkBackground(
-                art = s.artRef,
+                art = s.artworkUri?.let { com.pulse.player.data.scan.ArtRef(it, it, 0L) },
                 fallback = themeColors,
                 modifier = Modifier.fillMaxSize()
             )
@@ -458,4 +458,3 @@ fun ImmersivePlayerLayout(
         }
     }
 }
-

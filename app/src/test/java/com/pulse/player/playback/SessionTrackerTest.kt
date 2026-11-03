@@ -15,6 +15,7 @@ import java.time.ZoneId
 class FakeSharedPreferences : SharedPreferences {
     val map = mutableMapOf<String, Any?>()
 
+    override fun getAll(): MutableMap<String, *> = map.toMutableMap()
     override fun getString(key: String?, defValue: String?): String? = map[key] as? String ?: defValue
     override fun getStringSet(key: String?, defValues: Set<String>?): Set<String>? =
         (map[key] as? Set<*>)?.filterIsInstance<String>()?.toSet() ?: defValues
@@ -152,4 +153,3 @@ class SessionTrackerTest {
         assertEquals(20_000L, event.listenedMs) // Only the 10s + 10s played time
     }
 }
-

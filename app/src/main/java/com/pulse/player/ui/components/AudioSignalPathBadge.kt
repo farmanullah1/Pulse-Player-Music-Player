@@ -50,12 +50,13 @@ fun AudioSignalPathBadge(
 ) {
     if (track == null) return
     var showDetails by remember { mutableStateOf(false) }
+    val displayName = track.uri.substringAfterLast('/').substringBefore('?').ifBlank { track.title }
 
     val format = when {
-        track.displayName.endsWith(".flac", ignoreCase = true) -> "FLAC"
-        track.displayName.endsWith(".wav", ignoreCase = true) -> "WAV"
-        track.displayName.endsWith(".m4a", ignoreCase = true) || track.displayName.endsWith(".aac", ignoreCase = true) -> "AAC"
-        track.displayName.endsWith(".ogg", ignoreCase = true) -> "OGG"
+        displayName.endsWith(".flac", ignoreCase = true) -> "FLAC"
+        displayName.endsWith(".wav", ignoreCase = true) -> "WAV"
+        displayName.endsWith(".m4a", ignoreCase = true) || displayName.endsWith(".aac", ignoreCase = true) -> "AAC"
+        displayName.endsWith(".ogg", ignoreCase = true) -> "OGG"
         else -> "MP3"
     }
 
@@ -101,7 +102,7 @@ fun AudioSignalPathBadge(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SignalPathStep("1. Source File", "${track.displayName} (${format.uppercase()}, ${sampleRate}, ${bitDepth})")
+                    SignalPathStep("1. Source File", "$displayName (${format.uppercase()}, $sampleRate, $bitDepth)")
                     SignalPathStep("2. Decoder Engine", "Media3 ExoPlayer (Hardware Accelerated AudioTrack)")
                     SignalPathStep("3. Sound Processing", if (eqActive) "Hardware Equalizer & Effects Active" else "Direct Passthrough (Bit-Perfect)")
                     SignalPathStep("4. Audio Output Sink", "Android AudioHAL -> Connected Device (Direct PCM)")

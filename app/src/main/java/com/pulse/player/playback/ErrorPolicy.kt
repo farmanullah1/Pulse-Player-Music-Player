@@ -38,7 +38,7 @@ class ErrorPolicy(private val raw: Player) {
         }
 
         raw.pause()
-        PlaybackEngine.transitions.restore()
+        if (PlaybackEngine.isAttached()) PlaybackEngine.transitions.restore()
         _current.value = TrackError(
             mediaId = id,
             title = item?.mediaMetadata?.title?.toString().orEmpty(),
@@ -73,4 +73,3 @@ class ErrorPolicy(private val raw: Player) {
         }
     }
 }
-

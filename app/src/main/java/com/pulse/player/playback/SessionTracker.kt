@@ -5,6 +5,7 @@ import android.os.SystemClock
 import com.pulse.player.data.db.PlayEventEntity
 import com.pulse.player.data.db.PulseDb
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -18,7 +19,8 @@ object StatsPolicy {
     const val IGNORE_BELOW_REAL_MS = 2_000L          // sessions shorter than this are discarded (accidental taps)
 
     fun counted(real: Long, media: Long, dur: Long): Boolean =
-        real >= minOf(COUNT_MIN_REAL_MS, (dur * COUNT_MIN_FRACTION).toLong().coerceAtLeast(5_000L))
+        real >= COUNT_MIN_REAL_MS ||
+            (dur > 0 && media >= (dur * COUNT_MIN_FRACTION).toLong().coerceAtLeast(5_000L))
 
     fun skipped(real: Long, media: Long, dur: Long, userLeft: Boolean): Boolean =
         userLeft && !counted(real, media, dur) && (dur <= 0 || media < dur * SKIP_MAX_FRACTION)
@@ -119,7 +121,7 @@ class SessionTracker(
             speedAvg = if (real > 0) (media.toFloat() / real) else 1f,
             counted = StatsPolicy.counted(real, media, durationMs)
         )
-        scope.launch {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             recordEvent(e)
         }
     }

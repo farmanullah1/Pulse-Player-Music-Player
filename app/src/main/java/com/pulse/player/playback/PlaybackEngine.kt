@@ -35,6 +35,8 @@ object PlaybackEngine {
         private set
     @Volatile var fadeEnabled = true
 
+    fun isAttached(): Boolean = exo != null && ::sleep.isInitialized && ::errors.isInitialized
+
     private var trackerTickerJob: Job? = null
 
     fun attach(ctx: Context, db: PulseDb, player: ExoPlayer) {

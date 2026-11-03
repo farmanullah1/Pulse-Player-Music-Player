@@ -60,7 +60,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pulse.player.data.favorites.MatchResult
+import com.pulse.player.data.backup.classic.MatchResult
+import com.pulse.player.data.backup.classic.FavoritesRepository
 import com.pulse.player.playback.RingtoneHelper
 import com.pulse.player.playback.Track
 import com.pulse.player.ui.components.Artwork
@@ -434,7 +435,7 @@ fun CreatePlaylistDialog(vm: MainViewModel) {
 }
 
 @Composable
-fun ImportPreviewDialog(vm: MainViewModel, preview: com.pulse.player.data.favorites.FavoritesRepository.Preview) {
+fun ImportPreviewDialog(vm: MainViewModel, preview: FavoritesRepository.Preview) {
     var replace by remember { mutableStateOf(false) }
     val confidentCount = preview.results.count { it is MatchResult.Matched }
     val alreadyCount = preview.results.count { it is MatchResult.AlreadyFavorite }

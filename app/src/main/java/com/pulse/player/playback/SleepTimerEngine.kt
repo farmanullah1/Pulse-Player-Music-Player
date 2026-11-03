@@ -1,6 +1,7 @@
 package com.pulse.player.playback
 
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,6 +25,7 @@ class SleepTimerEngine(
     fun start(minutes: Int) {
         cancel()
         val end = clock() + minutes * 60_000L
+        _state.value = State(remainingMs = minutes * 60_000L)
         job = scope.launch {
             var faded = false
             while (true) {
@@ -44,13 +46,13 @@ class SleepTimerEngine(
 
     fun startEndOfTrack() {
         cancel()
-        raw.pauseAtEndOfMediaItems = true
+        setPauseAtEndOfMediaItems(true)
         _state.value = State(endOfTrack = true)
     }
 
     fun onPausedAtEndOfItem() {
         if (_state.value.endOfTrack) {
-            raw.pauseAtEndOfMediaItems = false
+            setPauseAtEndOfMediaItems(false)
             t.restore()
             _state.value = State()
         }
@@ -59,9 +61,12 @@ class SleepTimerEngine(
     fun cancel() {
         job?.cancel()
         job = null
-        raw.pauseAtEndOfMediaItems = false
+        setPauseAtEndOfMediaItems(false)
         t.restore()
         _state.value = State()
     }
-}
 
+    private fun setPauseAtEndOfMediaItems(value: Boolean) {
+        (raw as? ExoPlayer)?.pauseAtEndOfMediaItems = value
+    }
+}

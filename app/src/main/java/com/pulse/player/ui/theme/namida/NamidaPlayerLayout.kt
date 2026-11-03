@@ -348,7 +348,7 @@ private fun PlaybackControls(
         }
 
         FilledIconButton(
-            onClick = vm.player::togglePlayPause,
+            onClick = vm.player::togglePlay,
             modifier = Modifier.size(72.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = accentColor,

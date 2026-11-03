@@ -30,7 +30,7 @@ import com.pulse.player.data.backup.stage
 import com.pulse.player.data.db.PlaylistEntity
 import com.pulse.player.data.db.TrackEntity
 import com.pulse.player.data.favorites.FavItem
-import com.pulse.player.data.favorites.FavoritesRepository
+import com.pulse.player.data.backup.classic.FavoritesRepository
 import com.pulse.player.data.scan.SampleMusicHelper
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.playback.Track
@@ -148,7 +148,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setReducedMotion(v: Boolean) = viewModelScope.launch { settings.setReduced(v) }
     fun setFadeEnabled(v: Boolean) = viewModelScope.launch {
         settings.setFade(v)
-        player.fadeEnabled = v
+        com.pulse.player.playback.PlaybackEngine.fadeEnabled = v
     }
 
     // Scanning & Tracks
@@ -250,7 +250,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun importLyrics(trackId: String, uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
         runCatching {
             val stream = getApplication<Application>().contentResolver.openInputStream(uri) ?: return@runCatching
-            val text = com.pulse.player.data.backup.common.LimitedStream.readUtf8(stream, maxBytes = 256 * 1024L)
+            val text = com.pulse.player.data.backup.common.LimitedStream(stream, 256 * 1024L)
+                .reader()
+                .use { it.readText() }
             if (text.contains('\u0000')) {
                 snackbarMessage.value = "Couldn't read that file"
                 return@runCatching
@@ -901,4 +903,3 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settings.setGeminiApiKey(key)
     }
 }
-

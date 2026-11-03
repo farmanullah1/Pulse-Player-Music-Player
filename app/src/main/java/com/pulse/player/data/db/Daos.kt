@@ -203,9 +203,6 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist_tracks WHERE playlistId = :id AND trackId = :trackId")
     suspend fun removeTrack(id: Long, trackId: String)
 
-    @Query("SELECT * FROM playlists ORDER BY createdAtMs")
-    suspend fun allPlaylistsOnce(): List<PlaylistEntity>
-
     @Query("SELECT * FROM playlist_tracks WHERE playlistId = :id ORDER BY position")
     suspend fun tracksForPlaylist(id: Long): List<PlaylistTrackEntity>
 

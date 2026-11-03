@@ -88,7 +88,11 @@ object FavoritesCodec {
         val out = ArrayList<FavItem>(arr.length())
         var skipped = 0
         for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: run { skipped++; continue }
+            val o = arr.optJSONObject(i)
+            if (o == null) {
+                skipped++
+                continue
+            }
             val title = o.optString("title").take(MAX_STR)
             if (title.isBlank()) { skipped++; continue }
             val artist = o.optString("artist").take(MAX_STR)
@@ -242,4 +246,3 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         return o.toByteArray()
     }
 }
-

@@ -36,7 +36,7 @@ class PulseApp : Application() {
             .build()
         settings = SettingsStore(this)
         scanner = LibraryScanner(this, db, settings)
-        player = PlayerController(this, db)
+        player = PlayerController(this)
         favoritesRepo = FavoritesRepository(this, db)
         archiveBackup = ArchiveBackupService(this, db, settings)
         archiveRestore = ArchiveRestoreService(this, db, settings)

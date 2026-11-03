@@ -295,6 +295,8 @@ class PlayerController(
         }
     }
 
+    fun togglePlayPause() = togglePlay()
+
     fun next() {
         mc?.let {
             if (it.hasNextMediaItem()) {
@@ -447,7 +449,7 @@ class PlayerController(
 
     fun startSleep(minutes: Int) {
         cancelSleep()
-        if (::PlaybackEngine.isInitialized && PlaybackEngine.exo != null) {
+        if (PlaybackEngine.isAttached()) {
             PlaybackEngine.sleep.start(minutes)
         }
         val end = SystemClock.elapsedRealtime() + minutes * 60_000L
@@ -464,7 +466,7 @@ class PlayerController(
 
     fun sleepAtEndOfTrack() {
         cancelSleep()
-        if (::PlaybackEngine.isInitialized && PlaybackEngine.exo != null) {
+        if (PlaybackEngine.isAttached()) {
             PlaybackEngine.sleep.startEndOfTrack()
         }
         _state.update { it.copy(sleepEndOfTrack = true) }
@@ -472,7 +474,7 @@ class PlayerController(
 
     fun cancelSleep() {
         sleepJob?.cancel()
-        if (::PlaybackEngine.isInitialized && PlaybackEngine.exo != null) {
+        if (PlaybackEngine.isAttached()) {
             PlaybackEngine.sleep.cancel()
         }
         _state.update { it.copy(sleepRemainingMs = 0, sleepEndOfTrack = false) }
@@ -480,6 +482,9 @@ class PlayerController(
 
     fun retryError() = PlaybackEngine.errors.retry()
     fun skipError() = PlaybackEngine.errors.skip()
+
+    fun retry() = retryError()
+    fun skip() = skipError()
 
     fun takeQueueSnapshot(): QueueSnapshot? = mc?.let { c ->
         if (queueModel.original.isEmpty()) return null
