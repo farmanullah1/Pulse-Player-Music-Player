@@ -364,7 +364,7 @@ Confirmed permissions (no INTERNET permission):
 - `RECEIVE_BOOT_COMPLETED`
 - `WRITE_SETTINGS` (for ringtone, not normal)
 
-**INTERNET permission: absent** — confirmed in the current manifest. The project nevertheless contains an OkHttp Gemini client and has no `offline`/`full` flavor split or `NetworkGateway` boundary yet.
+**INTERNET permission:** absent from the base/offline manifest; the `full` flavor adds it together with `ACCESS_NETWORK_STATE`. Network calls are routed through `com.pulse.player.net.NetworkGateway` and are off until explicitly enabled.
 
 ---
 
@@ -403,24 +403,24 @@ Confirmed permissions (no INTERNET permission):
 
 ## 19. Known Issues and Incomplete Areas
 
-1. **`player_layout_mode` default stored as `"modern_art"`** but file 18 requires `ATMOSPHERIC_QUEUE` as default and unknown fallback. Discrepancy to resolve.
+1. **Existing stored `modern_art` values** are still accepted by the layout registry, while new/default values now use `"atmospheric_queue"`; unknown IDs also fall back to Atmospheric Queue.
 2. **No `genre` column in `TrackEntity`** — spec requires genre field in schema v4.
 3. **No `bitrate`, `sampleRate`, `bitDepth`, `codec`, `replayGain*`, `bpm`, `language`, `hasEmbeddedLyrics`** columns — required by spec's schema v4.
 4. **No smart playlists table** — required for §3.4.
 5. **No `track_tags`, `track_moods`, `track_meta`, `track_audio_profile`, `saved_queues`, `artist_images`, `sources`, `cache_entries`, `waveforms`** tables — required by spec.
 6. **`play_events` missing `origin` column** — required for history import (C5).
 7. **`lyrics` missing `source` and `format` columns** — required for multi-format lyrics.
-8. **No product flavors** — spec requires `offline` and `full` flavors (C1). Currently one build, no INTERNET permission, but online Gemini code is still compiled into it.
+8. **Flavor verification is blocked** — `offline` and `full` source sets now exist; the offline build excludes the OkHttp dependency and the full build owns the provider implementation, but SDK setup is unavailable in this environment.
 9. **No live button-layout preset system** — 12+ presets required.
 10. **Classic v2 audio copy feature** is MISSING.
 11. **No Capabilities registry** — spec §5.3 requires it.
-12. **No `NetworkGateway` or `com.pulse.player.net` package** — required for full flavor.
+12. **NetworkGateway foundation is present** — per-service switches, secure credential storage and the remaining online providers are still incomplete.
 13. **Lyrics editor** is MISSING.
 14. **Tag editor** (`NAM-L1`) is MISSING.
 15. **Smart playlists** are MISSING.
 16. **Advanced search** (typo-tolerant, ranked) is MISSING.
 17. **Waveform seekbar** (`NAM-U3`) — `WaveformSeekBar.kt` exists but full PCM decode pipeline may be PARTIAL.
 18. **Settings IA** does not match the spec's 13-section structure.
-19. **`RECORD_AUDIO` is declared in the manifest and requested by transcription UI**, contrary to the file 18 visualizer rule.
+19. **Microphone transcription is intentionally unavailable** — `RECORD_AUDIO` was removed from the manifest and the UI directs users to local track transcription; the visualizer remains a playback-side feature.
 20. **Classic Backup v2 is not implemented:** current Classic backup remains JSON/folder workflow without verified audio-copy export/import.
 21. **Current build/test result is blocked by SDK license acceptance**, so source-level statuses remain UNVERIFIED where runtime evidence is required.

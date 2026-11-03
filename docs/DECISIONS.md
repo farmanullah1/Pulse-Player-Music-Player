@@ -11,7 +11,7 @@
 
 **Rationale:** The original spec required no INTERNET permission. The merge spec adds optional online features. Both requirements are satisfied by separate flavors.
 
-**Current status:** NOT IMPLEMENTED. The current build is still a single flavor with no `INTERNET` permission, while Gemini networking is present in production source. Until the flavor boundary and `NetworkGateway` exist, online UI must not be described as a completed merge feature.
+**Current status:** FOUNDATION IMPLEMENTED. `offline` resolves to an explicit unsupported gateway and contains no network client dependency or network permission. `full` resolves to the OkHttp-backed gateway; requests remain blocked until the Online features switch is enabled and are blocked again by Offline-only mode. Per-service switches and secure API-key storage remain later work.
 
 ---
 

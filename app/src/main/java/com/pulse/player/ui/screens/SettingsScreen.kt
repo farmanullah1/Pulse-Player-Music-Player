@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.settings.ThemeMode
+import com.pulse.player.BuildConfig
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.theme.Skins
 import com.pulse.player.ui.viewmodel.MainViewModel
@@ -75,7 +76,9 @@ fun SettingsScreen(vm: MainViewModel) {
     val reducedMotion by vm.reducedMotion.collectAsStateWithLifecycle()
     val fadeEnabled by vm.fadeEnabled.collectAsStateWithLifecycle()
     val skinId by vm.skinId.collectAsStateWithLifecycle()
-    val playerThemeId by vm.playerThemeId.collectAsStateWithLifecycle()
+    val playerLayout by vm.activePlayerLayout.collectAsStateWithLifecycle()
+    val onlineFeaturesEnabled by vm.onlineFeaturesEnabled.collectAsStateWithLifecycle()
+    val offlineOnlyMode by vm.offlineOnlyMode.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
     val missingCount by vm.missingCount.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
@@ -134,7 +137,7 @@ fun SettingsScreen(vm: MainViewModel) {
                         ) { vm.go(Screen.SkinTheme) }
                         SettingsActionRow(
                             "Player Layout",
-                            "${PlayerLayoutMode.fromId(playerThemeId).displayName} • 12 switchable layouts",
+                            "${playerLayout.displayName} • ${PlayerLayoutMode.entries.size} switchable layouts",
                             Icons.Rounded.AutoAwesome
                         ) { vm.go(Screen.PlayerTheme) }
 
@@ -292,6 +295,37 @@ fun SettingsScreen(vm: MainViewModel) {
             }
 
             item {
+                SettingsSectionHeader("Online & Privacy")
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (!BuildConfig.NETWORK_FEATURES_INCLUDED) {
+                            Text(
+                                "Online integrations are not included in the offline build. Local playback, scanning, lyrics and backups remain available.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Pulse.TextMid
+                            )
+                        } else {
+                            SettingsSwitchRow(
+                                title = "Online features",
+                                subtitle = "Allow explicitly enabled providers to connect. Off by default.",
+                                checked = onlineFeaturesEnabled,
+                                onCheckedChange = vm::setOnlineFeaturesEnabled
+                            )
+                            SettingsSwitchRow(
+                                title = "Offline-only mode",
+                                subtitle = "Blocks all network requests while preserving local features.",
+                                checked = offlineOnlyMode,
+                                onCheckedChange = vm::setOfflineOnlyMode
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
                 SettingsSectionHeader("Backup & Transfer")
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -329,50 +363,58 @@ fun SettingsScreen(vm: MainViewModel) {
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SettingsNavRow("Audio & Lyrics Transcribe (gemini-3.5-transcribe)", Icons.Rounded.Mic) {
-                            vm.go(Screen.Transcribe)
-                        }
-                        SettingsNavRow("AI Music Studio (Google Lyria)", Icons.Rounded.AutoAwesome) {
-                            vm.go(Screen.GenerateMusic)
-                        }
-
-                        Spacer(Modifier.height(4.dp))
-                        Text("Gemini API Key", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                        Text(
-                            "Used only for optional online transcription and Lyria music generation in the full build.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = inputKey,
-                                onValueChange = { inputKey = it },
-                                placeholder = { Text("Paste API Key...", color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall) },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Pulse.Cyan,
-                                    unfocusedBorderColor = Pulse.Outline,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
+                        if (!BuildConfig.NETWORK_FEATURES_INCLUDED) {
+                            Text(
+                                "AI transcription and music generation are not included in the offline build. Select a local track for playback and local lyrics tools instead.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Pulse.TextMid
                             )
-                            Button(
-                                onClick = {
-                                    if (inputKey.isNotBlank()) {
-                                        vm.setGeminiApiKey(inputKey)
-                                        Toast.makeText(ctx, "Gemini API Key saved!", Toast.LENGTH_SHORT).show()
-                                        inputKey = ""
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                        } else {
+                            SettingsNavRow("Audio & Lyrics Transcribe (gemini-3.5-transcribe)", Icons.Rounded.Mic) {
+                                vm.go(Screen.Transcribe)
+                            }
+                            SettingsNavRow("AI Music Studio (Google Lyria)", Icons.Rounded.AutoAwesome) {
+                                vm.go(Screen.GenerateMusic)
+                            }
+
+                            Spacer(Modifier.height(4.dp))
+                            Text("Gemini API Key", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Used only for optional online transcription and Lyria music generation in the full build.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Pulse.TextMid
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                                OutlinedTextField(
+                                    value = inputKey,
+                                    onValueChange = { inputKey = it },
+                                    placeholder = { Text("Paste API Key...", color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Pulse.Cyan,
+                                        unfocusedBorderColor = Pulse.Outline,
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    )
+                                )
+                                Button(
+                                    onClick = {
+                                        if (inputKey.isNotBlank()) {
+                                            vm.setGeminiApiKey(inputKey)
+                                            Toast.makeText(ctx, "Gemini API Key saved!", Toast.LENGTH_SHORT).show()
+                                            inputKey = ""
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                                ) {
+                                    Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -421,7 +463,15 @@ fun SettingsScreen(vm: MainViewModel) {
                             Spacer(Modifier.width(12.dp))
                             Text("Pulse Player v1.0.0", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         }
-                        Text("100% Offline Music Player for Android. Zero internet permission, zero tracking, zero ads. Built with Jetpack Compose & Media3.", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                        Text(
+                            if (BuildConfig.NETWORK_FEATURES_INCLUDED) {
+                                "Full build: optional online features are off by default. No tracking or ads. Built with Jetpack Compose & Media3."
+                            } else {
+                                "Offline build: no internet permission, no tracking, no ads. Built with Jetpack Compose & Media3."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Pulse.TextMid
+                        )
                     }
                 }
             }
@@ -480,6 +530,30 @@ fun SettingsNavRow(title: String, icon: ImageVector, onClick: () -> Unit) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
         Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+        )
     }
 }
 

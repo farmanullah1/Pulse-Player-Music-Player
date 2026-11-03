@@ -36,7 +36,7 @@
 | AndroidX Glance AppWidget | 1.1.1 | Apache 2.0 | |
 | Kotlin Coroutines Android | 1.9.0 | Apache 2.0 | |
 | Kotlin Coroutines Guava | 1.9.0 | Apache 2.0 | |
-| OkHttp | 4.12.0 | Apache 2.0 | Used for Gemini AI client only |
+| OkHttp | 4.12.0 | Apache 2.0 | Full flavor only; used behind `com.pulse.player.net.NetworkGateway` |
 | JUnit | 4.13.2 | EPL 1.0 | Test-only dependency |
 | org.json | 20240303 | Public Domain | Test-only dependency |
 
@@ -58,7 +58,7 @@
 ---
 
 ## AI Services
-- Gemini API: Used via OkHttp HTTP calls. Subject to Google's Terms of Service. API key stored in BuildConfig from `.env` file (not committed to git). User-supplied key stored in DataStore (plaintext — to be migrated to Keystore in Phase M13/NET-14).
+- Gemini API: Available only in the `full` flavor through the network gateway and subject to Google's Terms of Service. The API key is user-supplied; it is currently held in the existing DataStore preference and must be moved to Keystore-backed storage before release.
 
 ---
 
