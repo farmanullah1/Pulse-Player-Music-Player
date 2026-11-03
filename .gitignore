@@ -17,3 +17,4 @@ app/build/
 *.hprof
 ManualBackup_*
 *.wav
+/New Player Concept/
