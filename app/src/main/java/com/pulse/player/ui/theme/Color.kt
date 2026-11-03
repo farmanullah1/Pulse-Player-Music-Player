@@ -7,11 +7,15 @@ object Pulse {
     val Bg = Color(0xFF05040A)
     val Surface = Color(0xFF110F1C)
     val Elevated = Color(0xFF1A1729)
+    val SurfaceCard = Elevated
     val Outline = Color(0xFF2E2A42)
 
     val TextHi = Color.White
     val TextMid = Color(0xFFB4B0C8) // TextMid lifted from A0A0A0 for AA contrast on Surface
+    val TextSecondary = TextMid
     val TextLow = Color(0xFF77738C)
+    val TextMuted = TextLow
+    val TextLight = TextMid
 
     val Cyan = Color(0xFF00C3FF)
     val Violet = Color(0xFF9B7BFF)

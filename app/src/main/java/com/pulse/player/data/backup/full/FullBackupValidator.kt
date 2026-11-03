@@ -30,6 +30,7 @@ object BackupLimits {
         "PlayLists/PlayListBackupConfig.conf",
         "SortBackupConfig.conf",
         "ScanHiddenBackupConfig.conf",
+        "Playlists.json",
         "Statistics/StatisticsSnapshotConfig.json",
         "Statistics/PlaybackRecords.json",
         "PlaybackRecords.json",

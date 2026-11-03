@@ -149,6 +149,8 @@ class SafeZip(val file: File) : Closeable {
 
     fun has(name: String): Boolean = zip.getEntry(name) != null
 
+    fun size(name: String): Long = zip.getEntry(name)?.size ?: 0L
+
     fun open(name: String): InputStream {
         val entry = zip.getEntry(name) ?: throw IOException("Missing $name")
         return LimitedStream(zip.getInputStream(entry), Compat.MAX_ENTRY)

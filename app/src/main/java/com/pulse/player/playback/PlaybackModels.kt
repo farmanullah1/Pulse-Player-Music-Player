@@ -52,4 +52,7 @@ data class PlaybackUiState(
     val error: String? = null,
     val trackError: ErrorPolicy.TrackError? = null,
     val queueNotice: String? = null
-)
+) {
+    val artRef: com.pulse.player.data.scan.ArtRef?
+        get() = artworkUri?.let { com.pulse.player.data.scan.ArtRef(mediaId ?: it, it, 0L) }
+}

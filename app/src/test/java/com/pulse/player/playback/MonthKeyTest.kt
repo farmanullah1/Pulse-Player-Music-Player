@@ -36,32 +36,36 @@ class MonthKeyTest {
 
         val utcEvents = mutableListOf<PlayEventEntity>()
         val testDispatcher = UnconfinedTestDispatcher(testScheduler)
+        var elapsedUtc = 0L
         val utcTracker = SessionTracker(
             prefs = FakeSharedPreferences(),
             zone = { ZoneId.of("UTC") },
-            elapsedClock = { 0L },
+            elapsedClock = { elapsedUtc },
             wallClock = { timestamp },
             scope = TestScope(testDispatcher),
             eventWriter = { utcEvents.add(it) }
         )
 
         utcTracker.onTrackStarted("track1", dur = 60_000L, playing = true, speed = 1f)
+        elapsedUtc = 35_000L
         utcTracker.onTrackLeft(userAction = false)
 
         assertEquals("202610", utcEvents.first().monthKey)
         assertEquals("UTC", utcEvents.first().zoneId)
 
         val tokyoEvents = mutableListOf<PlayEventEntity>()
+        var elapsedTokyo = 0L
         val tokyoTracker = SessionTracker(
             prefs = FakeSharedPreferences(),
             zone = { ZoneId.of("Asia/Tokyo") },
-            elapsedClock = { 0L },
+            elapsedClock = { elapsedTokyo },
             wallClock = { timestamp },
             scope = TestScope(testDispatcher),
             eventWriter = { tokyoEvents.add(it) }
         )
 
         tokyoTracker.onTrackStarted("track1", dur = 60_000L, playing = true, speed = 1f)
+        elapsedTokyo = 35_000L
         tokyoTracker.onTrackLeft(userAction = false)
 
         assertEquals("202611", tokyoEvents.first().monthKey)

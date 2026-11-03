@@ -61,6 +61,14 @@ class LimitedStream(inp: InputStream, private val max: Long) : FilterInputStream
 
     override fun read(): Int = super.read().also { if (it >= 0) add(1) }
     override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { add(it) }
+
+    companion object {
+        fun readUtf8(stream: InputStream, maxBytes: Long): String {
+            val limited = LimitedStream(stream, maxBytes)
+            val bytes = limited.use { it.readBytes() }
+            return String(bytes, Charsets.UTF_8)
+        }
+    }
 }
 
 fun sha1(bytes: ByteArray): String {

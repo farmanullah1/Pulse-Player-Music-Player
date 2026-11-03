@@ -29,7 +29,12 @@ class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
     private val firstRunPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) {
+    ) { results ->
+        val audioPerm = audioPermission()
+        val audioGranted = results[audioPerm] == true
+        if (audioGranted) {
+            vm.scan()
+        }
         lifecycleScope.launch {
             vm.settings.setAudioPermissionAsked(true)
         }
@@ -77,22 +82,33 @@ class MainActivity : ComponentActivity() {
 
     private fun requestFirstRunPermissions() {
         lifecycleScope.launch {
-            if (vm.settings.audioPermissionAsked()) return@launch
+            val audioPerm = audioPermission()
+            val hasAudio = ContextCompat.checkSelfPermission(this@MainActivity, audioPerm) == PackageManager.PERMISSION_GRANTED
+            val hasNotification = Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            val hasRecord = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+            if (hasAudio && hasNotification && hasRecord) {
+                vm.settings.setAudioPermissionAsked(true)
+                vm.scan()
+                return@launch
+            }
 
             val permissions = buildList {
-                if (ContextCompat.checkSelfPermission(this@MainActivity, audioPermission()) != PackageManager.PERMISSION_GRANTED) {
-                    add(audioPermission())
-                }
-                if (Build.VERSION.SDK_INT >= 33 &&
-                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                ) {
+                if (!hasAudio) add(audioPerm)
+                if (Build.VERSION.SDK_INT >= 33 && !hasNotification) {
                     add(Manifest.permission.POST_NOTIFICATIONS)
                 }
+                if (!hasRecord) {
+                    add(Manifest.permission.RECORD_AUDIO)
+                }
             }
-            if (permissions.isEmpty()) {
-                vm.settings.setAudioPermissionAsked(true)
-            } else {
+
+            if (permissions.isNotEmpty()) {
                 firstRunPermissionLauncher.launch(permissions.toTypedArray())
+            } else {
+                vm.settings.setAudioPermissionAsked(true)
+                vm.scan()
             }
         }
     }

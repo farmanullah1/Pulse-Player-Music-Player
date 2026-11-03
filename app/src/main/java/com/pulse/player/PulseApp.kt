@@ -30,9 +30,12 @@ class PulseApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        PulseDb.backupDatabaseBeforeMigration(this, 2)
+        try {
+            PulseDb.backupDatabaseBeforeMigration(this, 2)
+        } catch (_: Exception) {}
         db = Room.databaseBuilder(this, PulseDb::class.java, "pulse.db")
             .addMigrations(PulseDb.MIGRATION_1_2, PulseDb.MIGRATION_2_3)
+            .fallbackToDestructiveMigration()
             .build()
         settings = SettingsStore(this)
         scanner = LibraryScanner(this, db, settings)

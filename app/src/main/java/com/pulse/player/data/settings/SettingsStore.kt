@@ -23,6 +23,7 @@ class SettingsStore(private val ctx: Context) {
         val theme = stringPreferencesKey("theme_mode")
         val skin = stringPreferencesKey("skin_id")
         val player = stringPreferencesKey("player_theme")
+        val playerLayout = stringPreferencesKey("player_layout_mode")
         val wallpaper = stringPreferencesKey("wallpaper_path")
         val reduced = booleanPreferencesKey("reduced_motion")
         val dynamic = booleanPreferencesKey("dynamic_accent")
@@ -50,6 +51,7 @@ class SettingsStore(private val ctx: Context) {
 
     val skinId: Flow<String> = ctx.dataStore.data.map { it[K.skin] ?: "plum" }
     val playerThemeId: Flow<String> = ctx.dataStore.data.map { it[K.player] ?: "classic" }
+    val playerLayoutId: Flow<String> = ctx.dataStore.data.map { it[K.playerLayout] ?: "modern_art" }
     val wallpaperPath: Flow<String?> = ctx.dataStore.data.map { it[K.wallpaper] }
     val reducedMotion: Flow<Boolean> = ctx.dataStore.data.map { it[K.reduced] ?: false }
     val dynamicAccent: Flow<Boolean> = ctx.dataStore.data.map { it[K.dynamic] ?: true }
@@ -87,6 +89,7 @@ class SettingsStore(private val ctx: Context) {
         it.remove(K.wallpaper)
     }
     suspend fun setPlayerTheme(id: String) = ctx.dataStore.edit { it[K.player] = id }
+    suspend fun setPlayerLayout(id: String) = ctx.dataStore.edit { it[K.playerLayout] = id }
     suspend fun setWallpaper(path: String?) = ctx.dataStore.edit {
         if (path == null) it.remove(K.wallpaper) else it[K.wallpaper] = path
     }

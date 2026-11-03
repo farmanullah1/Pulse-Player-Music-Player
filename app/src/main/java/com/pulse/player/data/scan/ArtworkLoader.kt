@@ -163,4 +163,27 @@ object ArtworkLoader {
         }
         return inSampleSize
     }
+
+    fun dominant(bmp: Bitmap): Int {
+        var rTotal = 0L
+        var gTotal = 0L
+        var bTotal = 0L
+        var count = 0
+        val stepX = maxOf(1, bmp.width / 16)
+        val stepY = maxOf(1, bmp.height / 16)
+        for (x in 0 until bmp.width step stepX) {
+            for (y in 0 until bmp.height step stepY) {
+                val pixel = bmp.getPixel(x, y)
+                rTotal += (pixel shr 16) and 0xFF
+                gTotal += (pixel shr 8) and 0xFF
+                bTotal += pixel and 0xFF
+                count++
+            }
+        }
+        if (count == 0) return 0xFF2A0826.toInt()
+        val r = (rTotal / count).toInt()
+        val g = (gTotal / count).toInt()
+        val b = (bTotal / count).toInt()
+        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    }
 }

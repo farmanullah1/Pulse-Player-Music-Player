@@ -56,7 +56,7 @@ class PlayerController(
 
     init {
         scope.launch {
-            PlaybackEngine.errors.current.collect { err ->
+            PlaybackEngine.errorEvents.collect { err ->
                 _state.update { it.copy(trackError = err) }
             }
         }
@@ -480,8 +480,8 @@ class PlayerController(
         _state.update { it.copy(sleepRemainingMs = 0, sleepEndOfTrack = false) }
     }
 
-    fun retryError() = PlaybackEngine.errors.retry()
-    fun skipError() = PlaybackEngine.errors.skip()
+    fun retryError() = PlaybackEngine.retryError()
+    fun skipError() = PlaybackEngine.skipError()
 
     fun retry() = retryError()
     fun skip() = skipError()

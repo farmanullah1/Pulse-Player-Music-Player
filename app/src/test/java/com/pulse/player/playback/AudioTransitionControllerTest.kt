@@ -35,10 +35,9 @@ class AudioTransitionControllerTest {
     @Test
     fun newFade_cancelsPreviousFade() = runTest {
         var currentSinkVolume = -1f
-        var virtualTime = 0L
         val controller = AudioTransitionController(
             scope = this,
-            clock = { virtualTime },
+            clock = { testScheduler.currentTime },
             sink = { currentSinkVolume = it }
         )
 
@@ -48,7 +47,6 @@ class AudioTransitionControllerTest {
         }
 
         // Advance 200ms
-        virtualTime = 200L
         testScheduler.advanceTimeBy(200)
 
         // New fade requested
@@ -58,7 +56,6 @@ class AudioTransitionControllerTest {
         }
 
         // Advance beyond the first 1000ms duration
-        virtualTime = 1200L
         testScheduler.advanceTimeBy(1000)
 
         // The first onDone must never have executed because it was cancelled
@@ -90,10 +87,9 @@ class AudioTransitionControllerTest {
     @Test
     fun userVolumeChange_duringFade_isRespected() = runTest {
         var currentSinkVolume = -1f
-        var virtualTime = 0L
         val controller = AudioTransitionController(
             scope = this,
-            clock = { virtualTime },
+            clock = { testScheduler.currentTime },
             sink = { currentSinkVolume = it }
         )
 
@@ -101,7 +97,6 @@ class AudioTransitionControllerTest {
         controller.fadeTo(0.0f, 1000L, TransitionReason.PauseEnd)
 
         // Mid-fade at 500ms
-        virtualTime = 500L
         testScheduler.advanceTimeBy(500)
 
         // User changes hardware slider to 0.5
@@ -110,7 +105,6 @@ class AudioTransitionControllerTest {
         assertTrue(controller.effectiveVolume <= 0.5f)
 
         // Finish fade
-        virtualTime = 1000L
         testScheduler.advanceTimeBy(500)
         assertEquals(0.0f, controller.effectiveVolume, 0.001f)
     }

@@ -35,6 +35,7 @@ import com.pulse.player.data.scan.SampleMusicHelper
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.playback.Track
 import com.pulse.player.playback.toTrack
+import com.pulse.player.ui.screens.PlayerLayoutMode
 import com.pulse.player.ui.screens.Screen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,10 +134,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val snackbarMessage = MutableStateFlow<String?>(null)
     fun clearSnackbarMessage() { snackbarMessage.value = null }
 
+    val playerLayoutPickerOpen = MutableStateFlow(false)
+    fun openPlayerLayoutPicker() { playerLayoutPickerOpen.value = true }
+    fun closePlayerLayoutPicker() { playerLayoutPickerOpen.value = false }
+
     // Settings
     val themeMode: StateFlow<ThemeMode> = settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.DARK)
     val skinId: StateFlow<String> = settings.skinId.stateIn(viewModelScope, SharingStarted.Eagerly, "plum")
     val playerThemeId: StateFlow<String> = settings.playerThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "classic")
+    val activePlayerLayout: StateFlow<PlayerLayoutMode> = settings.playerLayoutId
+        .map { PlayerLayoutMode.fromId(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, PlayerLayoutMode.ATMOSPHERIC_QUEUE)
     val wallpaperPath: StateFlow<String?> = settings.wallpaperPath.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val reducedMotion: StateFlow<Boolean> = settings.reducedMotion.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val fadeEnabled: StateFlow<Boolean> = settings.fadeEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -144,6 +152,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setThemeMode(m: ThemeMode) = viewModelScope.launch { settings.setTheme(m) }
     fun setSkin(id: String) = viewModelScope.launch { settings.setSkin(id) }
     fun applyPlayerTheme(id: String) = viewModelScope.launch { settings.setPlayerTheme(id) }
+    fun setPlayerLayout(mode: PlayerLayoutMode) = viewModelScope.launch {
+        settings.setPlayerLayout(mode.id)
+    }
+    fun nextPlayerLayout() {
+        val current = activePlayerLayout.value
+        setPlayerLayout(PlayerLayoutMode.next(current))
+    }
+    fun previousPlayerLayout() {
+        val current = activePlayerLayout.value
+        setPlayerLayout(PlayerLayoutMode.previous(current))
+    }
     fun setWallpaper(path: String?) = viewModelScope.launch { settings.setWallpaper(path) }
     fun setReducedMotion(v: Boolean) = viewModelScope.launch { settings.setReduced(v) }
     fun setFadeEnabled(v: Boolean) = viewModelScope.launch {
@@ -152,8 +171,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Scanning & Tracks
-    val scanning = scanner.scanning
-    val scanProgress = scanner.progress
+    val scanning: StateFlow<Boolean> = scanner.scanning
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val scanProgress: StateFlow<Int> = scanner.progress
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val tracks: StateFlow<List<Track>> = db.tracks().observeAll(minMs = 0L)
         .map { list -> list.map { it.toTrack() } }

@@ -58,9 +58,23 @@ enum class PlayerLayoutMode(
         layout = PlayerLayout.ATMOSPHERIC_QUEUE
     );
 
+    val title: String get() = displayName
+
     companion object {
         /** New installations open with the premier split queue mode. */
         fun fromId(id: String?): PlayerLayoutMode =
             entries.firstOrNull { it.id == id } ?: ATMOSPHERIC_QUEUE
+
+        fun next(current: PlayerLayoutMode): PlayerLayoutMode {
+            val list = entries
+            val idx = list.indexOf(current)
+            return list[(idx + 1) % list.size]
+        }
+
+        fun previous(current: PlayerLayoutMode): PlayerLayoutMode {
+            val list = entries
+            val idx = list.indexOf(current)
+            return list[if (idx - 1 < 0) list.size - 1 else idx - 1]
+        }
     }
 }

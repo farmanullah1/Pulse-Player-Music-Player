@@ -56,16 +56,20 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.ui.components.MiniPlayer
+import com.pulse.player.ui.components.PlayerLayoutBottomSheet
 import com.pulse.player.ui.theme.AppBackground
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
@@ -92,6 +96,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
     val createPlaylistOpen by vm.createPlaylistOpen.collectAsStateWithLifecycle()
     val importPreview by vm.importPreview.collectAsStateWithLifecycle()
     val songDetailsTrack by vm.songDetailsTrack.collectAsStateWithLifecycle()
+    val playerLayoutPickerOpen by vm.playerLayoutPickerOpen.collectAsStateWithLifecycle()
 
     BackHandler(expandedPlayer) { vm.closeNowPlaying() }
     BackHandler(!expandedPlayer && screen !is Screen.Home) { vm.back() }
@@ -197,6 +202,9 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
         }
         songDetailsTrack?.let { track ->
             SongDetailsDialog(track) { vm.songDetailsTrack.value = null }
+        }
+        if (playerLayoutPickerOpen) {
+            PlayerLayoutBottomSheet(vm)
         }
     }
 }

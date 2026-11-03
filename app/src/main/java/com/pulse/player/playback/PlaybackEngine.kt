@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -34,10 +35,31 @@ object PlaybackEngine {
     var fadingPlayer: FadingPlayer? = null
         private set
     @Volatile var fadeEnabled = true
+    val errorEvents = MutableStateFlow<ErrorPolicy.TrackError?>(null)
 
     fun isAttached(): Boolean = exo != null && ::sleep.isInitialized && ::errors.isInitialized
 
     private var trackerTickerJob: Job? = null
+
+    fun startSleep(minutes: Int) {
+        if (::sleep.isInitialized && exo != null) sleep.start(minutes)
+    }
+
+    fun startSleepEndOfTrack() {
+        if (::sleep.isInitialized && exo != null) sleep.startEndOfTrack()
+    }
+
+    fun cancelSleep() {
+        if (::sleep.isInitialized && exo != null) sleep.cancel()
+    }
+
+    fun retryError() {
+        if (::errors.isInitialized) errors.retry()
+    }
+
+    fun skipError() {
+        if (::errors.isInitialized) errors.skip()
+    }
 
     fun attach(ctx: Context, db: PulseDb, player: ExoPlayer) {
         detach()
@@ -47,6 +69,9 @@ object PlaybackEngine {
         transitions = AudioTransitionController(s) { player.volume = it }
         sleep = SleepTimerEngine(s, player, transitions)
         errors = ErrorPolicy(player)
+        s.launch {
+            errors.current.collect { errorEvents.value = it }
+        }
         val prefs = ctx.getSharedPreferences("pulse_session_tracker", Context.MODE_PRIVATE)
         tracker = SessionTracker(db, prefs)
         s.launch(Dispatchers.IO) {
