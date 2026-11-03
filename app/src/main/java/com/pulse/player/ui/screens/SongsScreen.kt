@@ -61,6 +61,7 @@ fun SongsScreen(vm: MainViewModel) {
     val showMissing by vm.showMissing.collectAsStateWithLifecycle()
     val ps by vm.player.state.collectAsStateWithLifecycle()
     val scanning by vm.scanning.collectAsStateWithLifecycle(initialValue = false)
+    val scanProgress by vm.scanProgress.collectAsStateWithLifecycle(initialValue = 0)
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -100,6 +101,37 @@ fun SongsScreen(vm: MainViewModel) {
                                 contentDescription = "Select songs",
                                 tint = if (selectMode) Pulse.Cyan else Color.White
                             )
+                        }
+                    }
+                    if (scanning) {
+                        Surface(
+                            color = Pulse.Elevated,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (scanProgress > 0) "Scanning your library" else "Finishing library scan",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        text = if (scanProgress > 0) "$scanProgress found" else "Please wait…",
+                                        color = Pulse.TextMid,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = Pulse.Cyan,
+                                    trackColor = Pulse.Outline
+                                )
+                            }
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -198,7 +230,7 @@ fun SongsScreen(vm: MainViewModel) {
                 ) {
                     Text("${selected.size} selected", color = Color.White, fontWeight = FontWeight.Bold)
                     Row {
-                        IconButton(onClick = { vm.selectAll() }) {
+                        IconButton(onClick = { vm.selectAll(displayTracks.map { it.id }) }) {
                             Icon(Icons.Rounded.SelectAll, "Select all", tint = Color.White)
                         }
                         IconButton(onClick = { vm.playSelectedNext() }, enabled = selected.isNotEmpty()) {

@@ -1,6 +1,8 @@
 package com.pulse.player.ui.screens
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -67,6 +69,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
@@ -137,6 +140,29 @@ fun BackupScreen(vm: MainViewModel) {
         if (uri != null) {
             val fileName = uri.lastPathSegment?.substringAfterLast('/') ?: "PulsePlayer_Favorites.json"
             vm.previewFavoritesImport(uri, fileName)
+        }
+    }
+
+    val portableFolderImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) vm.previewFavoritesFolder(uri)
+    }
+
+    val legacyWritePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) vm.exportFavoritesToPulseFolder()
+        else vm.exportStatus.value = "Storage permission is needed to create a portable backup on Android 9 and older."
+    }
+
+    fun exportPortableBackup() {
+        if (Build.VERSION.SDK_INT < 29 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            legacyWritePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            vm.exportFavoritesToPulseFolder()
         }
     }
 
@@ -516,50 +542,66 @@ fun BackupScreen(vm: MainViewModel) {
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Existing Backup (Favorites JSON)", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Classic Backup (Favourites + Music)", style = MaterialTheme.typography.titleMedium, color = Color.White)
                                 }
                                 Text("pulseplayer.favorites JSON format", style = MaterialTheme.typography.labelSmall, color = Pulse.Violet)
                             }
                         }
 
                         Text(
-                            text = "Preserve the existing backup workflow. Exports and imports your favorites in a human-readable JSON file. Lightweight and dedicated strictly to your favorite tracks.",
+                            text = "Creates Music/Pulse Player, saves the unchanged pulseplayer.favorites v1 JSON, and copies each favourite audio file beside it. Move or paste this folder to another device, then import the folder to fuzzy-match favourites.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Pulse.TextMid
                         )
 
+                        Button(
+                            onClick = ::exportPortableBackup,
+                            enabled = favCount > 0 && !archiveOp.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("portable_export_button"),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet, contentColor = Color.White)
+                        ) {
+                            Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Export to Music/Pulse Player ($favCount)", fontWeight = FontWeight.Bold)
+                        }
+
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(
-                                onClick = {
-                                    legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json")
-                                },
-                                enabled = favCount > 0 && !archiveOp.inProgress,
+                            OutlinedButton(
+                                onClick = { portableFolderImportLauncher.launch(null) },
+                                enabled = !archiveOp.inProgress,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .testTag("legacy_export_button"),
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet, contentColor = Color.White)
+                                    .testTag("portable_import_button"),
+                                shape = CircleShape
                             ) {
-                                Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = Pulse.Violet)
                                 Spacer(Modifier.width(6.dp))
-                                Text(if (favCount > 0) "Export ($favCount)" else "No Favs", fontWeight = FontWeight.Bold)
+                                Text("Import Folder", color = Color.White, fontWeight = FontWeight.Bold)
                             }
-
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     legacyImportLauncher.launch(arrayOf("application/json", "*/*"))
                                 },
                                 enabled = !archiveOp.inProgress,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .testTag("legacy_import_button"),
-                                shape = CircleShape
+                                    .testTag("legacy_import_button_secondary"),
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Surface, contentColor = Color.White)
                             ) {
-                                Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp), tint = Pulse.Violet)
+                                Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Import JSON", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("Import JSON", fontWeight = FontWeight.Bold)
                             }
                         }
+                        TextButton(
+                            onClick = { legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json") },
+                            enabled = favCount > 0 && !archiveOp.inProgress,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) { Text("Export JSON copy elsewhere", color = Pulse.TextMid) }
                     }
                 }
             }

@@ -197,8 +197,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!selectMode.value && selected.value.isNotEmpty()) selectMode.value = true
     }
 
-    fun selectAll() {
-        selected.value = tracks.value.map { it.id }.toSet()
+    fun selectAll(ids: Collection<String> = tracks.value.map { it.id }) {
+        selected.value = ids.toSet()
     }
 
     fun clearSelect() {
@@ -468,12 +468,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         exportStatus.value = if (res.isSuccess) "Exported ${res.getOrNull()} favourites" else "Export failed: ${res.exceptionOrNull()?.message}"
     }
 
+    fun exportFavoritesToPulseFolder() = viewModelScope.launch {
+        val result = favoritesRepo.exportToPortableFolder()
+        exportStatus.value = result.fold(
+            onSuccess = { report ->
+                buildString {
+                    append("Saved ${report.favorites} favourites to ${report.location}. ")
+                    append("Copied ${report.copied} music files")
+                    if (report.reused > 0) append(", reused ${report.reused} existing copies")
+                    if (report.failed.isNotEmpty()) append(". ${report.failed.size} files could not be copied")
+                    append(".")
+                }
+            },
+            onFailure = { "Portable backup failed: ${it.message}" }
+        )
+    }
+
     fun previewFavoritesImport(uri: Uri, name: String) = viewModelScope.launch {
         val res = favoritesRepo.preview(uri, name)
         if (res.isSuccess) {
             importPreview.value = res.getOrNull()
         } else {
             exportStatus.value = "Import preview failed: ${res.exceptionOrNull()?.message}"
+        }
+    }
+
+    fun previewFavoritesFolder(uri: Uri) = viewModelScope.launch {
+        val resolver = getApplication<Application>().contentResolver
+        runCatching {
+            resolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        val res = favoritesRepo.previewPortableFolder(uri)
+        if (res.isSuccess) {
+            importPreview.value = res.getOrNull()
+            exportStatus.value = "Folder scanned. Review the fuzzy matches before importing."
+        } else {
+            exportStatus.value = "Folder import failed: ${res.exceptionOrNull()?.message}"
         }
     }
 

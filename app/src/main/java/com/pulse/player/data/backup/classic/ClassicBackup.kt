@@ -1,7 +1,14 @@
 package com.pulse.player.data.backup.classic
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.provider.OpenableColumns
+import androidx.documentfile.provider.DocumentFile
 import androidx.room.withTransaction
 import com.pulse.player.data.backup.common.BackupKind
 import com.pulse.player.data.backup.common.BackupSniffer
@@ -9,6 +16,7 @@ import com.pulse.player.data.backup.common.LimitedStream
 import com.pulse.player.data.db.FavoriteEntity
 import com.pulse.player.data.db.PulseDb
 import com.pulse.player.data.db.TrackEntity
+import com.pulse.player.data.scan.SafScanner
 import com.pulse.player.data.scan.norm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -16,6 +24,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.time.Instant
 import kotlin.math.abs
@@ -176,6 +186,20 @@ class FavoritesMatcher(
 }
 
 class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
+    companion object {
+        const val PORTABLE_FOLDER_NAME = "Pulse Player"
+        const val PORTABLE_JSON_NAME = "pulseplayer.favorites.json"
+        private const val PORTABLE_RELATIVE_PATH = "Music/$PORTABLE_FOLDER_NAME/"
+    }
+
+    data class PortableExportResult(
+        val favorites: Int,
+        val copied: Int,
+        val reused: Int,
+        val failed: List<String>,
+        val location: String
+    )
+
     suspend fun export(uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
         runCatching {
             val tracks = db.favorites().allTracksOnce()
@@ -189,6 +213,158 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
             tracks.size
         }
     }
+
+    /** Creates the portable Music/Pulse Player backup without changing v1 JSON. */
+    suspend fun exportToPortableFolder(): Result<PortableExportResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val tracks = db.favorites().allTracksOnce()
+            if (tracks.isEmpty()) error("You have no favourites to back up yet.")
+            val added = db.favorites().addedAtList().associate { it.trackId to it.addedAtMs }
+            val json = FavoritesCodec.encode(tracks, added)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                exportToMediaStore(tracks, json)
+            } else {
+                exportToLegacyMusicFolder(tracks, json)
+            }
+        }
+    }
+
+    private fun exportToMediaStore(tracks: List<TrackEntity>, json: String): PortableExportResult {
+        val resolver = ctx.contentResolver
+        writeMediaStoreJson(resolver, json)
+        var copied = 0
+        var reused = 0
+        val failed = mutableListOf<String>()
+        tracks.forEach { track ->
+            try {
+                when (copyAudioToMediaStore(resolver, track)) {
+                    CopyOutcome.COPIED -> copied++
+                    CopyOutcome.REUSED -> reused++
+                }
+            } catch (e: Exception) {
+                failed += "${track.displayName.ifBlank { track.title }}: ${e.message ?: "copy failed"}"
+            }
+        }
+        return PortableExportResult(tracks.size, copied, reused, failed, "Music/$PORTABLE_FOLDER_NAME")
+    }
+
+    private fun exportToLegacyMusicFolder(tracks: List<TrackEntity>, json: String): PortableExportResult {
+        if (ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            error("Storage write permission is required on Android 9 and older.")
+        }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), PORTABLE_FOLDER_NAME)
+        if (!dir.exists() && !dir.mkdirs()) error("Couldn't create Music/$PORTABLE_FOLDER_NAME.")
+        File(dir, PORTABLE_JSON_NAME).writeText(json, Charsets.UTF_8)
+
+        var copied = 0
+        var reused = 0
+        val failed = mutableListOf<String>()
+        tracks.forEach { track ->
+            try {
+                val name = safeFileName(track.displayName.ifBlank { "${track.title}.mp3" })
+                val destination = File(dir, name)
+                if (destination.exists() && track.sizeBytes > 0 && destination.length() == track.sizeBytes) {
+                    reused++
+                } else {
+                    ctx.contentResolver.openInputStream(Uri.parse(track.uri))?.use { input ->
+                        FileOutputStream(destination).use { output -> input.copyTo(output, 64 * 1024) }
+                    } ?: error("source file unavailable")
+                    copied++
+                }
+            } catch (e: Exception) {
+                failed += "${track.displayName.ifBlank { track.title }}: ${e.message ?: "copy failed"}"
+            }
+        }
+        return PortableExportResult(tracks.size, copied, reused, failed, dir.path)
+    }
+
+    private enum class CopyOutcome { COPIED, REUSED }
+
+    private fun copyAudioToMediaStore(resolver: android.content.ContentResolver, track: TrackEntity): CopyOutcome {
+        val originalName = safeFileName(track.displayName.ifBlank { "${track.title}.mp3" })
+        val existing = findMediaStoreFile(resolver, originalName)
+        if (existing != null && track.sizeBytes > 0L && querySize(resolver, existing) == track.sizeBytes) {
+            return CopyOutcome.REUSED
+        }
+        val name = uniqueMediaStoreName(resolver, originalName)
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, track.mimeType ?: "audio/mpeg")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, PORTABLE_RELATIVE_PATH)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+            ?: error("couldn't create $name")
+        try {
+            resolver.openInputStream(Uri.parse(track.uri))?.use { input ->
+                resolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) }
+                    ?: error("couldn't open destination")
+            } ?: error("source file unavailable")
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+            return CopyOutcome.COPIED
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+    }
+
+    private fun writeMediaStoreJson(resolver: android.content.ContentResolver, json: String) {
+        findMediaStoreFile(resolver, PORTABLE_JSON_NAME)?.let { resolver.delete(it, null, null) }
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, PORTABLE_JSON_NAME)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, PORTABLE_RELATIVE_PATH)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Files.getContentUri("external"), values)
+            ?: error("couldn't create $PORTABLE_JSON_NAME")
+        try {
+            resolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                ?: error("couldn't open backup file")
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+    }
+
+    private fun findMediaStoreFile(resolver: android.content.ContentResolver, name: String): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val files = MediaStore.Files.getContentUri("external")
+        resolver.query(
+            files,
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=?",
+            arrayOf(PORTABLE_RELATIVE_PATH, name),
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) return ContentUris.withAppendedId(files, cursor.getLong(0))
+        }
+        return null
+    }
+
+    private fun querySize(resolver: android.content.ContentResolver, uri: Uri): Long =
+        resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L
+        } ?: -1L
+
+    private fun uniqueMediaStoreName(resolver: android.content.ContentResolver, original: String): String {
+        val dot = original.lastIndexOf('.')
+        val stem = if (dot > 0) original.substring(0, dot) else original
+        val ext = if (dot > 0) original.substring(dot) else ""
+        var candidate = original
+        var n = 1
+        while (findMediaStoreFile(resolver, candidate) != null) {
+            candidate = "$stem ($n)$ext"
+            n++
+        }
+        return candidate
+    }
+
+    private fun safeFileName(name: String): String = name
+        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        .trim()
+        .ifBlank { "PulsePlayer_Track.mp3" }
 
     data class Preview(
         val fileName: String,
@@ -217,6 +393,27 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                     Preview(fileName, d.exportedAt, FavoritesMatcher(lib, favIds).match(d.items), d.skipped)
                 }
             }
+        }
+    }
+
+    /** Indexes pasted audio in a selected Pulse Player folder before fuzzy matching its JSON. */
+    suspend fun previewPortableFolder(treeUri: Uri): Result<Preview> = withContext(Dispatchers.IO) {
+        runCatching {
+            val root = DocumentFile.fromTreeUri(ctx, treeUri)
+                ?: error("That folder is no longer accessible.")
+            val jsonFile = root.listFiles().firstOrNull { file ->
+                val name = file.name.orEmpty().lowercase()
+                !file.isDirectory && (
+                    name == PORTABLE_JSON_NAME.lowercase() ||
+                        (name.endsWith(".json") && name.contains("favorite"))
+                    )
+            } ?: error("No pulseplayer.favorites JSON file was found in this folder.")
+
+            val scan = SafScanner.scanTree(ctx, db, treeUri)
+            if (scan is com.pulse.player.data.scan.ScanState.Partial) {
+                error("Couldn't read the folder. Grant Pulse Player access and try again.")
+            }
+            preview(jsonFile.uri, jsonFile.name ?: PORTABLE_JSON_NAME).getOrThrow()
         }
     }
 

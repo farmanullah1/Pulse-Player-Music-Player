@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.Skins
 import com.pulse.player.ui.viewmodel.MainViewModel
 import android.widget.Toast
 import androidx.compose.material.icons.rounded.Key
@@ -70,6 +71,8 @@ fun SettingsScreen(vm: MainViewModel) {
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val reducedMotion by vm.reducedMotion.collectAsStateWithLifecycle()
     val fadeEnabled by vm.fadeEnabled.collectAsStateWithLifecycle()
+    val skinId by vm.skinId.collectAsStateWithLifecycle()
+    val playerThemeId by vm.playerThemeId.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var inputKey by remember { mutableStateOf("") }
@@ -119,8 +122,16 @@ fun SettingsScreen(vm: MainViewModel) {
                             }
                         }
 
-                        SettingsNavRow("Skin Theme", Icons.Rounded.Checkroom) { vm.go(Screen.SkinTheme) }
-                        SettingsNavRow("Player Theme", Icons.Rounded.AutoAwesome) { vm.go(Screen.PlayerTheme) }
+                        SettingsActionRow(
+                            "Skin Theme",
+                            "${Skins.firstOrNull { it.id == skinId }?.name ?: "Plum"} palette, wallpaper & atmosphere",
+                            Icons.Rounded.Checkroom
+                        ) { vm.go(Screen.SkinTheme) }
+                        SettingsActionRow(
+                            "Player Layout",
+                            "${PlayerLayoutMode.fromId(playerThemeId).displayName} • 12 switchable layouts",
+                            Icons.Rounded.AutoAwesome
+                        ) { vm.go(Screen.PlayerTheme) }
 
                         Row(
                             Modifier.fillMaxWidth(),

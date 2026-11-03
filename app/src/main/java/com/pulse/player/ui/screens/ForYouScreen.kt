@@ -71,12 +71,14 @@ fun ForYouScreen(vm: MainViewModel) {
     val today by vm.todayMinutes.collectAsStateWithLifecycle()
     val streak by vm.streakDays.collectAsStateWithLifecycle()
     val favCount by vm.favoriteCount.collectAsStateWithLifecycle()
+    val scanning by vm.scanning.collectAsStateWithLifecycle(initialValue = false)
+    val scanProgress by vm.scanProgress.collectAsStateWithLifecycle(initialValue = 0)
     val recent = remember(tracks) { tracks.sortedByDescending { it.dateAddedMs }.take(12) }
     val top by vm.topPicks.collectAsStateWithLifecycle()
     val resumeTrack by vm.resume.collectAsStateWithLifecycle()
 
     if (tracks.isEmpty()) {
-        EmptyLibraryCard(vm)
+        EmptyLibraryCard(vm, scanning = scanning, foundCount = scanProgress)
         return
     }
 
@@ -274,7 +276,7 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
 }
 
 @Composable
-fun EmptyLibraryCard(vm: MainViewModel) {
+fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: Int = 0) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -315,22 +317,34 @@ fun EmptyLibraryCard(vm: MainViewModel) {
                 Icon(Icons.Rounded.Headphones, null, tint = Pulse.Cyan, modifier = Modifier.size(32.dp))
             }
             Text(
-                text = "Your music library is empty",
+                text = if (scanning) "Scanning your music library…" else "Your music library is empty",
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "Pulse Player plays local audio stored on your phone or SD card. Grant audio access or choose a Music folder to begin.",
+                text = if (scanning) {
+                    if (foundCount > 0) "Found $foundCount tracks so far. Pulse Player is still checking your storage." else "Pulse Player is checking your storage. This can take a moment on a large library."
+                } else {
+                    "Pulse Player plays local audio stored on your phone or SD card. Grant audio access or choose a Music folder to begin."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Pulse.TextMid,
                 textAlign = TextAlign.Center
             )
+            if (scanning) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Pulse.Cyan,
+                    trackColor = Pulse.Outline
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Button(
                 onClick = { vm.seedSampleTrack() },
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
+                enabled = !scanning,
                 colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = Color.Black)
             ) {
                 Icon(Icons.Rounded.PlayArrow, null)
@@ -348,6 +362,7 @@ fun EmptyLibraryCard(vm: MainViewModel) {
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
+                enabled = !scanning,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
             ) {
                 Icon(Icons.Rounded.Refresh, null)
@@ -357,7 +372,8 @@ fun EmptyLibraryCard(vm: MainViewModel) {
             OutlinedButton(
                 onClick = { safLauncher.launch(null) },
                 modifier = Modifier.fillMaxWidth(),
-                shape = CircleShape
+                shape = CircleShape,
+                enabled = !scanning
             ) {
                 Icon(Icons.Rounded.FolderOpen, null, tint = Pulse.Cyan)
                 Spacer(Modifier.width(8.dp))

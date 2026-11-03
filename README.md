@@ -15,7 +15,7 @@ A fast, colorful, 100% offline music player for Android. Built with Kotlin, Jetp
 - **Sleep Timer & Fades**: Sleep timer with automatic 10-second volume fade-out and "stop after this track" option.
 - **Synthesized Offline Sample Track**: Built-in 44.1kHz 16-bit stereo PCM WAV generator ("Pulse Horizon" by Pulse Studio) allows immediate testing of playback, themes, visualizers, and equalizer without needing manual file transfer.
 - **Dual Backup & Restore System**:
-  - **Classic Backup (Favourites JSON)**: Preserves `pulseplayer.favorites` v1 JSON format with fuzzy matching.
+  - **Classic Backup (Portable Favourites Folder)**: Creates `Music/Pulse Player`, writes the unchanged `pulseplayer.favorites` v1 JSON, and copies each favourite audio file into the same folder. On another device, paste the folder into Music, choose it from Classic Backup, and Pulse Player scans the audio before fuzzy matching title, artist, album, duration, filename, and size. Existing JSON-only import/export remains supported.
   - **Full Backup (Reference Format)**: Full reference format support (`ManualBackup_*.wav` or `.zip` holding metadata, JSON configs, and SQLite database entries). Includes magic byte sniffing (detects ZIP even if masked as `.wav`), ZIP-slip sanitization, 5-tier deterministic track resolution (exact path -> storage-relative -> folder + filename -> metadata tags -> unique filename), and atomic Room transaction-safe restore in `MERGE` or `REPLACE` modes.
 - **Home Screen Widget**: Responsive Jetpack Glance widget supporting 2x2, 4x1, and 4x2 layouts.
 - **Monthly Recap**: On-device listening statistics, top songs and artists, badges, and shareable card.
@@ -23,13 +23,17 @@ A fast, colorful, 100% offline music player for Android. Built with Kotlin, Jetp
 - **Accessibility & Motion**: Complies with M3 touch target guidelines; includes reduced motion mode.
 - **First-Run Setup**: Requests the required audio-library permission and Android notification permission when needed, with SAF folder access available for restricted libraries.
 
+## Player Layouts, Skins & Settings
+
+Existing player designs remain available alongside the integrated PixelPlayer- and Namida-inspired experiences. Open **Settings → Player Theme** to choose among the 12 layouts: Classic, Mountain Horizon, Mesh Glass, Minimal Mood, Acoustic, Vinyl, Coastal Ocean, Starry Sky, Immersive Artwork, Pixel Expressive, Namida Waveform, and Atmospheric Queue. **Settings → Skin Theme** includes the original palettes plus Pixel Material, Namida Amber, Namida Cyberpunk, and Atmospheric Mist skins, with procedural and custom wallpapers. Reduced motion, queue controls, equalizer, sleep timer, favorites, and playlist actions work across the layouts.
+
 ## Backup & Restore
 
 Pulse Player provides two independent, secure backup & restore methods under **Settings → Backup & Restore**:
 
 ### 1. Classic Backup (Favourites JSON)
-- **Export**: Exports your favourites list as a lightweight JSON document (`pulseplayer.favorites`).
-- **Import**: Restores favourites using fuzzy matching across track title, artist, album, and duration.
+- **Export**: The primary export creates `Music/Pulse Player/pulseplayer.favorites.json` and copies the favourite audio files into that folder. Existing copies are reused when their sizes match.
+- **Import**: Choose the `Pulse Player` folder after moving or pasting it to a new device. Pulse Player indexes the audio files first, then restores favourites using fuzzy matching across track title, artist, album, duration, filename, and size.
 - **Safety**: Unchanged from the original format; ideal for quick favourites transfers between devices.
 
 ### 2. Full Backup (Reference Format)
