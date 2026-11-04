@@ -1,4 +1,4 @@
-﻿package com.pulse.player.ui.screens
+package com.pulse.player.ui.screens
 
 import android.content.Intent
 import android.media.RingtoneManager
@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MoreVert
@@ -186,6 +187,18 @@ fun NowPlayingScreen(vm: MainViewModel) {
                 Spacer(Modifier.weight(1f))
                 SongLyricsSegment(showLyrics) { showLyrics = it }
                 Spacer(Modifier.weight(1f))
+                IconButton(
+                    onClick = {
+                        vm.closeNowPlaying()
+                        vm.go(Screen.Customize)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.DashboardCustomize,
+                        contentDescription = "Customize Player",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 PlayerTopMenu(vm)
             }
 
@@ -345,7 +358,10 @@ private fun AtmosphericQueuePlayer(
         onToggleShuffle = vm::toggleShuffle,
         onCycleRepeat = vm::cycleRepeat,
         onOpenTheme = { vm.go(Screen.SkinTheme) },
-        onOpenPicker = { vm.go(Screen.PlayerTheme) },
+        onOpenPicker = {
+            vm.closeNowPlaying()
+            vm.go(Screen.Customize)
+        },
         onCollapse = onBack,
         onOpenMenu = vm::openTrackOptions,
         onTrackOptions = { track ->
@@ -638,6 +654,14 @@ fun PlayerTopMenu(vm: MainViewModel) {
             onDismissRequest = { expanded = false },
             modifier = Modifier.background(Pulse.Elevated)
         ) {
+            DropdownMenuItem(
+                text = { Text("Customize Player") },
+                onClick = {
+                    expanded = false
+                    vm.closeNowPlaying()
+                    vm.go(Screen.Customize)
+                }
+            )
             DropdownMenuItem(
                 text = { Text("Player Theme") },
                 onClick = {

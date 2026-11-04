@@ -82,13 +82,34 @@ Format: `ID | Source | Name | Where it lives | What it does | Pulse equivalent |
 
 | ID | Source | Name | Phase | Status |
 |---|---|---|---|---|
-| SPEC-01 | Spec | Live button arrangement switcher (12+ presets) | M4 | NEW |
-| SPEC-02 | Spec | Classic backup v2 (audio file copy) | M12 | NEW |
-| SPEC-03 | Spec | Offline-only mode setting | M11 | NEW |
-| SPEC-04 | Spec | Just-in-time permission onboarding | M13 | NEW |
-| SPEC-05 | Spec | Privacy section in Settings | M13 | NEW |
-| SPEC-06 | Spec | Capabilities registry | M13 | NEW |
-| SPEC-07 | Spec | Widescreen / Atmospheric / Split-lyrics responsive layouts | M3 | PARTIAL |
-| SPEC-08 | Spec | Settings IA restructuring (13 sections) | M13 | NEW |
-| SPEC-09 | Spec | Schema v4 migration | M1 | NEW |
-| SPEC-10 | Spec | HistoryWriter gate + origin column | M9 | NEW |
+| SPEC-01 | Spec | Live button arrangement switcher (15 presets) | M4 | WORKING |
+| SPEC-02 | Spec | Classic backup v2 (audio file copy to Music/Pulse Player) | M12 | WORKING |
+| SPEC-03 | Spec | Offline-only mode setting | M11 | WORKING |
+| SPEC-04 | Spec | Just-in-time permission onboarding | M13 | WORKING |
+| SPEC-05 | Spec | Privacy section in Settings | M13 | WORKING |
+| SPEC-06 | Spec | Capabilities registry | M13 | WORKING |
+| SPEC-07 | Spec | Widescreen / Atmospheric / Split-lyrics responsive layouts | M3 | WORKING |
+| SPEC-08 | Spec | Settings IA restructuring (12 sections) | M13 | WORKING |
+| SPEC-09 | Spec | Schema v4 migration | M1 | WORKING |
+| SPEC-10 | Spec | HistoryWriter gate + origin column | M9 | WORKING |
+
+---
+
+## Annex E — Customization & Classic Backup v2 Parity
+
+| ID | Source | Name | Where it lives | What it does | Pulse equivalent | Status | Phase | Settings location |
+|---|---|---|---|---|---|---|---|---|
+| CUSTOMIZE-01 | Annex E §5 | In-player Customize screen | Navigation / Now Playing | 6-tab live customizer without stopping playback | PlayerCustomizeScreen | WORKING | E5 | Settings → Appearance → Customize Player |
+| CUSTOMIZE-02 | Annex E §5.1 | Now Playing entry point | Now Playing Top Bar & Overflow | Accessible button & menu item to open live customizer | NowPlayingScreen | WORKING | E5 | Now Playing |
+| CUSTOMIZE-03 | Annex E §5.3 | 15 Button Presets | Customizer → Buttons | All 15 canonical presets with aliases & arrangement functions | ButtonPresets | WORKING | E5 | Customize → Buttons |
+| CUSTOMIZE-04 | Annex E §5.3 | Add Button & Catalog | Customizer → Buttons | Add action buttons from grouped catalog | PlayerCustomizeScreen | WORKING | E5 | Customize → Buttons |
+| CUSTOMIZE-05 | Annex E §5.5 | Player Content Elements | Customizer → Elements | Toggle & arrange Artwork, Seekbar, Lyrics, Queue, Badge | PlayerCustomizeScreen | WORKING | E5 | Customize → Elements |
+| CUSTOMIZE-06 | Annex E §5.7 | Recommend Layout | Customizer → Buttons | Auto-select presets for Minimal, One-Handed, Queue, Accessible | PlayerCustomizeScreen | WORKING | E5 | Customize → Buttons |
+| CUSTOMIZE-07 | Annex E §5.8 | Home Section Organizer | Customizer → Home & Library | Reorder & toggle Quick Picks, Recents, Most Played, Moods | PlayerCustomizeScreen | WORKING | E5 | Customize → Home & Library |
+| CUSTOMIZE-08 | Annex E §5.2 | Customization Reset & Undo | Customizer | Reset current tab or reset all customizations | PlayerCustomizeScreen | WORKING | E5 | Customize → Reset |
+| CLASSIC-V2-01 | Annex E §7.1 | Music/Pulse Player portable folder | Backup | Creates portable folder with audio copies & v1 JSON | ClassicBackup | WORKING | E7 | Backup → Classic Backup |
+| CLASSIC-V2-02 | Annex E §7.2 | Unchanged v1 JSON compatibility | Backup | pulseplayer.favorites v1 schema preserved with displayName | FavoritesCodec | WORKING | E7 | Backup → Classic Backup |
+| CLASSIC-V2-03 | Annex E §7.3 | Preflight confirmation dialog | Backup | "Your originals will stay where they are..." + 3 choices | BackupScreen | WORKING | E7 | Backup → Classic Backup |
+| CLASSIC-V2-04 | Annex E §7.4 | SAF import & fuzzy matcher | Backup | 3-tier fuzzy match (Strong, High, Medium) with Merge/Replace | FavoritesMatcher | WORKING | E7 | Backup → Import |
+| CLASSIC-V2-05 | Annex E §7.5 | Source independence | Storage | Copied audio plays independently if original is unmounted | ClassicBackup | WORKING | E7 | Storage |
+

@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -95,6 +96,7 @@ fun BackupScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
 
     var showReplaceConfirmDialog by remember { mutableStateOf(false) }
+    var showClassicExportPreflight by remember { mutableStateOf(false) }
     var pendingUnmatchedList by remember { mutableStateOf<List<String>?>(null) }
 
     // Launcher for Full Backup Export
@@ -555,7 +557,7 @@ fun BackupScreen(vm: MainViewModel) {
                         )
 
                         Button(
-                            onClick = ::exportPortableBackup,
+                            onClick = { showClassicExportPreflight = true },
                             enabled = favCount > 0 && !archiveOp.inProgress,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -850,6 +852,60 @@ fun BackupScreen(vm: MainViewModel) {
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             titleContentColor = Color.White,
             textContentColor = Color.White
+        )
+    }
+
+    if (showClassicExportPreflight) {
+        AlertDialog(
+            onDismissRequest = { showClassicExportPreflight = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Backup, null, tint = Pulse.Violet, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Classic Backup Preflight", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Your originals will stay where they are. Pulse Player will create separate copies in Music/Pulse Player.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "• Favourites to export: $favCount\n• Destination: Music/Pulse Player/\n• Snapshot metadata: pulseplayer.favorites v1 format\n• Audio files: byte-for-byte independent copies",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Pulse.TextMid
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClassicExportPreflight = false
+                        exportPortableBackup()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet)
+                ) {
+                    Text("Create Full Backup", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            showClassicExportPreflight = false
+                            legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json")
+                        }
+                    ) {
+                        Text("JSON Only (Metadata)")
+                    }
+                    TextButton(onClick = { showClassicExportPreflight = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
         )
     }
 }

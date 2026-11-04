@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Checkroom
+import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
@@ -170,6 +171,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                             Screen.Duplicates -> DuplicatesScreen(vm)
                             Screen.Transcribe -> TranscribeScreen(vm)
                             Screen.GenerateMusic -> GenerateMusicScreen(vm)
+                            Screen.Customize -> PlayerCustomizeScreen(vm)
                             is Screen.Detail -> DetailScreen(vm, s)
                         }
                     }
@@ -286,6 +288,7 @@ fun PulseDrawer(
             val items = listOf(
                 DrawerItemData("Home", Icons.Rounded.Home, Screen.Home),
                 DrawerItemData("Equalizer", Icons.Rounded.Equalizer, Screen.Equalizer),
+                DrawerItemData("Customize Player", Icons.Rounded.DashboardCustomize, Screen.Customize),
                 DrawerItemData("Sleep Timer", Icons.Rounded.Bedtime, null) { /* opens sheet */ },
                 DrawerItemData("Monthly Recap", Icons.Rounded.History, Screen.Recap),
                 DrawerItemData("Favourites", Icons.Rounded.Favorite, Screen.Detail("system", "favorites")),

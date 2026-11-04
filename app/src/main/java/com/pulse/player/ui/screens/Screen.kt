@@ -12,5 +12,6 @@ sealed interface Screen {
     data object Duplicates : Screen
     data object Transcribe : Screen
     data object GenerateMusic : Screen
+    data object Customize : Screen
     data class Detail(val kind: String, val key: String) : Screen // album / artist / folder / playlist / system
 }

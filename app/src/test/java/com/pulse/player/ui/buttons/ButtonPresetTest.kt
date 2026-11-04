@@ -8,8 +8,8 @@ import org.junit.Test
 class ButtonPresetTest {
 
     @Test
-    fun atLeast12PresetsRegistered() {
-        assertTrue("Must have at least 12 button presets", ButtonPresets.size >= 12)
+    fun exactly15PresetsRegistered() {
+        assertEquals("Must have exactly 15 button presets", 15, ButtonPresets.size)
     }
 
     @Test
@@ -38,11 +38,17 @@ class ButtonPresetTest {
     }
 
     @Test
+    fun aliasesMapToCanonicalPresets() {
+        assertEquals("two_row", ButtonPresetRegistry.fromId("two_row_grid").id)
+        assertEquals("radial_inspired", ButtonPresetRegistry.fromId("radial").id)
+    }
+
+    @Test
     fun allCanonicalPresetsArePresent() {
         val expectedIds = setOf(
             "centered", "split", "minimal", "waveform_below", "queue_inline",
             "expanded", "compact", "floating", "symmetric", "asymmetric",
-            "two_row", "radial_inspired"
+            "two_row", "radial_inspired", "thumb_zone", "side_rail", "chips"
         )
         val registeredIds = ButtonPresets.map { it.id }.toSet()
         assertTrue(

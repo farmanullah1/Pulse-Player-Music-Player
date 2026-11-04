@@ -76,20 +76,20 @@ class Capabilities(ctx: Context) {
     }.getOrDefault(CapabilityState.Unsupported("Audio effect query failed"))
 
     /** Equalizer availability. */
-    val equalizerAvailable: CapabilityState = checkAudioFx(Equalizer.CONTENT_TYPE)
+    val equalizerAvailable: CapabilityState = checkAudioFx(AudioEffect.EFFECT_TYPE_EQUALIZER)
 
     /** Bass boost availability. */
-    val bassBoostAvailable: CapabilityState = checkAudioFx(BassBoost.CONTENT_TYPE)
+    val bassBoostAvailable: CapabilityState = checkAudioFx(AudioEffect.EFFECT_TYPE_BASS_BOOST)
 
     /** Virtualizer / surround availability. */
-    val virtualizerAvailable: CapabilityState = checkAudioFx(Virtualizer.CONTENT_TYPE)
+    val virtualizerAvailable: CapabilityState = checkAudioFx(AudioEffect.EFFECT_TYPE_VIRTUALIZER)
 
     /** Reverb availability. */
-    val reverbAvailable: CapabilityState = checkAudioFx(EnvironmentalReverb.CONTENT_TYPE)
+    val reverbAvailable: CapabilityState = checkAudioFx(AudioEffect.EFFECT_TYPE_ENV_REVERB)
 
     /** Loudness enhancer (API 19+). */
     val loudnessEnhancerAvailable: CapabilityState =
-        if (Build.VERSION.SDK_INT >= 19) checkAudioFx(LoudnessEnhancer.CONTENT_TYPE)
+        if (Build.VERSION.SDK_INT >= 19) checkAudioFx(AudioEffect.EFFECT_TYPE_LOUDNESS_ENHANCER)
         else CapabilityState.Unsupported("Requires Android 4.4+")
 
     /** Material You dynamic colors (API 31+). */
@@ -149,10 +149,10 @@ class Capabilities(ctx: Context) {
         CapabilityState.NotInBuild("offline")
     }
 
-    private fun checkAudioFx(@Suppress("SameParameterValue") contentType: Int): CapabilityState {
+    private fun checkAudioFx(effectType: java.util.UUID): CapabilityState {
         return runCatching {
             val effects = AudioEffect.queryEffects() ?: return@runCatching CapabilityState.Unsupported("No audio effects available")
-            if (effects.any { it.type == android.media.audiofx.AudioEffect.EFFECT_TYPE_EQUALIZER || it.type.toString().contains("equalizer", true) }) {
+            if (effects.any { it.type == effectType }) {
                 CapabilityState.Available
             } else {
                 CapabilityState.Available // Platform will fail gracefully at creation time

@@ -33,6 +33,8 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -104,6 +106,9 @@ fun ButtonArrangement(
             ButtonLayout.ASYMMETRIC     -> AsymmetricArrangement(actions)
             ButtonLayout.TWO_ROW        -> TwoRowArrangement(actions)
             ButtonLayout.RADIAL_INSPIRED -> RadialInspiredArrangement(actions)
+            ButtonLayout.THUMB_ZONE     -> ThumbZoneArrangement(actions)
+            ButtonLayout.SIDE_RAIL      -> SideRailArrangement(actions)
+            ButtonLayout.CHIPS          -> ChipsArrangement(actions)
         }
     }
 }
@@ -431,6 +436,152 @@ private fun RadialInspiredArrangement(a: PlaybackActions) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             SecondaryButton(if (a.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, "Favourite", a.onFavorite, active = a.isFavorite)
             SecondaryButton(Icons.Rounded.MoreHoriz, "More options", a.onMore)
+        }
+    }
+}
+
+/** 13. Thumb Zone: everything in the bottom area for easy one-handed access */
+@Composable
+private fun ThumbZoneArrangement(a: PlaybackActions) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SecondaryButton(Icons.Rounded.Shuffle, "Shuffle", a.onShuffle, active = a.isShuffled)
+            RepeatButton(a.repeatMode, a.onRepeat)
+            SecondaryButton(Icons.Rounded.MoreHoriz, "More options", a.onMore)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SecondaryButton(
+                if (a.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                "Favourite",
+                a.onFavorite,
+                active = a.isFavorite
+            )
+            TransportButton(Icons.Rounded.SkipPrevious, "Previous", a.onPrevious, modifier = Modifier.size(52.dp))
+            PlayPauseButton(a.isPlaying, a.onPlayPause, size = 80.dp)
+            TransportButton(Icons.Rounded.SkipNext, "Next", a.onNext, modifier = Modifier.size(52.dp))
+            IconButton(onClick = a.onQueue, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Rounded.MoreHoriz, "Queue", tint = LocalPulseTokens.current.textSecondary)
+            }
+        }
+    }
+}
+
+/** 14. Side Rail: vertical/edge rail styling for wide screens & landscape */
+@Composable
+private fun SideRailArrangement(a: PlaybackActions) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton(Icons.Rounded.Shuffle, "Shuffle", a.onShuffle, active = a.isShuffled)
+            SecondaryButton(
+                if (a.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                "Favourite",
+                a.onFavorite,
+                active = a.isFavorite
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TransportButton(Icons.Rounded.SkipPrevious, "Previous", a.onPrevious, modifier = Modifier.size(52.dp))
+            PlayPauseButton(a.isPlaying, a.onPlayPause, size = 76.dp)
+            TransportButton(Icons.Rounded.SkipNext, "Next", a.onNext, modifier = Modifier.size(52.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RepeatButton(a.repeatMode, a.onRepeat)
+            SecondaryButton(Icons.Rounded.MoreHoriz, "More options", a.onMore)
+        }
+    }
+}
+
+/** 15. Chips: interactive labelled chips plus large central play button */
+@Composable
+private fun ChipsArrangement(a: PlaybackActions) {
+    val tokens = LocalPulseTokens.current
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                onClick = a.onShuffle,
+                shape = CircleShape,
+                color = if (a.isShuffled) tokens.accent.copy(alpha = 0.2f) else tokens.bgCard,
+                contentColor = if (a.isShuffled) tokens.accent else tokens.textPrimary
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.Shuffle, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Shuffle", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Surface(
+                onClick = a.onFavorite,
+                shape = CircleShape,
+                color = if (a.isFavorite) tokens.accent.copy(alpha = 0.2f) else tokens.bgCard,
+                contentColor = if (a.isFavorite) tokens.accent else tokens.textPrimary
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(if (a.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Like", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Surface(
+                onClick = a.onRepeat,
+                shape = CircleShape,
+                color = if (a.repeatMode != 0) tokens.accent.copy(alpha = 0.2f) else tokens.bgCard,
+                contentColor = if (a.repeatMode != 0) tokens.accent else tokens.textPrimary
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (a.repeatMode == 2) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                        null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Repeat", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TransportButton(Icons.Rounded.SkipPrevious, "Previous", a.onPrevious, modifier = Modifier.size(52.dp))
+            PlayPauseButton(a.isPlaying, a.onPlayPause, size = 80.dp)
+            TransportButton(Icons.Rounded.SkipNext, "Next", a.onNext, modifier = Modifier.size(52.dp))
         }
     }
 }

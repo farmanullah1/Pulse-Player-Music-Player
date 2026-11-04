@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Checkroom
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.FolderOpen
@@ -140,6 +141,11 @@ fun SettingsScreen(vm: MainViewModel) {
                             "${playerLayout.displayName} • ${PlayerLayoutMode.entries.size} switchable layouts",
                             Icons.Rounded.AutoAwesome
                         ) { vm.go(Screen.PlayerTheme) }
+                        SettingsActionRow(
+                            "Customize Player",
+                            "Live editor for layouts, themes, 15 button presets & elements",
+                            Icons.Rounded.DashboardCustomize
+                        ) { vm.go(Screen.Customize) }
 
                         Row(
                             Modifier.fillMaxWidth(),

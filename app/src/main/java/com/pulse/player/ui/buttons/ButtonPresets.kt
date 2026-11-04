@@ -59,7 +59,13 @@ enum class ButtonLayout {
     /** Transport row plus separate secondary action row below. */
     TWO_ROW,
     /** Circular visual arrangement adapted to touch accessibility (accessible alternative to radial). */
-    RADIAL_INSPIRED
+    RADIAL_INSPIRED,
+    /** Everything in the bottom third for one-handed use; seek bar above controls. */
+    THUMB_ZONE,
+    /** Vertical rail of buttons on the screen edge (used in landscape and wide screens). */
+    SIDE_RAIL,
+    /** Labelled chips (Shuffle, Repeat, Sleep, Queue, EQ) plus a large play button. */
+    CHIPS
 }
 
 /** The canonical ordered list of all button presets. */
@@ -147,14 +153,42 @@ val ButtonPresets: List<ButtonPreset> = listOf(
         description = "Circular arrangement, touch accessible",
         icon = Icons.Rounded.RadioButtonUnchecked,
         layout = ButtonLayout.RADIAL_INSPIRED
+    ),
+    ButtonPreset(
+        id = "thumb_zone",
+        name = "Thumb Zone",
+        description = "One-handed bottom-third controls",
+        icon = Icons.Rounded.SpaceBar,
+        layout = ButtonLayout.THUMB_ZONE
+    ),
+    ButtonPreset(
+        id = "side_rail",
+        name = "Side Rail",
+        description = "Vertical rail controls for wide screens",
+        icon = Icons.Rounded.ViewColumn,
+        layout = ButtonLayout.SIDE_RAIL
+    ),
+    ButtonPreset(
+        id = "chips",
+        name = "Chips",
+        description = "Labelled chips with large play button",
+        icon = Icons.Rounded.GridView,
+        layout = ButtonLayout.CHIPS
     )
 )
 
 object ButtonPresetRegistry {
     private val index = ButtonPresets.associateBy { it.id }
+    private val aliases = mapOf(
+        "two_row_grid" to "two_row",
+        "radial" to "radial_inspired"
+    )
 
     val default: ButtonPreset get() = ButtonPresets.first { it.id == "centered" }
 
     /** Returns the preset for [id], or [default] if unknown (no dead buttons). */
-    fun fromId(id: String?): ButtonPreset = index[id] ?: default
+    fun fromId(id: String?): ButtonPreset {
+        val targetId = aliases[id] ?: id
+        return index[targetId] ?: default
+    }
 }

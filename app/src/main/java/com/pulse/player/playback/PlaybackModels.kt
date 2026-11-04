@@ -29,6 +29,19 @@ fun TrackWithFav.toTrack() = Track(
     mimeType = track.mimeType
 )
 
+fun com.pulse.player.data.db.TrackEntity.toTrack(isFavorite: Boolean = false) = Track(
+    id = id,
+    uri = uri,
+    title = title,
+    artist = artist,
+    album = album,
+    durationMs = durationMs,
+    isFavorite = isFavorite,
+    folder = folderPath,
+    dateAddedMs = dateAddedMs,
+    mimeType = mimeType
+)
+
 data class PlaybackUiState(
     val mediaId: String? = null,
     val title: String = "",

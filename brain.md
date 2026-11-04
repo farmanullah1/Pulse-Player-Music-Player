@@ -123,6 +123,15 @@
   - Added "Clean Missing Tracks" utility across `MainViewModel`, `SettingsScreen`, and navigation drawer
   - Added Material 3 top-level Snackbars with actionable "Skip" and "View Log" triggers in `MainActivity`
 
+- [x] Phase 10 — Annex E: Complete In-Player Customization & Classic Backup v2 Parity:
+  - Implemented `PlayerCustomizeScreen` with 6 tabs: Layouts, Themes, Buttons, Elements, Colors & Skins, Home & Library
+  - Added entry points in Now Playing top bar (`Icons.Rounded.DashboardCustomize`), overflow menu, Navigation Drawer, and Settings
+  - Expanded `ButtonPresets` to all 15 presets (`thumb_zone`, `side_rail`, `chips` included) with alias resolution
+  - Implemented `ThumbZoneArrangement`, `SideRailArrangement`, and `ChipsArrangement` in `ButtonArrangement.kt`
+  - Added Classic Backup v2 Preflight confirmation dialog with "Your originals will stay where they are" disclosure and Full Backup / JSON-only choices
+  - Updated `ButtonPresetTest.kt` to test all 15 presets and aliases
+  - Updated `PARITY_INVENTORY.md` with Annex E traceability rows (`CUSTOMIZE-01..08`, `CLASSIC-V2-01..05`)
+
 ## 2. Tested
 - Static verification & real compilation completed across all phases (Phase 0–9).
 - `compile_applet`: SUCCESS (Clean build, 0 errors).
