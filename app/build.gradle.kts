@@ -9,19 +9,6 @@ android {
     namespace = "com.pulse.player"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
-    flavorDimensions += "network"
-
-    productFlavors {
-        create("offline") {
-            dimension = "network"
-            buildConfigField("Boolean", "NETWORK_FEATURES_INCLUDED", "false")
-        }
-        create("full") {
-            dimension = "network"
-            buildConfigField("Boolean", "NETWORK_FEATURES_INCLUDED", "true")
-        }
-    }
-
     defaultConfig {
         applicationId = "com.aistudio.pulseplayer.wvfykq"
         minSdk = libs.versions.minSdk.get().toInt()
@@ -30,7 +17,7 @@ android {
         versionName = libs.versions.versionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
+        buildConfigField("Boolean", "NETWORK_FEATURES_INCLUDED", "true")
     }
 
     signingConfigs {
@@ -119,7 +106,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.9.0")
-    add("fullImplementation", "com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

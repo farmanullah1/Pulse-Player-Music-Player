@@ -189,7 +189,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
     companion object {
         const val PORTABLE_FOLDER_NAME = "Pulse Player"
         const val PORTABLE_JSON_NAME = "pulseplayer.favorites.json"
-        private const val PORTABLE_RELATIVE_PATH = "Music/$PORTABLE_FOLDER_NAME/"
+        private const val PORTABLE_RELATIVE_PATH = "Download/$PORTABLE_FOLDER_NAME/"
     }
 
     data class PortableExportResult(
@@ -214,7 +214,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
-    /** Creates the portable Music/Pulse Player backup without changing v1 JSON. */
+    /** Creates the portable Download/Pulse Player backup without changing v1 JSON. */
     suspend fun exportToPortableFolder(
         customTreeUri: Uri? = null,
         onProgress: ((current: Int, total: Int, title: String, fraction: Float) -> Unit)? = null
@@ -229,7 +229,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 exportToMediaStore(tracks, json, onProgress)
             } else {
-                exportToLegacyMusicFolder(tracks, json, onProgress)
+                exportToLegacyDownloadFolder(tracks, json, onProgress)
             }
         }
     }
@@ -307,10 +307,10 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
             }
         }
         onProgress?.invoke(tracks.size, tracks.size, "Complete", 1.0f)
-        return PortableExportResult(tracks.size, copied, reused, failed, "Music/$PORTABLE_FOLDER_NAME")
+        return PortableExportResult(tracks.size, copied, reused, failed, "Download/$PORTABLE_FOLDER_NAME")
     }
 
-    private fun exportToLegacyMusicFolder(
+    private fun exportToLegacyDownloadFolder(
         tracks: List<TrackEntity>,
         json: String,
         onProgress: ((Int, Int, String, Float) -> Unit)?
@@ -318,8 +318,8 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         if (ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             error("Storage write permission is required on Android 9 and older.")
         }
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), PORTABLE_FOLDER_NAME)
-        if (!dir.exists() && !dir.mkdirs()) error("Couldn't create Music/$PORTABLE_FOLDER_NAME.")
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PORTABLE_FOLDER_NAME)
+        if (!dir.exists() && !dir.mkdirs()) error("Couldn't create Download/$PORTABLE_FOLDER_NAME.")
         File(dir, PORTABLE_JSON_NAME).writeText(json, Charsets.UTF_8)
 
         var copied = 0
@@ -363,8 +363,14 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
             put(MediaStore.MediaColumns.RELATIVE_PATH, PORTABLE_RELATIVE_PATH)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-            ?: error("couldn't create $name")
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Files.getContentUri("external")
+        }
+        val uri = resolver.insert(collection, values)
+            ?: resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+            ?: error("couldn't create $name in Download/$PORTABLE_FOLDER_NAME")
         try {
             resolver.openInputStream(Uri.parse(track.uri))?.use { input ->
                 resolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) }
@@ -386,8 +392,13 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
             put(MediaStore.MediaColumns.RELATIVE_PATH, PORTABLE_RELATIVE_PATH)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val uri = resolver.insert(MediaStore.Files.getContentUri("external"), values)
-            ?: error("couldn't create $PORTABLE_JSON_NAME")
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Files.getContentUri("external")
+        }
+        val uri = resolver.insert(collection, values)
+            ?: error("couldn't create $PORTABLE_JSON_NAME in Download/$PORTABLE_FOLDER_NAME")
         try {
             resolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
                 ?: error("couldn't open backup file")
@@ -400,6 +411,16 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
 
     private fun findMediaStoreFile(resolver: android.content.ContentResolver, name: String): Uri? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        resolver.query(
+            collection,
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=?",
+            arrayOf(PORTABLE_RELATIVE_PATH, name),
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) return ContentUris.withAppendedId(collection, cursor.getLong(0))
+        }
         val files = MediaStore.Files.getContentUri("external")
         resolver.query(
             files,
@@ -435,6 +456,142 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         .replace(Regex("[\\\\/:*?\"<>|]"), "_")
         .trim()
         .ifBlank { "PulsePlayer_Track.mp3" }
+
+    /** Auto-detects and previews a classic backup in Download/Pulse Player. */
+    suspend fun previewDownloadFolder(): Result<Preview> = withContext(Dispatchers.IO) {
+        runCatching {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PORTABLE_FOLDER_NAME)
+            var jsonBytes: ByteArray? = null
+            var jsonFileName = PORTABLE_JSON_NAME
+
+            // 1. Try reading directly from File if accessible
+            if (dir.exists()) {
+                val directFile = File(dir, PORTABLE_JSON_NAME)
+                if (directFile.exists() && directFile.canRead()) {
+                    jsonBytes = directFile.readBytes()
+                } else {
+                    val candidate = dir.listFiles()?.firstOrNull { f ->
+                        val lower = f.name.lowercase()
+                        lower.endsWith(".json") && (lower.contains("favorite") || lower.contains("pulseplayer"))
+                    }
+                    if (candidate != null && candidate.canRead()) {
+                        jsonBytes = candidate.readBytes()
+                        jsonFileName = candidate.name
+                    }
+                }
+            }
+
+            // 2. Try MediaStore if not found on filesystem
+            if (jsonBytes == null) {
+                val jsonUri = findMediaStoreFile(ctx.contentResolver, PORTABLE_JSON_NAME)
+                if (jsonUri != null) {
+                    ctx.contentResolver.openInputStream(jsonUri)?.use { stream ->
+                        jsonBytes = readLimited(stream, FavoritesCodec.MAX_BYTES)
+                    }
+                }
+            }
+
+            if (jsonBytes == null) {
+                error("No $PORTABLE_JSON_NAME found in Download/$PORTABLE_FOLDER_NAME. Please ensure your backup files are placed in Download/$PORTABLE_FOLDER_NAME, or use the Folder Picker.")
+            }
+
+            // Index any audio files present in Download/Pulse Player
+            if (dir.exists() && dir.isDirectory) {
+                scanDirectoryAudioFiles(dir)
+            }
+
+            val sniffed = BackupSniffer.sniff(jsonBytes!!)
+            if (sniffed == BackupKind.Full) {
+                error("This looks like a Full backup — open the Full backup importer?")
+            }
+            if (sniffed == BackupKind.RealWav) {
+                error("This is an audio WAV file, not a Pulse Player favorites backup.")
+            }
+            when (val d = FavoritesCodec.decode(jsonBytes!!.toString(Charsets.UTF_8))) {
+                is FavoritesCodec.Decoded.Fail -> error(d.reason)
+                is FavoritesCodec.Decoded.Ok -> {
+                    val lib = db.tracks().allOnce().filter { it.available }
+                    val favIds = db.favorites().observeIds().first().toSet()
+                    Preview(jsonFileName, d.exportedAt, FavoritesMatcher(lib, favIds).match(d.items), d.skipped)
+                }
+            }
+        }
+    }
+
+    private suspend fun scanDirectoryAudioFiles(dir: File) {
+        try {
+            val audioFiles = dir.listFiles()?.filter { file ->
+                !file.isDirectory && SafScanner.isAudio(file.name, null)
+            }.orEmpty()
+
+            if (audioFiles.isEmpty()) return
+
+            val mmr = android.media.MediaMetadataRetriever()
+            val scanned = mutableListOf<TrackEntity>()
+            val scanGen = System.currentTimeMillis()
+
+            for (file in audioFiles) {
+                try {
+                    val size = file.length()
+                    if (size <= 0) continue
+                    mmr.setDataSource(file.absolutePath)
+                    val title = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+                        ?.ifBlank { null } ?: file.nameWithoutExtension
+                    val artist = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                        ?.ifBlank { null } ?: "Unknown artist"
+                    val album = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                        ?.ifBlank { null } ?: PORTABLE_FOLDER_NAME
+                    val albumArtist = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+                    val durationMs = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                        ?.toLongOrNull() ?: 0L
+                    val trackNumber = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+                        ?.toIntOrNull() ?: 0
+                    val year = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_YEAR)
+                        ?.toIntOrNull() ?: 0
+                    val genre = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_GENRE)
+                        ?.ifBlank { "" } ?: ""
+
+                    val fileUri = Uri.fromFile(file).toString()
+                    val trackId = "file:" + file.absolutePath.hashCode()
+
+                    scanned += TrackEntity(
+                        id = trackId,
+                        uri = fileUri,
+                        displayName = file.name,
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        albumArtist = albumArtist,
+                        durationMs = durationMs,
+                        sizeBytes = size,
+                        mimeType = "audio/" + file.extension.lowercase(),
+                        folderPath = dir.absolutePath,
+                        dateAddedMs = file.lastModified(),
+                        dateModifiedMs = file.lastModified(),
+                        trackNumber = trackNumber,
+                        year = year,
+                        normTitle = norm(title),
+                        normArtist = norm(artist),
+                        normAlbum = norm(album),
+                        available = true,
+                        dataPath = file.absolutePath,
+                        scanGen = scanGen,
+                        sourceType = "FILE",
+                        stableId = file.name,
+                        volumeId = "download_primary",
+                        genre = genre
+                    )
+                } catch (_: Exception) {}
+            }
+            mmr.release()
+
+            if (scanned.isNotEmpty()) {
+                db.withTransaction {
+                    db.tracks().upsertAll(scanned)
+                }
+            }
+        } catch (_: Exception) {}
+    }
 
     data class Preview(
         val fileName: String,

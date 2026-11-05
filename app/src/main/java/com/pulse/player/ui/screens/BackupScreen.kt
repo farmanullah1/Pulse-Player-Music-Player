@@ -566,7 +566,7 @@ fun BackupScreen(vm: MainViewModel) {
                         }
 
                         Text(
-                            text = "Creates Music/Pulse Player, saves the unchanged pulseplayer.favorites v1 JSON, and copies each favourite audio file beside it. Move or paste this folder to another device, then import the folder to fuzzy-match favourites.",
+                            text = "Creates Download/Pulse Player, saves the unchanged pulseplayer.favorites v1 JSON, and copies each favourite audio file beside it. Reuses existing files if already copied. Move or paste this folder to another device, then auto-detect or import to restore favourites.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -582,7 +582,7 @@ fun BackupScreen(vm: MainViewModel) {
                         ) {
                             Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Export to Music/Pulse Player ($favCount)", fontWeight = FontWeight.Bold)
+                            Text("Export to Download/Pulse Player ($favCount)", fontWeight = FontWeight.Bold)
                         }
 
                         if (archiveOp.inProgress) {
@@ -629,6 +629,24 @@ fun BackupScreen(vm: MainViewModel) {
                             }
                         }
 
+                        // Auto-detect & Import options
+                        Button(
+                            onClick = { vm.importFavoritesFromDownloadFolder() },
+                            enabled = !archiveOp.inProgress,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("portable_auto_detect_button"),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Pulse.Violet,
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Icon(Icons.Rounded.SettingsBackupRestore, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Auto-Detect from Download/Pulse Player", fontWeight = FontWeight.Bold)
+                        }
+
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
                                 onClick = { portableFolderImportLauncher.launch(null) },
@@ -640,7 +658,7 @@ fun BackupScreen(vm: MainViewModel) {
                             ) {
                                 Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Import Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                Text("Pick Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                             }
                             Button(
                                 onClick = {
@@ -940,13 +958,13 @@ fun BackupScreen(vm: MainViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Your originals will stay where they are. Pulse Player will create separate copies in Music/Pulse Player.",
+                        text = "Your originals will stay where they are. Pulse Player will create separate copies in Download/Pulse Player.",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "• Favourites to export: $favCount\n• Destination: Music/Pulse Player/\n• Snapshot metadata: pulseplayer.favorites v1 format\n• Audio files: byte-for-byte independent copies",
+                        text = "• Favourites to export: $favCount\n• Destination: Download/Pulse Player/\n• Snapshot metadata: pulseplayer.favorites v1 format\n• Audio files: byte-for-byte independent copies (reuses matching files)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -960,7 +978,7 @@ fun BackupScreen(vm: MainViewModel) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet)
                 ) {
-                    Text("Create Full Backup", fontWeight = FontWeight.Bold)
+                    Text("Export Favorites & Music", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

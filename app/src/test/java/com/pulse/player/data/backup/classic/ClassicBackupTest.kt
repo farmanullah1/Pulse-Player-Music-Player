@@ -158,5 +158,11 @@ class ClassicBackupTest {
         assertTrue(matchResults[0] is MatchResult.Matched)
         assertEquals("copy:123456", (matchResults[0] as MatchResult.Matched).track.id)
     }
+
+    @Test
+    fun portableFolderConstantsTargetPulsePlayerAndJson() {
+        assertEquals("Pulse Player", FavoritesRepository.PORTABLE_FOLDER_NAME)
+        assertEquals("pulseplayer.favorites.json", FavoritesRepository.PORTABLE_JSON_NAME)
+    }
 }
 

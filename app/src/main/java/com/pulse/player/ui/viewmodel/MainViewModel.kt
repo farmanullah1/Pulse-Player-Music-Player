@@ -673,6 +673,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun importFavoritesFromDownloadFolder() = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(
+            inProgress = true,
+            stage = "Scanning Download/Pulse Player...",
+            progressFraction = 0f
+        )
+        val res = favoritesRepo.previewDownloadFolder()
+        archiveOperation.value = BackupOperationState(inProgress = false)
+        if (res.isSuccess) {
+            importPreview.value = res.getOrNull()
+            exportStatus.value = "Download/Pulse Player scanned. Review fuzzy matches before importing."
+        } else {
+            val err = "Auto-detect failed: ${res.exceptionOrNull()?.message}"
+            exportStatus.value = err
+            archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = err)
+        }
+    }
+
     fun applyImport(preview: FavoritesRepository.Preview, resolved: Map<FavItem, TrackEntity>, replace: Boolean) = viewModelScope.launch {
         val count = favoritesRepo.apply(preview, resolved, replace)
         exportStatus.value = "Imported $count favourites successfully"
