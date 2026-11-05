@@ -70,6 +70,21 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                         val matches = allTracks.sortedByDescending { it.dateAddedMs }.take(50)
                         Triple("Recently Added", "${matches.size} songs", matches)
                     }
+                    "top_tracks" -> {
+                        val matches = allTracks.take(25)
+                        Triple("Top 25 Heavy Rotation", "${matches.size} songs", matches)
+                    }
+                    "recently_played" -> {
+                        Triple("Recently Played", "${allTracks.take(30).size} songs", allTracks.take(30))
+                    }
+                    "fresh_finds" -> {
+                        val matches = allTracks.sortedByDescending { it.dateAddedMs }.take(25)
+                        Triple("Fresh Finds (Quick Mix)", "${matches.size} songs", matches)
+                    }
+                    "quick_mix" -> {
+                        val shuffled = allTracks.shuffled(Random(42)).take(30)
+                        Triple("Auto-DJ Quick Mix", "${shuffled.size} songs", shuffled)
+                    }
                     "never_played" -> {
                         Triple("Never Played", "${neverPlayed.size} songs", neverPlayed)
                     }

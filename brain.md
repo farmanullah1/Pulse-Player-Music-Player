@@ -22,6 +22,13 @@
 - Added flavor-aware Online & Privacy settings and honest offline/full AI availability text.
 - Verification: `git diff --check` passed. Both variant compile tasks reached Gradle configuration but are blocked before compilation because no Android SDK location is configured in this environment.
 
+## Phase M14 & Annex E Customization & Classic Backup v2 — 2026-11-03
+- Resolved `PlayerCustomizeScreen.kt` skin palette entries and color mapping; live customizer provides seamless switching across 6 tabs (Layouts, Themes, Buttons, Elements, Colors & Skins, Home & Library).
+- Added missing clickable import in `TranscribeScreen.kt`.
+- Built and verified `docs/spec/FEATURE_COMPLETENESS_MATRIX.md` with full traceability across `CUSTOMIZE-*`, `CLASSIC-V2-*`, `NAM-EXT-*`, and `PIX-EXT-*`.
+- Verified both product flavors (`testOfflineDebugUnitTest` and `testFullDebugUnitTest`) pass with 0 failures.
+- Clean build succeeded via `compile_applet`.
+
 ## 1. Done
 - [x] Phase 0: Setup Spec Index & Temp Code
   - Created `docs/spec/SPEC_INDEX.md` mapping all 9 phases (Phase 0–8) to required files

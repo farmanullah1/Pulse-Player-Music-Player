@@ -72,7 +72,7 @@ fun EqualizerScreen(vm: MainViewModel) {
             Switch(
                 checked = enabled,
                 onCheckedChange = { enabled = it },
-                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
             )
         }
 
@@ -84,7 +84,7 @@ fun EqualizerScreen(vm: MainViewModel) {
             if (!fxStatus.eqSupported && !fxStatus.bassSupported && !fxStatus.virtSupported && !fxStatus.reverbSupported) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Column(
@@ -99,14 +99,14 @@ fun EqualizerScreen(vm: MainViewModel) {
                             )
                             Text(
                                 text = "Playback continues normally without DSP processing. You can check detailed effect status and logs in System Diagnostics.",
-                                color = Pulse.TextMid,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Button(
                                 onClick = { vm.openDiagnostics() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("Open Diagnostics", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("Open Diagnostics", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -158,7 +158,7 @@ fun EqualizerScreen(vm: MainViewModel) {
                                     Text(
                                         text = freq,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Pulse.TextMid,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.width(64.dp)
                                     )
                                     Slider(
@@ -169,7 +169,10 @@ fun EqualizerScreen(vm: MainViewModel) {
                                         },
                                         valueRange = minLevel.toFloat()..maxLevel.toFloat(),
                                         modifier = Modifier.weight(1f),
-                                        colors = SliderDefaults.colors(thumbColor = Pulse.Cyan, activeTrackColor = Pulse.Cyan)
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = MaterialTheme.colorScheme.primary,
+                                            activeTrackColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
                                     Text(
                                         text = "${(level / 100).toInt()} dB",
@@ -196,7 +199,7 @@ fun EqualizerScreen(vm: MainViewModel) {
                                 Column {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text("Bass Boost", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("${(bassVal / 10).toInt()}%", color = Pulse.Cyan)
+                                        Text("${(bassVal / 10).toInt()}%", color = MaterialTheme.colorScheme.primary)
                                     }
                                     Slider(
                                         value = bassVal,
@@ -205,7 +208,10 @@ fun EqualizerScreen(vm: MainViewModel) {
                                             AudioFx.setBass(it.toInt())
                                         },
                                         valueRange = 0f..1000f,
-                                        colors = SliderDefaults.colors(thumbColor = Pulse.Cyan, activeTrackColor = Pulse.Cyan)
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = MaterialTheme.colorScheme.primary,
+                                            activeTrackColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
                                 }
                             }
@@ -213,7 +219,7 @@ fun EqualizerScreen(vm: MainViewModel) {
                                 Column {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text("Virtualizer (3D Surround)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("${(virtVal / 10).toInt()}%", color = Pulse.Cyan)
+                                        Text("${(virtVal / 10).toInt()}%", color = MaterialTheme.colorScheme.primary)
                                     }
                                     Slider(
                                         value = virtVal,
@@ -222,7 +228,10 @@ fun EqualizerScreen(vm: MainViewModel) {
                                             AudioFx.setVirtualizer(it.toInt())
                                         },
                                         valueRange = 0f..1000f,
-                                        colors = SliderDefaults.colors(thumbColor = Pulse.Cyan, activeTrackColor = Pulse.Cyan)
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = MaterialTheme.colorScheme.primary,
+                                            activeTrackColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
                                 }
                             }
@@ -264,7 +273,10 @@ fun EqualizerScreen(vm: MainViewModel) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 ) {
                     Icon(Icons.Rounded.RestartAlt, null)
                     Spacer(Modifier.width(8.dp))

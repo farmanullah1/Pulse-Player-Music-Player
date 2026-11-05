@@ -99,13 +99,13 @@ fun SongsScreen(vm: MainViewModel) {
                             Icon(
                                 imageVector = Icons.Rounded.Checklist,
                                 contentDescription = "Select songs",
-                                tint = if (selectMode) Pulse.Cyan else Color.White
+                                tint = if (selectMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
                     if (scanning) {
                         Surface(
-                            color = Pulse.Elevated,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -116,20 +116,20 @@ fun SongsScreen(vm: MainViewModel) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = if (scanProgress > 0) "Scanning your library" else "Finishing library scan",
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         style = MaterialTheme.typography.labelLarge
                                     )
                                     Spacer(Modifier.weight(1f))
                                     Text(
                                         text = if (scanProgress > 0) "$scanProgress found" else "Please wait…",
-                                        color = Pulse.TextMid,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.labelMedium
                                     )
                                 }
                                 androidx.compose.material3.LinearProgressIndicator(
                                     modifier = Modifier.fillMaxWidth(),
-                                    color = Pulse.Cyan,
-                                    trackColor = Pulse.Outline
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.outlineVariant
                                 )
                             }
                         }
@@ -170,14 +170,14 @@ fun SongsScreen(vm: MainViewModel) {
                         )
                         if (showMissing) {
                             Surface(
-                                color = Pulse.Surface,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = "These files weren't found on the last scan. Your favourites and playlists keep them.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextMid,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(12.dp)
                                 )
                             }
@@ -193,6 +193,14 @@ fun SongsScreen(vm: MainViewModel) {
                     playing = ps.isPlaying,
                     selected = track.id in selected,
                     selectMode = selectMode,
+                    onSwipeRightQueue = {
+                        vm.playNext(track)
+                        vm.snackbarMessage.value = "Queued next: ${track.title}"
+                    },
+                    onSwipeLeftFavorite = {
+                        vm.toggleFavorite(track.id)
+                        vm.snackbarMessage.value = if (!track.isFavorite) "Added to favorites" else "Removed from favorites"
+                    },
                     onClick = {
                         if (selectMode) {
                             vm.toggleSelect(track.id)
@@ -220,7 +228,7 @@ fun SongsScreen(vm: MainViewModel) {
                     .padding(bottom = 76.dp, start = 16.dp, end = 16.dp)
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                color = Pulse.Elevated,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 tonalElevation = 8.dp
             ) {
                 Row(
@@ -228,19 +236,27 @@ fun SongsScreen(vm: MainViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                            Text("${selected.size} selected", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                    Text("${selected.size} selected", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Row {
                         IconButton(onClick = { vm.selectAll(displayTracks.map { it.id }) }) {
                             Icon(Icons.Rounded.SelectAll, "Select all", tint = MaterialTheme.colorScheme.onSurface)
                         }
                         IconButton(onClick = { vm.playSelectedNext() }, enabled = selected.isNotEmpty()) {
-                            Icon(Icons.Rounded.QueueMusic, "Play next", tint = if (selected.isNotEmpty()) Pulse.Cyan else Pulse.TextLow)
+                            Icon(
+                                Icons.Rounded.QueueMusic,
+                                "Play next",
+                                tint = if (selected.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
                         }
                         IconButton(onClick = { vm.favoriteSelected() }, enabled = selected.isNotEmpty()) {
-                            Icon(Icons.Rounded.Favorite, "Favorite", tint = if (selected.isNotEmpty()) Pulse.Cyan else Pulse.TextLow)
+                            Icon(
+                                Icons.Rounded.Favorite,
+                                "Favorite",
+                                tint = if (selected.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
                         }
                         IconButton(onClick = { vm.clearSelect() }) {
-                            Icon(Icons.Rounded.Close, "Close select", tint = Pulse.TextMid)
+                            Icon(Icons.Rounded.Close, "Close select", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -262,7 +278,7 @@ fun SortMenu(vm: MainViewModel) {
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(Pulse.Elevated)
+            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
             DropdownMenuItem(
                 text = { Text("Title ${if (currentField == SortField.TITLE) if (asc) "↑" else "↓" else ""}") },

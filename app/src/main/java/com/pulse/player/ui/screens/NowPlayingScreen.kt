@@ -19,10 +19,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -94,6 +96,7 @@ import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.components.AuroraBackground
 import com.pulse.player.ui.components.GlowArtwork
 import com.pulse.player.ui.components.HeartButton
+import com.pulse.player.ui.components.WaveformSeekBar
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.screens.layouts.AtmosphericQueuePlayerLayout
@@ -204,6 +207,15 @@ fun NowPlayingScreen(vm: MainViewModel) {
 
             Spacer(Modifier.height(16.dp))
 
+            if (s.trackError != null) {
+                PlaybackErrorBanner(
+                    error = s.trackError!!,
+                    onRetry = vm.player::retry,
+                    onSkip = vm.player::skip,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+
             if (showLyrics) {
                 LyricsView(
                     vm = vm,
@@ -250,6 +262,8 @@ fun NowPlayingScreen(vm: MainViewModel) {
             SeekBar(
                 position = vm.player.position,
                 duration = s.durationMs,
+                isPlaying = s.isPlaying,
+                trackKey = s.mediaId ?: "default",
                 onSeek = vm.player::seekTo
             )
 
@@ -341,7 +355,8 @@ private fun AtmosphericQueuePlayer(
             isFavorite = favorite,
             shuffleEnabled = s.shuffle,
             repeatMode = s.repeat,
-            queue = queueTracks
+            queue = queueTracks,
+            error = s.trackError
         ),
         onPlayPauseClick = vm.player::togglePlay,
         onPreviousClick = vm.player::previous,
@@ -370,7 +385,9 @@ private fun AtmosphericQueuePlayer(
         onOpenSleep = vm::openSleepSheet,
         onAddToPlaylist = { vm.openAddToPlaylist() },
         onOpenQueue = vm::openQueue,
-        onOpenEqualizer = { vm.go(Screen.Equalizer) }
+        onOpenEqualizer = { vm.go(Screen.Equalizer) },
+        onRetry = vm.player::retry,
+        onSkip = vm.player::skip
     )
 }
 
@@ -405,7 +422,13 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
             )
             Text(text = s.artist, style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
             Spacer(Modifier.height(16.dp))
-            SeekBar(vm.player.position, s.durationMs, onSeek = vm.player::seekTo)
+            SeekBar(
+                position = vm.player.position,
+                duration = s.durationMs,
+                isPlaying = s.isPlaying,
+                trackKey = s.mediaId ?: "default",
+                onSeek = vm.player::seekTo
+            )
             Spacer(Modifier.height(8.dp))
             TransportRow(s, vm.player)
             Spacer(Modifier.height(8.dp))
@@ -562,9 +585,12 @@ fun LyricsView(
         }
     }
 
-    val activeIdx = remember(lrcLines, currentPosMs) {
+    var lrcOffsetMs by remember(mediaId) { mutableStateOf(0L) }
+
+    val activeIdx = remember(lrcLines, currentPosMs, lrcOffsetMs) {
+        val effectivePos = (currentPosMs + lrcOffsetMs).coerceAtLeast(0L)
         if (lrcLines.isNotEmpty() && lrcLines.first().timeMs >= 0) {
-            Lrc.activeIndex(lrcLines, currentPosMs)
+            Lrc.activeIndex(lrcLines, effectivePos)
         } else {
             -1
         }
@@ -582,14 +608,14 @@ fun LyricsView(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("No lyrics found for this track", color = Pulse.TextMid)
+                Text("No lyrics found for this track", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { lrcPicker.launch(arrayOf("*/*", "text/*")) },
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = Pulse.Cyan
+                            contentColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
                         Text("Choose .lrc")
@@ -601,7 +627,7 @@ fun LyricsView(
                         },
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Pulse.Cyan,
+                            containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
@@ -612,27 +638,83 @@ fun LyricsView(
                 }
             }
         } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                itemsIndexed(lrcLines) { idx, line ->
-                    val isActive = idx == activeIdx
-                    Text(
-                        text = line.text,
-                        style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
-                        color = if (isActive) Pulse.Cyan else Pulse.TextLow,
-                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                        textAlign = TextAlign.Center,
+            Column(Modifier.fillMaxSize()) {
+                // Inline Sync Offset Nudger
+                if (lrcLines.any { it.timeMs >= 0 }) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = line.timeMs >= 0) {
-                                vm.player.seekTo(line.timeMs)
-                            }
-                            .padding(vertical = 8.dp, horizontal = 24.dp)
-                    )
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Sync Offset: ${if (lrcOffsetMs >= 0) "+" else ""}${lrcOffsetMs / 1000f}s",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = { lrcOffsetMs -= 500L },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Text("-0.5s", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Button(
+                            onClick = { lrcOffsetMs = 0L },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Text("Reset", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Button(
+                            onClick = { lrcOffsetMs += 500L },
+                            shape = CircleShape,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Text("+0.5s", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    itemsIndexed(lrcLines) { idx, line ->
+                        val isActive = idx == activeIdx
+                        Text(
+                            text = line.text,
+                            style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = line.timeMs >= 0) {
+                                    val target = (line.timeMs - lrcOffsetMs).coerceAtLeast(0L)
+                                    vm.player.seekTo(target)
+                                }
+                                .padding(vertical = 8.dp, horizontal = 24.dp)
+                        )
+                    }
                 }
             }
         }
@@ -654,6 +736,13 @@ fun PlayerTopMenu(vm: MainViewModel) {
             onDismissRequest = { expanded = false },
             modifier = Modifier.background(Pulse.Elevated)
         ) {
+            DropdownMenuItem(
+                text = { Text("Edit Track Tags & Art") },
+                onClick = {
+                    expanded = false
+                    vm.openTagEditor()
+                }
+            )
             DropdownMenuItem(
                 text = { Text("Customize Player") },
                 onClick = {
@@ -704,41 +793,45 @@ fun PlayerTopMenu(vm: MainViewModel) {
 }
 
 @Composable
-fun SeekBar(position: StateFlow<Long>, duration: Long, onSeek: (Long) -> Unit) {
+fun SeekBar(
+    position: StateFlow<Long>,
+    duration: Long,
+    isPlaying: Boolean = true,
+    trackKey: String = "default",
+    onSeek: (Long) -> Unit
+) {
     val pos by position.collectAsStateWithLifecycle()
     var drag by remember { mutableStateOf<Float?>(null) }
     val rawProgress = if (duration > 0) pos / duration.toFloat() else 0f
     val safeProgress = if (rawProgress.isNaN() || rawProgress.isInfinite()) 0f else rawProgress.coerceIn(0f, 1f)
     val value = drag ?: safeProgress
 
-    Column {
-        Slider(
-            value = (drag ?: safeProgress).coerceIn(0f, 1f),
+    Column(Modifier.fillMaxWidth()) {
+        WaveformSeekBar(
+            value = value,
             onValueChange = { drag = it },
             onValueChangeFinished = {
                 drag?.let { onSeek((it * duration).toLong()) }
                 drag = null
             },
-            colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(0.25f)
-            )
+            isPlaying = isPlaying,
+            seedKey = trackKey,
+            modifier = Modifier.fillMaxWidth().height(44.dp)
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
             Text(
                 formatTime(((drag ?: value) * duration).toLong()),
-                color = Pulse.TextMid,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.weight(1f))
             Text(
                 formatTime(duration),
-                color = Pulse.TextMid,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
         }

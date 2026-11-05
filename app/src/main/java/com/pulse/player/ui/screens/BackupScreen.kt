@@ -648,12 +648,12 @@ fun BackupScreen(vm: MainViewModel) {
         Dialog(onDismissRequest = vm::dismissCompatPreview) {
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = Pulse.Elevated,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Unarchive, null, tint = Pulse.Cyan, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Rounded.Unarchive, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Backup Restore Preview", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
@@ -662,8 +662,8 @@ fun BackupScreen(vm: MainViewModel) {
                     val backupTime = preview.staged.meta["backupTime"] as? String ?: "Unknown time"
                     val device = preview.staged.meta["deviceId"] as? String ?: "Unknown device"
                     val ver = preview.staged.meta["versionName"] as? String ?: "1.0.0"
-                    Text("Backup Date: $backupTime", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
-                    Text("Source: Device $device (v$ver)", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                    Text("Backup Date: $backupTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Source: Device $device (v$ver)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     // Resolution Stats Breakdown
                     Card(
@@ -680,13 +680,13 @@ fun BackupScreen(vm: MainViewModel) {
                             Text(
                                 "Matches: exact ${preview.stats.tier[1]}, storage-rel ${preview.stats.tier[2]}, folder ${preview.stats.tier[3]}, tags ${preview.stats.tier[4]}, name ${preview.stats.tier[5]}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Pulse.TextMid
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (preview.stats.ambiguous > 0 || preview.stats.missing > 0) {
                                 Text(
                                     "Unmatched: ${preview.stats.ambiguous} ambiguous, ${preview.stats.missing} not found on this device",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Pulse.Coral
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
@@ -727,14 +727,14 @@ fun BackupScreen(vm: MainViewModel) {
                         RadioButton(
                             selected = !replaceMode,
                             onClick = { vm.setCompatReplaceMode(false) },
-                            colors = RadioButtonDefaults.colors(selectedColor = Pulse.Cyan)
+                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
                         )
                         Text("Merge (default)", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.width(16.dp))
                         RadioButton(
                             selected = replaceMode,
                             onClick = { vm.setCompatReplaceMode(true) },
-                            colors = RadioButtonDefaults.colors(selectedColor = Pulse.Coral)
+                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.error)
                         )
                         Text("Replace selected", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
                     }
@@ -757,8 +757,8 @@ fun BackupScreen(vm: MainViewModel) {
                             },
                             modifier = Modifier.testTag("compat_restore_confirm_button"),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (replaceMode) Pulse.Coral else Pulse.Cyan,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                containerColor = if (replaceMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                contentColor = if (replaceMode) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
                             Text(if (replaceMode) "Replace & Restore" else "Apply Restore", fontWeight = FontWeight.Bold)
@@ -822,7 +822,7 @@ fun BackupScreen(vm: MainViewModel) {
                         Text(
                             "${report.unmatchedPaths.size} tracks were unmatched or missing on this device.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.Coral
+                            color = MaterialTheme.colorScheme.error
                         )
                         Button(
                             onClick = {
@@ -832,7 +832,7 @@ fun BackupScreen(vm: MainViewModel) {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("compat_save_unmatched_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = Pulse.Cyan)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(Icons.Rounded.Download, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
@@ -844,14 +844,14 @@ fun BackupScreen(vm: MainViewModel) {
             confirmButton = {
                 Button(
                     onClick = vm::dismissCompatReport,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
                 ) {
                     Text("Done", fontWeight = FontWeight.Bold)
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            titleContentColor = Color.White,
-            textContentColor = Color.White
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 
@@ -876,7 +876,7 @@ fun BackupScreen(vm: MainViewModel) {
                     Text(
                         text = "• Favourites to export: $favCount\n• Destination: Music/Pulse Player/\n• Snapshot metadata: pulseplayer.favorites v1 format\n• Audio files: byte-for-byte independent copies",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             },
@@ -928,9 +928,9 @@ private fun CompatCategoryCheckbox(
             checked = selected,
             onCheckedChange = { onToggle() },
             colors = CheckboxDefaults.colors(
-                checkedColor = Pulse.Cyan,
-                uncheckedColor = Pulse.TextMid,
-                checkmarkColor = Color.Black
+                checkedColor = MaterialTheme.colorScheme.primary,
+                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                checkmarkColor = MaterialTheme.colorScheme.onPrimary
             )
         )
         Spacer(Modifier.width(4.dp))

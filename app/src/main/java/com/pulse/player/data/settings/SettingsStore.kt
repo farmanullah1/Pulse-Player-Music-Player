@@ -57,6 +57,8 @@ class SettingsStore(private val ctx: Context) {
         val listDensity = intPreferencesKey("list_density")               // 0=compact, 1=normal, 2=comfortable
         val albumGridColumns = intPreferencesKey("album_grid_columns")    // 2..4
         val minFileSizeKb = intPreferencesKey("min_file_size_kb")         // 0 = no filter
+        val crossfadeSecs = intPreferencesKey("crossfade_secs")            // 0..12 seconds
+        val homeTabs = stringPreferencesKey("home_tabs_csv")
     }
 
     val themeMode: Flow<ThemeMode> = ctx.dataStore.data.map {
@@ -205,6 +207,11 @@ class SettingsStore(private val ctx: Context) {
     val listDensity: Flow<Int> = ctx.dataStore.data.map { (it[K.listDensity] ?: 1).coerceIn(0, 2) }
     val albumGridColumns: Flow<Int> = ctx.dataStore.data.map { (it[K.albumGridColumns] ?: 2).coerceIn(2, 4) }
     val minFileSizeKb: Flow<Int> = ctx.dataStore.data.map { (it[K.minFileSizeKb] ?: 0).coerceAtLeast(0) }
+    val crossfadeSeconds: Flow<Int> = ctx.dataStore.data.map { (it[K.crossfadeSecs] ?: 0).coerceIn(0, 12) }
+    val homeTabsList: Flow<List<String>> = ctx.dataStore.data.map {
+        val raw = it[K.homeTabs]?.split(",")?.map { s -> s.trim() }?.filter { s -> s.isNotBlank() }
+        if (!raw.isNullOrEmpty()) raw else listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
+    }
 
     suspend fun setColorSource(s: ColorSource) = ctx.dataStore.edit { it[K.colorSource] = s.name }
     suspend fun setSeedColor(argb: Int) = ctx.dataStore.edit { it[K.seedColor] = argb }
@@ -216,6 +223,8 @@ class SettingsStore(private val ctx: Context) {
     suspend fun setListDensity(v: Int) = ctx.dataStore.edit { it[K.listDensity] = v.coerceIn(0, 2) }
     suspend fun setAlbumGridColumns(v: Int) = ctx.dataStore.edit { it[K.albumGridColumns] = v.coerceIn(2, 4) }
     suspend fun setMinFileSizeKb(v: Int) = ctx.dataStore.edit { it[K.minFileSizeKb] = v.coerceAtLeast(0) }
+    suspend fun setCrossfadeSeconds(sec: Int) = ctx.dataStore.edit { it[K.crossfadeSecs] = sec.coerceIn(0, 12) }
+    suspend fun setHomeTabs(tabs: List<String>) = ctx.dataStore.edit { it[K.homeTabs] = tabs.joinToString(",") }
 
     fun sortFor(screen: String, raw: Map<String, Any?>?): Pair<String, Int> {
         val o = raw?.get(screen) as? Map<*, *>

@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
@@ -365,6 +366,9 @@ fun TrackMenuSheet(vm: MainViewModel, track: Track) {
                 },
                 Triple("Song details", Icons.Rounded.Info) {
                     vm.songDetailsTrack.value = track
+                },
+                Triple("Edit tags & cover art", Icons.Rounded.Edit) {
+                    vm.openTagEditor(track)
                 },
                 Triple("Set as ringtone", Icons.Rounded.Notifications) {
                     val ok = RingtoneHelper.setRingtone(ctx, Uri.parse(track.uri), RingtoneManager.TYPE_RINGTONE)

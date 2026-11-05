@@ -69,7 +69,7 @@ fun FoldersScreen(vm: MainViewModel) {
                 Button(
                     onClick = { safLauncher.launch(null) },
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = Pulse.Cyan)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Rounded.FolderOpen, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -86,7 +86,7 @@ fun FoldersScreen(vm: MainViewModel) {
                         .padding(vertical = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No audio folders found", color = Pulse.TextMid)
+                    Text("No audio folders found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -95,7 +95,7 @@ fun FoldersScreen(vm: MainViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Pulse.Surface)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { vm.go(Screen.Detail("folder", folderName)) }
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -104,10 +104,10 @@ fun FoldersScreen(vm: MainViewModel) {
                         Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Pulse.Elevated),
+                            .background(MaterialTheme.colorScheme.surface),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Folder, null, tint = Pulse.Cyan, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Rounded.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                     }
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
@@ -119,7 +119,7 @@ fun FoldersScreen(vm: MainViewModel) {
                         Text(
                             text = "$count songs · $folderName",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

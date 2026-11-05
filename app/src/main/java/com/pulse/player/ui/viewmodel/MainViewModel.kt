@@ -126,6 +126,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val createPlaylistOpen = MutableStateFlow(false)
     val importPreview = MutableStateFlow<FavoritesRepository.Preview?>(null)
     val songDetailsTrack = MutableStateFlow<Track?>(null)
+    val tagEditorTrack = MutableStateFlow<Track?>(null)
 
     fun openQueue() { queueOpen.value = true }
     fun closeQueue() { queueOpen.value = false }
@@ -137,6 +138,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openTrackMenu(t: Track) { trackMenuTrack.value = t }
     fun closeTrackMenu() { trackMenuTrack.value = null }
     fun openTrackOptions() { currentPlayingTrack()?.let { openTrackMenu(it) } }
+    fun openTagEditor(t: Track? = null) { tagEditorTrack.value = t ?: currentPlayingTrack() }
+    fun closeTagEditor() { tagEditorTrack.value = null }
 
     val snackbarMessage = MutableStateFlow<String?>(null)
     fun clearSnackbarMessage() { snackbarMessage.value = null }
@@ -167,6 +170,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val listDensity: StateFlow<Int> = settings.listDensity.stateIn(viewModelScope, SharingStarted.Eagerly, 1)
     val albumGridColumns: StateFlow<Int> = settings.albumGridColumns.stateIn(viewModelScope, SharingStarted.Eagerly, 2)
     val minFileSizeKb: StateFlow<Int> = settings.minFileSizeKb.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val crossfadeSeconds: StateFlow<Int> = settings.crossfadeSeconds.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val homeTabsList: StateFlow<List<String>> = settings.homeTabsList.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
+    )
     // Dynamic accent driven by current artwork — updated by player layouts when art changes
     val artworkAccent = MutableStateFlow(PulseColors.Cyan)
 
@@ -201,6 +210,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setListDensity(v: Int) = viewModelScope.launch { settings.setListDensity(v) }
     fun setAlbumGridColumns(v: Int) = viewModelScope.launch { settings.setAlbumGridColumns(v) }
     fun setMinFileSizeKb(v: Int) = viewModelScope.launch { settings.setMinFileSizeKb(v) }
+    fun setCrossfadeSeconds(sec: Int) = viewModelScope.launch {
+        val s = sec.coerceIn(0, 12)
+        settings.setCrossfadeSeconds(s)
+        com.pulse.player.playback.PlaybackEngine.crossfadeMs = s * 1000L
+    }
+    fun setHomeTabs(tabs: List<String>) = viewModelScope.launch { settings.setHomeTabs(tabs) }
+
+    init {
+        viewModelScope.launch {
+            settings.crossfadeSeconds.collect { sec ->
+                com.pulse.player.playback.PlaybackEngine.crossfadeMs = sec * 1000L
+            }
+        }
+    }
 
     // Scanning & Tracks
     val scanning: StateFlow<Boolean> = scanner.scanning
@@ -413,6 +436,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val favs = selected.value.map { com.pulse.player.data.db.FavoriteEntity(it, now) }
         db.favorites().addAll(favs)
         clearSelect()
+    }
+
+    fun updateTrackTags(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        year: Int,
+        trackNumber: Int,
+        onDone: (() -> Unit)? = null
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching {
+            db.tracks().updateTrackTags(
+                id = id,
+                title = title.trim(),
+                artist = artist.trim(),
+                album = album.trim(),
+                genre = genre.trim(),
+                year = year,
+                trackNumber = trackNumber,
+                normTitle = norm(title.trim()),
+                normArtist = norm(artist.trim()),
+                normAlbum = norm(album.trim())
+            )
+        }.onSuccess {
+            withContext(Dispatchers.Main) {
+                snackbarMessage.value = "Track details updated"
+                onDone?.invoke()
+            }
+        }.onFailure { err ->
+            ErrorDispatcher.post(
+                category = ErrorCategory.STORAGE,
+                title = "Tag Update Failed",
+                message = err.message ?: "Failed to save track tags",
+                technicalDetails = err.stackTraceToString()
+            )
+            withContext(Dispatchers.Main) {
+                snackbarMessage.value = "Failed to update tags: ${err.message}"
+            }
+        }
     }
 
     // For You / Recap stats

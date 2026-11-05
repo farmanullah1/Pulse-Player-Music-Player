@@ -867,7 +867,7 @@ private fun ColorsAndSkinsTab(
             )
         }
 
-        items(Skins.entries, key = { it.id }) { skin ->
+        items(Skins, key = { it.id }) { skin ->
             val isSelected = skin.id == skinId
             Card(
                 modifier = Modifier
@@ -889,7 +889,7 @@ private fun ColorsAndSkinsTab(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(skin.accent)
+                            .background(skin.colors.firstOrNull() ?: Pulse.Cyan)
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {

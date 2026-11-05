@@ -48,7 +48,7 @@ fun WaveformSeekBar(
     isPlaying: Boolean = true,
     seedKey: String = "default",
     onValueChangeFinished: (() -> Unit)? = null,
-    activeColor: Color = Pulse.Orange,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
     inactiveColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
     barCount: Int = 48,
     barSpacing: Dp = 3.dp,

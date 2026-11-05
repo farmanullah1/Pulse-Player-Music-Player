@@ -69,6 +69,11 @@ fun MiniPlayer(
             .clickable(onClick = onExpand),
         shape = RoundedCornerShape(32.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (s.trackError != null) MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+        ),
         tonalElevation = 6.dp
     ) {
         Box {
@@ -93,11 +98,11 @@ fun MiniPlayer(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = s.artist.ifBlank { "Select a song to start" },
+                        text = if (s.trackError != null) "⚠️ ${s.trackError.message}" else s.artist.ifBlank { "Select a song to start" },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (s.trackError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(onClick = onToggle) {
@@ -126,8 +131,8 @@ fun MiniPlayer(
                     .align(Alignment.BottomCenter)
                     .padding(horizontal = 28.dp)
                     .fillMaxWidth()
-                    .height(2.dp),
-                color = Pulse.Cyan,
+                    .height(2.5.dp),
+                color = if (s.trackError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 trackColor = Color.Transparent
             )
         }

@@ -35,6 +35,7 @@ object PlaybackEngine {
     var fadingPlayer: FadingPlayer? = null
         private set
     @Volatile var fadeEnabled = true
+    @Volatile var crossfadeMs: Long = 0L
     val errorEvents = MutableStateFlow<ErrorPolicy.TrackError?>(null)
 
     fun isAttached(): Boolean = exo != null && ::sleep.isInitialized && ::errors.isInitialized
@@ -110,6 +111,10 @@ object PlaybackEngine {
                 val speed = player.playbackParameters.speed
                 if (id != null) {
                     tracker.onTrackStarted(id, dur, player.isPlaying, speed)
+                    if (crossfadeMs > 0 && player.isPlaying) {
+                        transitions.snapTo(0.25f)
+                        transitions.fadeTo(1f, crossfadeMs, TransitionReason.TrackChange)
+                    }
                 } else {
                     tracker.onTrackLeft(userAction = false)
                 }

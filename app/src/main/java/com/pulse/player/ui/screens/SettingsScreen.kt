@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Checkroom
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -28,8 +29,10 @@ import androidx.compose.material.icons.rounded.DashboardCustomize
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -82,9 +85,12 @@ fun SettingsScreen(vm: MainViewModel) {
     val offlineOnlyMode by vm.offlineOnlyMode.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
     val missingCount by vm.missingCount.collectAsStateWithLifecycle()
+    val crossfadeSeconds by vm.crossfadeSeconds.collectAsStateWithLifecycle()
+    val homeTabsList by vm.homeTabsList.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     var inputKey by remember { mutableStateOf("") }
     var showCleanConfirmDialog by remember { mutableStateOf(false) }
+    var showHomeTabsDialog by remember { mutableStateOf(false) }
 
     val safLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -146,6 +152,11 @@ fun SettingsScreen(vm: MainViewModel) {
                             "Live editor for layouts, themes, 15 button presets & elements",
                             Icons.Rounded.DashboardCustomize
                         ) { vm.go(Screen.Customize) }
+                        SettingsActionRow(
+                            "Home Tabs Arrangement",
+                            "Reorder or toggle For you, Songs, Playlists, Folders, Albums, Artists",
+                            Icons.Rounded.ViewCarousel
+                        ) { showHomeTabsDialog = true }
 
                         Row(
                             Modifier.fillMaxWidth(),
@@ -154,12 +165,12 @@ fun SettingsScreen(vm: MainViewModel) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Reduced Motion", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text("Disables spinning disc, visualizer bars, and infinite animations", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                                Text("Disables spinning disc, visualizer bars, and infinite animations", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(
                                 checked = reducedMotion,
                                 onCheckedChange = { vm.setReducedMotion(it) },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                             )
                         }
                     }
@@ -193,6 +204,16 @@ fun SettingsScreen(vm: MainViewModel) {
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsNavRow("Equalizer & Sound Effects", Icons.Rounded.Equalizer) {
+                            vm.go(Screen.Equalizer)
+                        }
+                        SettingsActionRow(
+                            title = "Sleep Timer",
+                            subtitle = "Set countdown timer or stop at the end of the current track",
+                            icon = Icons.Rounded.Bedtime,
+                            onClick = { vm.openSleep() }
+                        )
+
                         Row(
                             Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -200,12 +221,40 @@ fun SettingsScreen(vm: MainViewModel) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Audio Fades", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text("Smooth volume ramp on play/pause", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                                Text("Smooth volume ramp on play/pause", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(
                                 checked = fadeEnabled,
                                 onCheckedChange = { vm.setFadeEnabled(it) },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
+                            )
+                        }
+
+                        // Audiophile Crossfade Slider (0..12s)
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Track Crossfade", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    if (crossfadeSeconds == 0) "Off" else "${crossfadeSeconds}s",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Slider(
+                                value = crossfadeSeconds.toFloat(),
+                                onValueChange = { vm.setCrossfadeSeconds(it.roundToInt()) },
+                                valueRange = 0f..12f,
+                                steps = 11,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant
+                                )
                             )
                         }
 
@@ -220,7 +269,7 @@ fun SettingsScreen(vm: MainViewModel) {
                                 Text(
                                     "%.2fx".format(playerState.speed),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Pulse.Cyan,
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -233,9 +282,9 @@ fun SettingsScreen(vm: MainViewModel) {
                                 valueRange = 0.5f..2.0f,
                                 steps = 29,
                                 colors = SliderDefaults.colors(
-                                    thumbColor = Pulse.Cyan,
-                                    activeTrackColor = Pulse.Cyan,
-                                    inactiveTrackColor = Pulse.Outline
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant
                                 )
                             )
                         }
@@ -248,12 +297,12 @@ fun SettingsScreen(vm: MainViewModel) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Lock Pitch", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text("Preserve natural voice pitch when altering speed", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                                Text("Preserve natural voice pitch when altering speed", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(
                                 checked = playerState.pitchLocked,
                                 onCheckedChange = { vm.player.setPitchLocked(it) },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                             )
                         }
 
@@ -265,14 +314,14 @@ fun SettingsScreen(vm: MainViewModel) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Stop After Current Track", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text("Pause playback automatically when current song finishes", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                                Text("Pause playback automatically when current song finishes", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(
                                 checked = playerState.sleepEndOfTrack,
                                 onCheckedChange = { enabled ->
                                     if (enabled) vm.player.sleepAtEndOfTrack() else vm.player.cancelSleep()
                                 },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                             )
                         }
 
@@ -284,17 +333,31 @@ fun SettingsScreen(vm: MainViewModel) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Skip Silence", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text("Skip silent passages seamlessly during playback", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                                Text("Skip silent passages seamlessly during playback", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Switch(
                                 checked = playerState.skipSilence,
                                 onCheckedChange = { vm.player.setSkipSilence(it) },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                                colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                             )
                         }
+                    }
+                }
+            }
 
-                        SettingsNavRow("Equalizer & Sound Effects", Icons.Rounded.Equalizer) {
-                            vm.go(Screen.Equalizer)
+            item {
+                SettingsSectionHeader("History & Statistics")
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SettingsActionRow(
+                            title = "Music Recap & Listening Stats",
+                            subtitle = "View monthly listening recap, top tracks, total listening time and play trends",
+                            icon = Icons.Rounded.History
+                        ) {
+                            vm.go(Screen.Recap)
                         }
                     }
                 }
@@ -311,7 +374,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             Text(
                                 "Online integrations are not included in the offline build. Local playback, scanning, lyrics and backups remain available.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Pulse.TextMid
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
                             SettingsSwitchRow(
@@ -352,11 +415,11 @@ fun SettingsScreen(vm: MainViewModel) {
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Widgets, null, tint = Pulse.Cyan)
+                        Icon(Icons.Rounded.Widgets, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(16.dp))
                         Column {
                             Text("Home Screen Widget", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                            Text("Long-press home screen → Widgets → Pulse Player. Supports 2x2, 4x1, and 4x2 responsive layouts.", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                            Text("Long-press home screen → Widgets → Pulse Player. Supports 2x2, 4x1, and 4x2 responsive layouts.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -373,7 +436,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             Text(
                                 "AI transcription and music generation are not included in the offline build. Select a local track for playback and local lyrics tools instead.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Pulse.TextMid
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
                             SettingsNavRow("Audio & Lyrics Transcribe (gemini-3.5-transcribe)", Icons.Rounded.Mic) {
@@ -388,7 +451,7 @@ fun SettingsScreen(vm: MainViewModel) {
                             Text(
                                 "Used only for optional online transcription and Lyria music generation in the full build.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Pulse.TextMid
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             Row(
@@ -399,14 +462,14 @@ fun SettingsScreen(vm: MainViewModel) {
                                 OutlinedTextField(
                                     value = inputKey,
                                     onValueChange = { inputKey = it },
-                                    placeholder = { Text("Paste API Key...", color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall) },
+                                    placeholder = { Text("Paste API Key...", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) },
                                     singleLine = true,
                                     modifier = Modifier.weight(1f),
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = Pulse.Cyan,
-                                        unfocusedBorderColor = Pulse.Outline,
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                                     )
                                 )
                                 Button(
@@ -417,9 +480,12 @@ fun SettingsScreen(vm: MainViewModel) {
                                             inputKey = ""
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
                                 ) {
-                                    Text("Save", color = Color.Black, fontWeight = FontWeight.Bold)
+                                    Text("Save", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -465,7 +531,7 @@ fun SettingsScreen(vm: MainViewModel) {
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.Info, null, tint = Pulse.Cyan)
+                            Icon(Icons.Rounded.Info, null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
                             Text("Pulse Player v1.0.0", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         }
@@ -476,12 +542,80 @@ fun SettingsScreen(vm: MainViewModel) {
                                 "Offline build: no internet permission, no tracking, no ads. Built with Jetpack Compose & Media3."
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
         }
+    }
+
+    if (showHomeTabsDialog) {
+        val allTabs = listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
+        var currentSelection by remember(homeTabsList) { mutableStateOf(homeTabsList.toSet()) }
+
+        AlertDialog(
+            onDismissRequest = { showHomeTabsDialog = false },
+            title = { Text("Home Tabs Arrangement") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Select which tabs appear on the home screen:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    allTabs.forEach { tabName ->
+                        val isChecked = tabName in currentSelection
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    currentSelection = if (isChecked) {
+                                        if (currentSelection.size > 1) currentSelection - tabName else currentSelection
+                                    } else {
+                                        currentSelection + tabName
+                                    }
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { check ->
+                                    currentSelection = if (check) currentSelection + tabName else {
+                                        if (currentSelection.size > 1) currentSelection - tabName else currentSelection
+                                    }
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(tabName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val ordered = allTabs.filter { it in currentSelection }
+                        vm.setHomeTabs(ordered)
+                        showHomeTabsDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Text("Apply", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showHomeTabsDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     }
 
     if (showCleanConfirmDialog) {
@@ -503,14 +637,17 @@ fun SettingsScreen(vm: MainViewModel) {
                             Toast.makeText(ctx, "Cleaned $deleted missing track(s)", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Coral)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
                 ) {
-                    Text("Clean", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Clean", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { showCleanConfirmDialog = false }) {
-                    Text("Cancel", color = Pulse.Cyan)
+                    Text("Cancel", color = MaterialTheme.colorScheme.primary)
                 }
             },
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -520,7 +657,12 @@ fun SettingsScreen(vm: MainViewModel) {
 
 @Composable
 fun SettingsSectionHeader(title: String) {
-    Text(title, style = MaterialTheme.typography.titleMedium, color = Pulse.Cyan, modifier = Modifier.padding(bottom = 6.dp))
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 6.dp)
+    )
 }
 
 @Composable
@@ -553,12 +695,12 @@ private fun SettingsSwitchRow(
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+            colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
         )
     }
 }
@@ -577,7 +719,7 @@ fun SettingsActionRow(title: String, subtitle: String, icon: ImageVector, onClic
         Spacer(Modifier.width(16.dp))
         Column {
             Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

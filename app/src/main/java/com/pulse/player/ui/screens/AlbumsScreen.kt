@@ -64,7 +64,7 @@ fun AlbumsScreen(vm: MainViewModel) {
                         .padding(vertical = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No albums found", color = Pulse.TextMid)
+                    Text("No albums found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -96,7 +96,7 @@ fun AlbumsScreen(vm: MainViewModel) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

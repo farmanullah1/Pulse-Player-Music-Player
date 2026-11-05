@@ -62,6 +62,12 @@ interface TrackDao {
     @Upsert
     suspend fun upsertAll(items: List<TrackEntity>)
 
+    @Query(
+        "UPDATE tracks SET title = :title, artist = :artist, album = :album, genre = :genre, year = :year, trackNumber = :trackNumber " +
+        "WHERE id = :id"
+    )
+    suspend fun updateTrackTags(id: String, title: String, artist: String, album: String, genre: String, year: Int, trackNumber: Int)
+
     @Query("SELECT COALESCE(MAX(scanGen), 0) FROM tracks")
     suspend fun maxGen(): Long
 
@@ -163,6 +169,26 @@ interface TrackDao {
         bpm: Float,
         lang: String,
         hasLyrics: Boolean
+    )
+
+    /** Update basic tags written by user via Tag Editor. */
+    @Query(
+        "UPDATE tracks SET title = :title, artist = :artist, album = :album, " +
+        "genre = :genre, year = :year, trackNumber = :trackNumber, " +
+        "normTitle = :normTitle, normArtist = :normArtist, normAlbum = :normAlbum " +
+        "WHERE id = :id"
+    )
+    suspend fun updateTrackTags(
+        id: String,
+        title: String,
+        artist: String,
+        album: String,
+        genre: String,
+        year: Int,
+        trackNumber: Int,
+        normTitle: String,
+        normArtist: String,
+        normAlbum: String
     )
 }
 

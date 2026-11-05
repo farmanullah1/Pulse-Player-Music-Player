@@ -121,6 +121,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
     val createPlaylistOpen by vm.createPlaylistOpen.collectAsStateWithLifecycle()
     val importPreview by vm.importPreview.collectAsStateWithLifecycle()
     val songDetailsTrack by vm.songDetailsTrack.collectAsStateWithLifecycle()
+    val tagEditorTrack by vm.tagEditorTrack.collectAsStateWithLifecycle()
     val playerLayoutPickerOpen by vm.playerLayoutPickerOpen.collectAsStateWithLifecycle()
 
     BackHandler(expandedPlayer) { vm.closeNowPlaying() }
@@ -248,6 +249,13 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
         songDetailsTrack?.let { track ->
             SongDetailsDialog(track) { vm.songDetailsTrack.value = null }
         }
+        tagEditorTrack?.let { track ->
+            com.pulse.player.ui.components.TagEditorSheet(
+                track = track,
+                vm = vm,
+                onDismiss = vm::closeTagEditor
+            )
+        }
         if (playerLayoutPickerOpen) {
             PlayerLayoutBottomSheet(vm)
         }
@@ -303,7 +311,7 @@ fun PulseDrawer(
             items.forEach { item ->
                 NavigationDrawerItem(
                     label = { Text(item.label, color = MaterialTheme.colorScheme.onSurface) },
-                    icon = { Icon(item.icon, null, tint = Pulse.Cyan) },
+                    icon = { Icon(item.icon, null, tint = MaterialTheme.colorScheme.primary) },
                     selected = false,
                     onClick = {
                         onClose()
@@ -312,7 +320,7 @@ fun PulseDrawer(
                     colors = NavigationDrawerItemDefaults.colors(
                         unselectedContainerColor = Color.Transparent,
                         unselectedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unselectedIconColor = Pulse.Cyan
+                        unselectedIconColor = MaterialTheme.colorScheme.primary
                     )
                 )
             }
@@ -342,35 +350,50 @@ fun PulseRail(
             onClick = { onNavigate(Screen.Home) },
             icon = { Icon(Icons.Rounded.Home, "Home") },
             label = { Text("Home") },
-            colors = NavigationRailItemDefaults.colors(selectedIconColor = Pulse.Cyan, selectedTextColor = Pulse.Cyan)
+            colors = NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary
+            )
         )
         NavigationRailItem(
             selected = currentScreen is Screen.Search,
             onClick = { onNavigate(Screen.Search) },
             icon = { Icon(Icons.Rounded.Search, "Search") },
             label = { Text("Search") },
-            colors = NavigationRailItemDefaults.colors(selectedIconColor = Pulse.Cyan, selectedTextColor = Pulse.Cyan)
+            colors = NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary
+            )
         )
         NavigationRailItem(
             selected = currentScreen is Screen.Equalizer,
             onClick = { onNavigate(Screen.Equalizer) },
             icon = { Icon(Icons.Rounded.Equalizer, "Equalizer") },
             label = { Text("EQ") },
-            colors = NavigationRailItemDefaults.colors(selectedIconColor = Pulse.Cyan, selectedTextColor = Pulse.Cyan)
+            colors = NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary
+            )
         )
         NavigationRailItem(
             selected = currentScreen is Screen.PlayerTheme,
             onClick = { onNavigate(Screen.PlayerTheme) },
             icon = { Icon(Icons.Rounded.AutoAwesome, "Themes") },
             label = { Text("Themes") },
-            colors = NavigationRailItemDefaults.colors(selectedIconColor = Pulse.Cyan, selectedTextColor = Pulse.Cyan)
+            colors = NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary
+            )
         )
         NavigationRailItem(
             selected = currentScreen is Screen.Settings,
             onClick = { onNavigate(Screen.Settings) },
             icon = { Icon(Icons.Rounded.Settings, "Settings") },
             label = { Text("Settings") },
-            colors = NavigationRailItemDefaults.colors(selectedIconColor = Pulse.Cyan, selectedTextColor = Pulse.Cyan)
+            colors = NavigationRailItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary
+            )
         )
     }
 }

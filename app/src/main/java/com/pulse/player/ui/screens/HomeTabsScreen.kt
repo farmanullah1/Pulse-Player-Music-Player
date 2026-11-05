@@ -21,17 +21,19 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 
-val homeTabs = listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
+val defaultHomeTabs = listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
 
 @Composable
 fun HomeTabsScreen(
@@ -39,7 +41,9 @@ fun HomeTabsScreen(
     onMenu: () -> Unit,
     showMenu: Boolean
 ) {
-    val pager = rememberPagerState { homeTabs.size }
+    val activeTabs by vm.homeTabsList.collectAsStateWithLifecycle()
+    val tabs = if (activeTabs.isNotEmpty()) activeTabs else defaultHomeTabs
+    val pager = rememberPagerState { tabs.size }
     val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize()) {
@@ -55,19 +59,22 @@ fun HomeTabsScreen(
                 }
             }
             ScrollableTabRow(
-                selectedTabIndex = pager.currentPage,
+                selectedTabIndex = pager.currentPage.coerceIn(0, tabs.lastIndex.coerceAtLeast(0)),
                 modifier = Modifier.weight(1f),
                 containerColor = Color.Transparent,
                 edgePadding = 8.dp,
                 divider = {},
                 indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[pager.currentPage]),
-                        color = Pulse.Cyan
-                    )
+                    val safeIdx = pager.currentPage.coerceIn(0, tabPositions.lastIndex.coerceAtLeast(0))
+                    if (tabPositions.isNotEmpty() && safeIdx in tabPositions.indices) {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[safeIdx]),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             ) {
-                homeTabs.forEachIndexed { index, tabTitle ->
+                tabs.forEachIndexed { index, tabTitle ->
                     Tab(
                         selected = pager.currentPage == index,
                         onClick = { scope.launch { pager.animateScrollToPage(index) } },
@@ -75,7 +82,7 @@ fun HomeTabsScreen(
                             Text(
                                 text = tabTitle,
                                 fontWeight = if (pager.currentPage == index) FontWeight.Bold else FontWeight.Medium,
-                                 color = if (pager.currentPage == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (pager.currentPage == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     )
@@ -97,15 +104,17 @@ fun HomeTabsScreen(
             state = pager,
             modifier = Modifier.weight(1f),
             beyondViewportPageCount = 1,
-            key = { homeTabs[it] }
+            key = { index -> tabs.getOrElse(index) { "$index" } }
         ) { page ->
-            when (page) {
-                0 -> ForYouScreen(vm)
-                1 -> SongsScreen(vm)
-                2 -> PlaylistsScreen(vm)
-                3 -> FoldersScreen(vm)
-                4 -> AlbumsScreen(vm)
-                else -> ArtistsScreen(vm)
+            val tabName = tabs.getOrElse(page) { "" }
+            when {
+                tabName.equals("For you", ignoreCase = true) -> ForYouScreen(vm)
+                tabName.equals("Songs", ignoreCase = true) -> SongsScreen(vm)
+                tabName.equals("Playlists", ignoreCase = true) -> PlaylistsScreen(vm)
+                tabName.equals("Folders", ignoreCase = true) -> FoldersScreen(vm)
+                tabName.equals("Albums", ignoreCase = true) -> AlbumsScreen(vm)
+                tabName.equals("Artists", ignoreCase = true) -> ArtistsScreen(vm)
+                else -> SongsScreen(vm)
             }
         }
     }

@@ -111,46 +111,64 @@ fun PlaylistsScreen(vm: MainViewModel) {
                 }
             }
 
-            val hasSmart = neverPlayed.isNotEmpty() || forgottenFavs.isNotEmpty() || longTracks.isNotEmpty()
-            if (hasSmart) {
-                item {
-                    Text("Smart Playlists", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-                }
+            item {
+                Text("Smart Playlists & Auto-DJ", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+            }
 
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (neverPlayed.isNotEmpty()) {
-                            SystemPlaylistCard(
-                                title = "Never played",
-                                subtitle = "${neverPlayed.size} songs",
-                                icon = Icons.Rounded.HourglassEmpty,
-                                gradient = listOf(Color(0xFF1B1B4B), Pulse.Cyan),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                vm.go(Screen.Detail("system", "never_played"))
-                            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SystemPlaylistCard(
+                            title = "Fresh Finds",
+                            subtitle = "Quick Mix",
+                            icon = Icons.Rounded.LibraryAdd,
+                            gradient = listOf(Color(0xFF004D40), Color(0xFF00BFA5)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            vm.go(Screen.Detail("system", "fresh_finds"))
                         }
-                        if (forgottenFavs.isNotEmpty()) {
-                            SystemPlaylistCard(
-                                title = "Forgotten favourites (30 days)",
-                                subtitle = "${forgottenFavs.size} songs",
-                                icon = Icons.Rounded.FavoriteBorder,
-                                gradient = listOf(Color(0xFF5B1A58), Pulse.Pink),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                vm.go(Screen.Detail("system", "forgotten_favorites"))
-                            }
+                        SystemPlaylistCard(
+                            title = "Auto-DJ Mix",
+                            subtitle = "Smart Discovery",
+                            icon = Icons.Rounded.LocalFireDepartment,
+                            gradient = listOf(Color(0xFF4A148C), Color(0xFFAB47BC)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            vm.go(Screen.Detail("system", "quick_mix"))
                         }
-                        if (longTracks.isNotEmpty()) {
-                            SystemPlaylistCard(
-                                title = "Long tracks (7 min+)",
-                                subtitle = "${longTracks.size} songs",
-                                icon = Icons.Rounded.Timer,
-                                gradient = listOf(Color(0xFF2B1055), Pulse.Purple),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                vm.go(Screen.Detail("system", "long_tracks"))
-                            }
+                    }
+
+                    if (neverPlayed.isNotEmpty()) {
+                        SystemPlaylistCard(
+                            title = "Never played",
+                            subtitle = "${neverPlayed.size} songs",
+                            icon = Icons.Rounded.HourglassEmpty,
+                            gradient = listOf(Color(0xFF1B1B4B), Pulse.Cyan),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            vm.go(Screen.Detail("system", "never_played"))
+                        }
+                    }
+                    if (forgottenFavs.isNotEmpty()) {
+                        SystemPlaylistCard(
+                            title = "Forgotten favourites (30 days)",
+                            subtitle = "${forgottenFavs.size} songs",
+                            icon = Icons.Rounded.FavoriteBorder,
+                            gradient = listOf(Color(0xFF5B1A58), Pulse.Pink),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            vm.go(Screen.Detail("system", "forgotten_favorites"))
+                        }
+                    }
+                    if (longTracks.isNotEmpty()) {
+                        SystemPlaylistCard(
+                            title = "Long tracks (7 min+)",
+                            subtitle = "${longTracks.size} songs",
+                            icon = Icons.Rounded.Timer,
+                            gradient = listOf(Color(0xFF2B1055), Pulse.Purple),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            vm.go(Screen.Detail("system", "long_tracks"))
                         }
                     }
                 }
@@ -183,7 +201,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Pulse.Surface)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { vm.go(Screen.Detail("playlist", playlist.id.toString())) }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -192,18 +210,18 @@ fun PlaylistsScreen(vm: MainViewModel) {
                             Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Pulse.Elevated),
+                                .background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Rounded.PlaylistPlay, null, tint = Pulse.Cyan, modifier = Modifier.size(28.dp))
+                            Icon(Icons.Rounded.PlaylistPlay, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
                             Text(playlist.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                            Text("Playlist", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                            Text("Playlist", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { vm.deletePlaylist(playlist.id) }) {
-                            Icon(Icons.Rounded.Delete, "Delete playlist", tint = Pulse.TextLow)
+                            Icon(Icons.Rounded.Delete, "Delete playlist", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -215,7 +233,7 @@ fun PlaylistsScreen(vm: MainViewModel) {
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 76.dp, end = 20.dp),
-            containerColor = Pulse.Cyan,
+            containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
             Icon(Icons.Rounded.Add, "New playlist")

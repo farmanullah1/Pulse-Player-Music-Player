@@ -67,6 +67,11 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import com.pulse.player.ui.components.AtmosphericBackground
 
+import androidx.compose.ui.graphics.luminance
+import com.pulse.player.playback.ErrorPolicy
+import com.pulse.player.ui.components.PlaybackErrorBanner
+import com.pulse.player.ui.theme.Pulse
+
 /** Queue item model used by the stateless atmospheric player. */
 data class Track(
     val id: String,
@@ -86,7 +91,8 @@ data class AtmosphericQueueUiState(
     val isFavorite: Boolean,
     val shuffleEnabled: Boolean,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val queue: List<Track> = emptyList()
+    val queue: List<Track> = emptyList(),
+    val error: ErrorPolicy.TrackError? = null
 )
 
 /**
@@ -113,6 +119,8 @@ fun AtmosphericQueuePlayerLayout(
     onAddToPlaylist: () -> Unit = {},
     onOpenQueue: () -> Unit = {},
     onOpenEqualizer: () -> Unit = {},
+    onRetry: () -> Unit = {},
+    onSkip: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -143,6 +151,8 @@ fun AtmosphericQueuePlayerLayout(
                 onAddToPlaylist = onAddToPlaylist,
                 onOpenQueue = onOpenQueue,
                 onOpenEqualizer = onOpenEqualizer,
+                onRetry = onRetry,
+                onSkip = onSkip,
                 modifier = Modifier.weight(1.2f)
             )
             QueueSection(
@@ -173,6 +183,8 @@ private fun AtmosphericUpperSection(
     onAddToPlaylist: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenEqualizer: () -> Unit,
+    onRetry: () -> Unit = {},
+    onSkip: () -> Unit = {},
     modifier: Modifier
 ) {
     AtmosphericBackground(modifier = modifier.fillMaxWidth()) {
@@ -241,6 +253,15 @@ private fun AtmosphericUpperSection(
                         )
                     )
                     Text(uiState.totalDuration, color = Color.White.copy(alpha = 0.68f), style = MaterialTheme.typography.labelSmall)
+                }
+
+                if (uiState.error != null) {
+                    PlaybackErrorBanner(
+                        error = uiState.error,
+                        onRetry = onRetry,
+                        onSkip = onSkip,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
 
@@ -355,9 +376,15 @@ private fun QueueSection(
     onTrackOptions: (Track) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val surfaceColor = if (isLight) Color(0xFFF9F9FB) else MaterialTheme.colorScheme.surface
+    val titleColor = if (isLight) Color(0xFF1C1B1F) else MaterialTheme.colorScheme.onSurface
+    val subtitleColor = if (isLight) Color(0xFF77737A) else MaterialTheme.colorScheme.onSurfaceVariant
+    val activeAmber = if (isLight) Pulse.ActiveAmberOnLight else Color(0xFFD4AF37)
+
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color(0xFFF9F9FB),
+        color = surfaceColor,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(Modifier.fillMaxSize().padding(top = 16.dp)) {
@@ -365,13 +392,13 @@ private fun QueueSection(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Up Next", color = Color(0xFF1C1B1F), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Up Next", color = titleColor, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
                 BadgedBox(badge = { Badge { Text(tracks.size.toString()) } }) {}
             }
             if (tracks.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Your queue is empty", color = Color(0xFF6F6B72), style = MaterialTheme.typography.bodyMedium)
+                    Text("Your queue is empty", color = subtitleColor, style = MaterialTheme.typography.bodyMedium)
                 }
             } else {
                 LazyColumn(
@@ -381,6 +408,9 @@ private fun QueueSection(
                     items(tracks, key = { it.id }) { track ->
                         QueueTrackRow(
                             track = track,
+                            titleColor = titleColor,
+                            subtitleColor = subtitleColor,
+                            activeColor = activeAmber,
                             onClick = { onTrackSelect(track) },
                             onOptions = { onTrackOptions(track) }
                         )
@@ -392,8 +422,14 @@ private fun QueueSection(
 }
 
 @Composable
-private fun QueueTrackRow(track: Track, onClick: () -> Unit, onOptions: () -> Unit) {
-    val activeColor = Color(0xFFD4AF37)
+private fun QueueTrackRow(
+    track: Track,
+    titleColor: Color,
+    subtitleColor: Color,
+    activeColor: Color,
+    onClick: () -> Unit,
+    onOptions: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -409,7 +445,7 @@ private fun QueueTrackRow(track: Track, onClick: () -> Unit, onOptions: () -> Un
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(
                 text = track.title,
-                color = if (track.isPlaying) activeColor else Color(0xFF1C1B1F),
+                color = if (track.isPlaying) activeColor else titleColor,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -417,14 +453,14 @@ private fun QueueTrackRow(track: Track, onClick: () -> Unit, onOptions: () -> Un
             )
             Text(
                 text = "${track.artist}  •  ${track.duration}",
-                color = Color(0xFF77737A),
+                color = subtitleColor,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         IconButton(onClick = onOptions, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Rounded.MoreVert, "Track options", tint = Color(0xFF5E5A62))
+            Icon(Icons.Rounded.MoreVert, "Track options", tint = subtitleColor)
         }
     }
 }

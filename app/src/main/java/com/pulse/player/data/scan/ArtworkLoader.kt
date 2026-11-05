@@ -42,6 +42,19 @@ object ArtworkLoader {
             return@withContext null
         }
 
+        // Check user-attached custom cover art in app filesDir
+        val safeKey = r.stableKey.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val customArtFile = File(File(ctx.filesDir, "custom_art"), "$safeKey.jpg")
+        if (customArtFile.exists() && customArtFile.length() > 0) {
+            val customBmp = runCatching {
+                decodeSampledBitmap(customArtFile.absolutePath, b, b)
+            }.getOrNull()
+            if (customBmp != null) {
+                cache.put(k, customBmp)
+                return@withContext customBmp
+            }
+        }
+
         val filePath = when {
             parsed.scheme == "file" -> parsed.path
             parsed.path?.startsWith("/") == true -> parsed.path
@@ -129,6 +142,11 @@ object ArtworkLoader {
             noArtworkCache.put(k, true)
             null
         }
+    }
+
+    fun clearCache() {
+        cache.evictAll()
+        noArtworkCache.evictAll()
     }
 
     // Compatibility method

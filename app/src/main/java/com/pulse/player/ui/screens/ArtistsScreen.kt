@@ -63,7 +63,7 @@ fun ArtistsScreen(vm: MainViewModel) {
                         .padding(vertical = 40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No artists found", color = Pulse.TextMid)
+                    Text("No artists found", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -100,7 +100,7 @@ fun ArtistsScreen(vm: MainViewModel) {
                         Text(
                             text = "${artist.trackCount} songs · ${artist.albumCount} albums",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
