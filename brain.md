@@ -163,7 +163,6 @@
 - Sample track: built-in procedural WAV generator (`SampleMusicHelper`).
 
 ## 3. Not Done (Next Steps)
-<<<<<<< HEAD
 - [x] Phase M0 (Audit): CURRENT_INVENTORY.md, PRESERVATION_MATRIX.md, FEATURE_GAP_MATRIX.md, PARITY_INVENTORY.md, DECISIONS.md, THIRD_PARTY_NOTICES.md, SPEC_INDEX.md updated
 - [x] Phase M1 (Schema v4): Migration 3→4 with all new columns/tables; `Migration3To4Test`; `PulseDb` updated to version 4; all new entity/DAO classes; `LibraryScanner` updated with v4 fields + `guessCodecFromMime`
 - [x] Phase M2 (Theme architecture): `ColorSource` enum + 5-axis customization; `PulseTokens` design token system; `LocalPulseTokens` CompositionLocal; new skins (Dark Plum, Light Warm, Expressive Material, Monochrome); Material You / dynamic color; `cornerRadiusDp` setting; `AmberContrastTest`; `MainActivity` updated (removed RECORD_AUDIO first-launch request — C13/§10.1)
@@ -172,20 +171,14 @@
 - [x] Phase M7 (Search): `SearchIndex` (typo-tolerant ranked search with trigram similarity — SRCH-01)
 - [x] Phase M9 (History foundations): `HistoryWriter` (C5 gate — sole non-live writer of `play_events`; `IMPORT_*` and `MANUAL` origins); `HistoryWriterTest`
 - [x] Phase M13 (Capabilities registry): `Capabilities` object (runtime evaluation of all feature availability — SEC-03, Annex A §5.3)
-- Remaining phases: M3 (layout registry polish — `PlayerLayoutMode` improvements), M8 (audio enhancements — ReplayGain, per-track sound), M10 (visualizer, waveform pipeline), M11 (product flavors offline/full), M12 (backup hardening), M13 (full permissions onboarding, Settings IA restructuring), M14 (final acceptance)
-=======
-- None (All phases 0 through 9, prompts, error handling, and test matrices fully completed and verified).
->>>>>>> 17bd756acb41b92f36e98188f2f8d05cb45d048d
+- Enhancements in progress:
+  - Advanced UI/UX: Gestures on NowPlaying artwork (swipe to skip/collapse), Fast A–Z Alphabet indexer, Live Equalizer bars on playing tracks, and Seekbar Switcher (linear, wavy, waveform).
 
 ## 4. Known Limits & Honest Constraints
 - Hardware audio effects depend on Android OS audiofx engine availability; emulator HAL -38 status is caught and reported gracefully with fallback banner in the Equalizer screen.
 - Ringtone setting requires the user to grant `WRITE_SETTINGS` in system settings.
 - Restoring archive metadata reconciles tracks against the receiving device's library; it does not fabricate missing audio files.
-<<<<<<< HEAD
 - Namida license not yet verified (likely GPL-3.0); all Namida-inspired features are independently re-implemented.
 - PixelPlayer license not yet verified; all PixelPlayer-inspired features are independently re-implemented.
 - TagLib Android binding selection is deferred to Phase M6 (pending license/compatibility evaluation).
-- `./gradlew testDebugUnitTest` — NOT RUN (no local Android SDK); `Migration3To4Test`, `ButtonPresetTest`, `AmberContrastTest` are new tests added in this session.
-=======
-
->>>>>>> 17bd756acb41b92f36e98188f2f8d05cb45d048d
+- `./gradlew testDebugUnitTest` — NOT RUN (environment without Android SDK configured).

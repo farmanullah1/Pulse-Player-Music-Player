@@ -66,9 +66,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,8 +80,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,6 +101,7 @@ import com.pulse.player.ui.components.AuroraBackground
 import com.pulse.player.ui.components.GlowArtwork
 import com.pulse.player.ui.components.HeartButton
 import com.pulse.player.ui.components.WaveformSeekBar
+import com.pulse.player.ui.components.WavyMusicSlider
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.screens.layouts.AtmosphericQueuePlayerLayout
@@ -453,28 +458,53 @@ fun NowPlayingPanel(vm: MainViewModel, modifier: Modifier = Modifier) {
 fun PlayerThemeHost(vm: MainViewModel, s: PlaybackUiState, glowColor: Color = Pulse.Cyan) {
     val id by vm.playerThemeId.collectAsStateWithLifecycle()
     val theme = PlayerThemes.firstOrNull { it.id == id } ?: PlayerThemes[0]
+    val haptic = LocalHapticFeedback.current
+    var dragAccumulated by remember { mutableFloatStateOf(0f) }
 
-    Crossfade(theme, animationSpec = tween(400), label = "ptheme") { t ->
-        when (t.layout) {
-            PlayerLayout.VINYL -> VinylDisc(s)
-            PlayerLayout.ACOUSTIC -> AcousticDisc(s)
-            PlayerLayout.COAST -> Box(Modifier.size(280.dp), Alignment.Center) {
-                WavesCanvas(Modifier.fillMaxSize())
-                Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
-            }
-            PlayerLayout.STARRY -> Box(Modifier.size(280.dp), Alignment.Center) {
-                StarField(Modifier.fillMaxSize())
-                Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
-            }
-            PlayerLayout.SHEET_QUEUE -> Box(Modifier.size(280.dp), Alignment.Center) {
-                MountainSunset(Modifier.fillMaxSize())
-                Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
-            }
-            else -> GlowArtwork(
-                uri = s.artworkUri,
-                size = 280.dp,
-                glow = glowColor
+    Box(
+        modifier = Modifier.pointerInput(s.currentMediaId) {
+            detectHorizontalDragGestures(
+                onDragStart = { dragAccumulated = 0f },
+                onDragEnd = {
+                    if (dragAccumulated < -80f) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        vm.playerController.next()
+                    } else if (dragAccumulated > 80f) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        vm.playerController.previous()
+                    }
+                    dragAccumulated = 0f
+                },
+                onDragCancel = { dragAccumulated = 0f },
+                onHorizontalDrag = { _, dragAmount ->
+                    dragAccumulated += dragAmount
+                }
             )
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        Crossfade(theme, animationSpec = tween(400), label = "ptheme") { t ->
+            when (t.layout) {
+                PlayerLayout.VINYL -> VinylDisc(s)
+                PlayerLayout.ACOUSTIC -> AcousticDisc(s)
+                PlayerLayout.COAST -> Box(Modifier.size(280.dp), Alignment.Center) {
+                    WavesCanvas(Modifier.fillMaxSize())
+                    Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
+                }
+                PlayerLayout.STARRY -> Box(Modifier.size(280.dp), Alignment.Center) {
+                    StarField(Modifier.fillMaxSize())
+                    Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
+                }
+                PlayerLayout.SHEET_QUEUE -> Box(Modifier.size(280.dp), Alignment.Center) {
+                    MountainSunset(Modifier.fillMaxSize())
+                    Artwork(s.artworkUri, 220.dp, radius = 16.dp, px = 512)
+                }
+                else -> GlowArtwork(
+                    uri = s.artworkUri,
+                    size = 280.dp,
+                    glow = glowColor
+                )
+            }
         }
     }
 }
@@ -792,6 +822,8 @@ fun PlayerTopMenu(vm: MainViewModel) {
     }
 }
 
+enum class SeekStyle { WAVEFORM, WAVY, LINEAR }
+
 @Composable
 fun SeekBar(
     position: StateFlow<Long>,
@@ -802,32 +834,91 @@ fun SeekBar(
 ) {
     val pos by position.collectAsStateWithLifecycle()
     var drag by remember { mutableStateOf<Float?>(null) }
+    var currentStyle by remember { mutableStateOf(SeekStyle.WAVEFORM) }
     val rawProgress = if (duration > 0) pos / duration.toFloat() else 0f
     val safeProgress = if (rawProgress.isNaN() || rawProgress.isInfinite()) 0f else rawProgress.coerceIn(0f, 1f)
     val value = drag ?: safeProgress
 
     Column(Modifier.fillMaxWidth()) {
-        WaveformSeekBar(
-            value = value,
-            onValueChange = { drag = it },
-            onValueChangeFinished = {
-                drag?.let { onSeek((it * duration).toLong()) }
-                drag = null
-            },
-            isPlaying = isPlaying,
-            seedKey = trackKey,
-            modifier = Modifier.fillMaxWidth().height(44.dp)
-        )
+        when (currentStyle) {
+            SeekStyle.WAVEFORM -> {
+                WaveformSeekBar(
+                    value = value,
+                    onValueChange = { drag = it },
+                    onValueChangeFinished = {
+                        drag?.let { onSeek((it * duration).toLong()) }
+                        drag = null
+                    },
+                    isPlaying = isPlaying,
+                    seedKey = trackKey,
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                )
+            }
+            SeekStyle.WAVY -> {
+                WavyMusicSlider(
+                    value = value,
+                    onValueChange = { drag = it },
+                    onValueChangeFinished = {
+                        drag?.let { onSeek((it * duration).toLong()) }
+                        drag = null
+                    },
+                    isPlaying = isPlaying,
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                )
+            }
+            SeekStyle.LINEAR -> {
+                Slider(
+                    value = value,
+                    onValueChange = { drag = it },
+                    onValueChangeFinished = {
+                        drag?.let { onSeek((it * duration).toLong()) }
+                        drag = null
+                    },
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 formatTime(((drag ?: value) * duration).toLong()),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
+            Spacer(Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        currentStyle = when (currentStyle) {
+                            SeekStyle.WAVEFORM -> SeekStyle.WAVY
+                            SeekStyle.WAVY -> SeekStyle.LINEAR
+                            SeekStyle.LINEAR -> SeekStyle.WAVEFORM
+                        }
+                    }
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = when (currentStyle) {
+                        SeekStyle.WAVEFORM -> "Waveform"
+                        SeekStyle.WAVY -> "Wavy"
+                        SeekStyle.LINEAR -> "Classic"
+                    },
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             Spacer(Modifier.weight(1f))
             Text(
                 formatTime(duration),
