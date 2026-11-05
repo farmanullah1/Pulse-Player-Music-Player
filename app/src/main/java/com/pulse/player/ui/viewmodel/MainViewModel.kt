@@ -607,19 +607,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         exportStatus.value = if (res.isSuccess) "Exported ${res.getOrNull()} favourites" else "Export failed: ${res.exceptionOrNull()?.message}"
     }
 
-    fun exportFavoritesToPulseFolder() = viewModelScope.launch {
-        val result = favoritesRepo.exportToPortableFolder()
-        exportStatus.value = result.fold(
+    fun exportFavoritesToPulseFolder(customTreeUri: Uri? = null) = viewModelScope.launch {
+        archiveOperation.value = BackupOperationState(
+            inProgress = true,
+            stage = "Initializing Classic Backup...",
+            progressFraction = 0f
+        )
+        val result = favoritesRepo.exportToPortableFolder(customTreeUri) { current, total, title, fraction ->
+            archiveOperation.value = BackupOperationState(
+                inProgress = true,
+                stage = "Copying ($current/$total): $title",
+                progressFraction = fraction
+            )
+        }
+        result.fold(
             onSuccess = { report ->
-                buildString {
+                val msg = buildString {
                     append("Saved ${report.favorites} favourites to ${report.location}. ")
                     append("Copied ${report.copied} music files")
                     if (report.reused > 0) append(", reused ${report.reused} existing copies")
                     if (report.failed.isNotEmpty()) append(". ${report.failed.size} files could not be copied")
                     append(".")
                 }
+                exportStatus.value = msg
+                archiveOperation.value = BackupOperationState(
+                    inProgress = false,
+                    completedMessage = msg
+                )
             },
-            onFailure = { "Portable backup failed: ${it.message}" }
+            onFailure = { err ->
+                val msg = "Portable backup failed: ${err.message}"
+                exportStatus.value = msg
+                archiveOperation.value = BackupOperationState(
+                    inProgress = false,
+                    errorMessage = msg
+                )
+                ErrorDispatcher.post(ErrorCategory.BACKUP, "Classic Backup Failed", msg, err.stackTraceToString())
+            }
         )
     }
 

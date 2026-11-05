@@ -1,89 +1,130 @@
-# Implementation Plan - Comprehensive Error Handling & App Improvements
+# Classic Backup (Favourites JSON) Portable Folder & Parity Implementation Plan
 
-Add robust multi-layer error handling, automatic playback recovery, library scanner diagnostics, storage/SAF failure recovery, missing file detection badges, and an in-app Diagnostics & Error Log to Pulse Player.
+Enhance the Classic Backup (Favourites JSON) feature to create an independent, portable backup inside `Music/Pulse Player`. It preserves the `pulseplayer.favorites` v1 JSON schema with fuzzy matching, includes all favorites (both original device tracks and tracks restored/imported from Full Backups), duplicates audio files safely into the folder without modifying originals, supports both automated MediaStore/filesystem creation and SAF folder selection, and provides live dual progress indicators (top banner and in-card progress bar) with robust error reporting.
 
-## User Review Required
+---
+
+## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> All changes maintain 100% offline functionality and preserve all existing user data (favorites, custom playlists, EQ settings, and skin selections).
-
-- **Automatic Playback Error Recovery**: If an audio file is deleted, unreadable, or in an unsupported format, the player will show a clear Snackbar and automatically skip to the next track rather than stalling indefinitely.
-- **Diagnostics & Error Log**: A new diagnostic sheet in Settings will display active audio effect statuses (EQ, Bass Boost, Virtualizer, Reverb), scanner health, and recent playback or backup issues.
-
----
-
-## Proposed Changes
-
-### 1. Unified Error Model & App-Wide Event Dispatcher
-
-#### [app/src/main/java/com/pulse/player/data/AppError.kt]
-- Create a unified `AppError` data structure representing error categories:
-  - `Playback`: File not found, unsupported codec, decoder failure, permission revoked.
-  - `Scan`: SAF permission lost, storage unmounted, query failure, corrupted metadata.
-  - `Backup`: File I/O failure, invalid JSON schema, disk full, missing destination folder.
-  - `AudioFx`: AudioFlinger effect creation failure (-38), unsupported DSP hardware.
-- Add an in-memory rotating event buffer (keeping the last 50 events) with timestamps for the Diagnostics Log.
-
-#### [app/src/main/java/com/pulse/player/ui/viewmodel/MainViewModel.kt]
-- Expose `errorEvents: SharedFlow<AppError>` and `recentErrors: StateFlow<List<AppError>>`.
-- Add helper functions to dismiss or clear error logs (`clearErrorLog()`).
-- Add missing tracks query observation (`missingTracksCount: StateFlow<Int>`).
-- Add `cleanMissingTracks()` action to purge unavailable tracks from playlists/queue or re-verify file paths.
+> The following product and architectural decisions were confirmed via interactive clarification:
+>
+> - **Progress Feedback**: Dual progress feedback — both a top operation banner and a live in-card progress bar during export showing active track copying, total count, and fractional percentage.
+> - **Destination Access**: Both automated storage access (`MediaStore` on Android 10+ and standard public `Music/Pulse Player` on Android 9 and older) and SAF folder picker fallback if specialized permissions or custom storage locations are preferred.
+> - **Duplicate Handling**: Safe deduplication — checks filename and byte size in `Music/Pulse Player`; if an identical copy already exists, it is reused rather than redundantly re-copied.
+> - **Full Backup Parity**: Favourites restored or imported via Full Backup (with `sourceType = 'COPIED'`) are fully included in the Classic Backup export alongside standard library favorites.
+> - **Zero Interference**: The Full Backup system (`CompatExport`, `CompatRestore`, `ArchiveValidator`) remains intact and unmodified.
 
 ---
 
-### 2. Playback Resilience & Audio Effect Error Fallback
+## 1. Overview & Core Concept
 
-#### [app/src/main/java/com/pulse/player/playback/ErrorPolicy.kt]
-- Enhance `onError(e: PlaybackException)` to emit structured `AppError` events to the ViewModel and playback engine.
-- For `Category.MISSING_FILE` or `Category.UNSUPPORTED`, mark the track's availability in `PulseDb` (`available = false`) and trigger an auto-skip after notifying the UI.
-- Update `skip()` and `retry()` logic to handle edge cases where the next track is also unreachable.
-
-#### [app/src/main/java/com/pulse/player/playback/AudioFx.kt]
-- Add graceful diagnostic reporting when effects fail to initialize (such as `AudioEffect initCheck failed -3` on emulators or constrained hardware).
-- Provide safe fallback flags without throwing uncaught exceptions or leaking effect handles.
+- **What It Does**:
+  1. **Export**: Gathers all current favorite tracks (including tracks imported/copied from Full Backups), generates the standard `pulseplayer.favorites.json` (schema v1), and copies each favorite audio file into `Music/Pulse Player`. Original audio files in their initial folders are completely untouched.
+  2. **Import**: On any new or existing device, the user can select the `Music/Pulse Player` folder (or individual JSON file). The app scans/indexes the audio files and executes 5-tier fuzzy matching to restore all favorites, resolving strong matches, already-favorite tracks, and missing files with graceful reporting.
+- **Key Value**: Provides an open, cross-device portable backup where user favorite music remains fully playable, backed up, and protected even if original music is deleted elsewhere.
 
 ---
 
-### 3. Library Scanner & Missing Track Detection
+## 2. User Experience & Visual Design
 
-#### [app/src/main/java/com/pulse/player/data/scan/LibraryScanner.kt]
-- Collect scan statistics: total scanned, newly added, marked missing, and errors encountered during tag extraction.
-- Expose a `ScanReport` data class (`scannedCount`, `addedCount`, `missingCount`, `durationMs`, `errors`) displayed after scan completion.
-- Gracefully handle corrupted files without aborting the entire scan batch.
+```
+┌──────────────────────────────────────────────────────────────┐
+│  ← Backup & Restore                                          │
+├──────────────────────────────────────────────────────────────┤
+│  [ Progress Banner: Copying track 14 of 48... (29%) ]         │
+│  [==========================>                              ] │
+├──────────────────────────────────────────────────────────────┤
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │ ★ Classic Favourites & Portable Music Folder           │  │
+│  │ Saves pulseplayer.favorites v1 JSON & copies all       │  │
+│  │ favorite audio files to Music/Pulse Player.            │  │
+│  │                                                        │  │
+│  │ [ ↑ Export to Music/Pulse Player (48) ]                │  │
+│  │                                                        │  │
+│  │ ── Live Export Progress ─────────────────────────────  │  │
+│  │ Copying: Bohemian Rhapsody.mp3 (14 / 48)               │  │
+│  │ [████████████████░░░░░░░░░░░░░░░░░░░░░░░░] 29%         │  │
+│  │                                                        │  │
+│  │ [ 📁 Import Folder ]       [ ⬇ Import JSON ]           │  │
+│  │                                                        │  │
+│  │            Export JSON copy elsewhere                  │  │
+│  └────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
 
-#### [app/src/main/java/com/pulse/player/ui/screens/SongsScreen.kt]
-- Display an indicator or warning badge for missing/unreachable tracks if they appear in search or filtered views.
-- Provide a "Clean missing tracks" quick action banner when unreachable tracks are detected.
+### Key User Flows
+1. **Preflight & Initiation**: User taps **Export to Music/Pulse Player**. A preflight dialog discloses that originals remain in place, and copies are safely placed in `Music/Pulse Player`.
+2. **Export with Real-Time Progress**:
+   - The user selects "Create Full Backup" (music + JSON).
+   - The UI displays live progress in both the top `archiveOp` banner and an in-card progress bar, updating after each audio track copy.
+   - Any individual failed file copies are logged in a structured report without aborting the rest of the batch.
+3. **Import on New Device**:
+   - User copies or moves `Music/Pulse Player` to a new device.
+   - User taps **Import Folder** in Pulse Player and picks `Music/Pulse Player`.
+   - Pulse Player scans and indexes the local tracks via `SafScanner`, loads `pulseplayer.favorites.json`, runs `FavoritesMatcher`, and displays a clear preview of matched tracks before committing.
 
 ---
 
-### 4. Storage & SAF Backup Error Handling
+## 3. Key Product Decisions & Trade-Offs
 
-#### [app/src/main/java/com/pulse/player/ui/screens/BackupScreen.kt]
-- Add user-friendly alert dialogs when JSON import fails due to corrupted data or schema mismatch.
-- Add error recovery advice when SAF folder permission is revoked or storage access is denied.
-- Provide detailed export outcome status (e.g., number of favorites exported, full export path, and disk space warnings).
-
----
-
-### 5. UI Notification System & Diagnostics Log
-
-#### [app/src/main/java/com/pulse/player/ui/screens/AppShell.kt]
-- Integrate a top-level `SnackbarHost` in `AppShell` with action buttons (e.g. "Skip", "View Log", "Dismiss").
-- Collect `vm.errorEvents` and present actionable snackbars across all screens without interrupting navigation.
-- Add `DiagnosticsDialog` displaying system audio capabilities, scanner status, and recent error entries.
-
-#### [app/src/main/java/com/pulse/player/ui/screens/SettingsScreen.kt]
-- Add a new "Diagnostics & Error Log" row under Settings to let users view audio engine status, DSP support, and copy diagnostic logs if needed.
-- Add a "Scan & Clean Missing Files" setting row with status badges.
+- **Decision 1: Streamed Copy with Real-Time Progress Callback**
+  - *Chosen Approach*: `exportToPortableFolder` takes a progress callback `(current: Int, total: Int, trackTitle: String, progressFraction: Float) -> Unit` and updates the ViewModel state flow.
+  - *Why*: Large audio libraries take time to copy. A live progress indicator prevents perceived freezes and provides transparency.
+- **Decision 2: Universal Favorites Query (`allTracksOnce`)**
+  - *Chosen Approach*: Favorites query in `FavoriteDao` joins `favorites` with `tracks` table without filtering out `sourceType = 'COPIED'`. Tracks imported from Full Backups are thus seamlessly exported into Classic Backups.
+- **Decision 3: MediaStore + SAF Hybrid Creation**
+  - *Chosen Approach*: On Android 10+ (API 29+), uses `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI` with `RELATIVE_PATH = "Music/Pulse Player/"` and `IS_PENDING` flags. On API 28 and older, uses `Environment.getExternalStoragePublicDirectory`. If MediaStore writes are restricted or the user specifies a custom folder, SAF tree folder export is available as a fallback.
 
 ---
 
-## Verification Plan & Status
-- **Automated Tests**: `gradle :app:testDebugUnitTest` -> **149 passed, 0 failed, 2 skipped**.
-- **Compilation**: `compile_applet` -> **Build succeeded with 0 errors**.
-- **Playback Error Recovery**: Tested with auto-skip and unavailable database marking.
-- **Audio Effect Fallback**: AudioFlinger HAL -38 caught with zero crashes and status exposed via `AudioFxStatus`.
-- **Diagnostics Dialog & Missing Track Purge**: Implemented and accessible in Settings and Navigation Drawer.
-- **Spec Grep Gates**: `TODO-TEMP=0`, `player.volume writers=1`, `destructive migration=0`, `media3 shuffle=0`, `compatible in UI=0`, `INTERNET permission=0` all 100% verified.
+## 4. Technical Architecture & Component Structure
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      UI Presentation                         │
+│  BackupScreen.kt ───(collects)──► MainViewModel              │
+│  • Top Banner & ProgressIndicator                            │
+│  • In-Card Live Progress (Fraction & Track Title)            │
+│  • Preflight Modal & Error Reporting                         │
+└───────────────────────────────┬──────────────────────────────┘
+                                │ launches with progress callback
+┌───────────────────────────────▼──────────────────────────────┐
+│               ClassicBackup.kt (Coordinator)                 │
+│  ┌────────────────────────┐    ┌──────────────────────────┐  │
+│  │ FavoritesCodec         │    │ FavoritesMatcher         │  │
+│  │ (v1 JSON encode/decode)│    │ (5-tier fuzzy match)     │  │
+│  └───────────┬────────────┘    └─────────────▲────────────┘  │
+│              │                               │               │
+│  ┌───────────▼───────────────────────────────┴────────────┐  │
+│  │ exportToPortableFolder(onProgress)                     │  │
+│  │ 1. Fetch all favorites (MediaStore + Full Backup copies)│  │
+│  │ 2. Write pulseplayer.favorites.json                     │  │
+│  │ 3. Copy audio files (dedupe: skip identical length)    │  │
+│  │ 4. Safely close streams & clear IS_PENDING             │  │
+│  │ previewPortableFolder(treeUri)                         │  │
+│  │ 1. Index audio files via SafScanner                   │  │
+│  │ 2. Parse pulseplayer.favorites.json                    │  │
+│  │ 3. Match against library index                        │  │
+│  └────────────────────────────────────────────────────────┘  │
+└───────────────────────────────┬──────────────────────────────┘
+                                │ Room DB queries / inserts
+┌───────────────────────────────▼──────────────────────────────┐
+│              PulseDb (TrackDao, FavoriteDao)                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Verification Plan
+
+1. **Unit Testing (`:app:testFullDebugUnitTest` and `:app:testOfflineDebugUnitTest`)**:
+   - Verify `ClassicBackupTest` round-trip JSON serialization and fuzzy matcher ranking.
+   - Add unit tests verifying progress callback emission and deduplication logic (identical file sizes skipped/reused).
+2. **Compilation & Build**:
+   - Run `gradle :app:compileFullDebugKotlin :app:compileOfflineDebugKotlin`.
+   - Run `compile_applet` to confirm clean builds.
+3. **End-to-End CUJ Check**:
+   - Export favorites with sample track. Verify `Music/Pulse Player` contains `pulseplayer.favorites.json` and the `.mp3` copy.
+   - Verify that favorites originating from Full Backup are included in the export.
+   - Verify that folder import reads the files and restores the favorites list.

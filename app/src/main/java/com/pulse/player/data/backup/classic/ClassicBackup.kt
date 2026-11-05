@@ -215,27 +215,88 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
     }
 
     /** Creates the portable Music/Pulse Player backup without changing v1 JSON. */
-    suspend fun exportToPortableFolder(): Result<PortableExportResult> = withContext(Dispatchers.IO) {
+    suspend fun exportToPortableFolder(
+        customTreeUri: Uri? = null,
+        onProgress: ((current: Int, total: Int, title: String, fraction: Float) -> Unit)? = null
+    ): Result<PortableExportResult> = withContext(Dispatchers.IO) {
         runCatching {
             val tracks = db.favorites().allTracksOnce()
             if (tracks.isEmpty()) error("You have no favourites to back up yet.")
             val added = db.favorites().addedAtList().associate { it.trackId to it.addedAtMs }
             val json = FavoritesCodec.encode(tracks, added)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                exportToMediaStore(tracks, json)
+            if (customTreeUri != null) {
+                exportToCustomSafTree(customTreeUri, tracks, json, onProgress)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                exportToMediaStore(tracks, json, onProgress)
             } else {
-                exportToLegacyMusicFolder(tracks, json)
+                exportToLegacyMusicFolder(tracks, json, onProgress)
             }
         }
     }
 
-    private fun exportToMediaStore(tracks: List<TrackEntity>, json: String): PortableExportResult {
+    private fun exportToCustomSafTree(
+        treeUri: Uri,
+        tracks: List<TrackEntity>,
+        json: String,
+        onProgress: ((Int, Int, String, Float) -> Unit)?
+    ): PortableExportResult {
+        val root = DocumentFile.fromTreeUri(ctx, treeUri)
+            ?: error("Selected destination folder is not accessible.")
+        // Write or overwrite pulseplayer.favorites.json
+        val existingJson = root.findFile(PORTABLE_JSON_NAME)
+        val jsonDoc = existingJson ?: root.createFile("application/json", PORTABLE_JSON_NAME)
+            ?: error("Couldn't create $PORTABLE_JSON_NAME in the chosen folder.")
+        ctx.contentResolver.openOutputStream(jsonDoc.uri, "wt")?.use { out ->
+            out.write(json.toByteArray(Charsets.UTF_8))
+            out.flush()
+        } ?: error("Failed to write favorites metadata to destination folder.")
+
+        var copied = 0
+        var reused = 0
+        val failed = mutableListOf<String>()
+
+        tracks.forEachIndexed { index, track ->
+            val fraction = (index.toFloat() / tracks.size.coerceAtLeast(1))
+            val title = track.displayName.ifBlank { track.title }
+            onProgress?.invoke(index + 1, tracks.size, title, fraction)
+            try {
+                val fileName = safeFileName(track.displayName.ifBlank { "${track.title}.mp3" })
+                val existingDoc = root.findFile(fileName)
+                if (existingDoc != null && track.sizeBytes > 0L && existingDoc.length() == track.sizeBytes) {
+                    reused++
+                } else {
+                    val destDoc = existingDoc ?: root.createFile(track.mimeType ?: "audio/mpeg", fileName)
+                        ?: error("Couldn't create file $fileName in folder")
+                    ctx.contentResolver.openInputStream(Uri.parse(track.uri))?.use { input ->
+                        ctx.contentResolver.openOutputStream(destDoc.uri, "wt")?.use { output ->
+                            input.copyTo(output, 64 * 1024)
+                            output.flush()
+                        } ?: error("couldn't open destination stream")
+                    } ?: error("source audio file unavailable")
+                    copied++
+                }
+            } catch (e: Exception) {
+                failed += "${track.displayName.ifBlank { track.title }}: ${e.message ?: "copy failed"}"
+            }
+        }
+        onProgress?.invoke(tracks.size, tracks.size, "Complete", 1.0f)
+        return PortableExportResult(tracks.size, copied, reused, failed, root.name ?: "Custom Folder")
+    }
+
+    private fun exportToMediaStore(
+        tracks: List<TrackEntity>,
+        json: String,
+        onProgress: ((Int, Int, String, Float) -> Unit)?
+    ): PortableExportResult {
         val resolver = ctx.contentResolver
         writeMediaStoreJson(resolver, json)
         var copied = 0
         var reused = 0
         val failed = mutableListOf<String>()
-        tracks.forEach { track ->
+        tracks.forEachIndexed { index, track ->
+            val fraction = (index.toFloat() / tracks.size.coerceAtLeast(1))
+            val title = track.displayName.ifBlank { track.title }
+            onProgress?.invoke(index + 1, tracks.size, title, fraction)
             try {
                 when (copyAudioToMediaStore(resolver, track)) {
                     CopyOutcome.COPIED -> copied++
@@ -245,10 +306,15 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                 failed += "${track.displayName.ifBlank { track.title }}: ${e.message ?: "copy failed"}"
             }
         }
+        onProgress?.invoke(tracks.size, tracks.size, "Complete", 1.0f)
         return PortableExportResult(tracks.size, copied, reused, failed, "Music/$PORTABLE_FOLDER_NAME")
     }
 
-    private fun exportToLegacyMusicFolder(tracks: List<TrackEntity>, json: String): PortableExportResult {
+    private fun exportToLegacyMusicFolder(
+        tracks: List<TrackEntity>,
+        json: String,
+        onProgress: ((Int, Int, String, Float) -> Unit)?
+    ): PortableExportResult {
         if (ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             error("Storage write permission is required on Android 9 and older.")
         }
@@ -259,7 +325,10 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         var copied = 0
         var reused = 0
         val failed = mutableListOf<String>()
-        tracks.forEach { track ->
+        tracks.forEachIndexed { index, track ->
+            val fraction = (index.toFloat() / tracks.size.coerceAtLeast(1))
+            val title = track.displayName.ifBlank { track.title }
+            onProgress?.invoke(index + 1, tracks.size, title, fraction)
             try {
                 val name = safeFileName(track.displayName.ifBlank { "${track.title}.mp3" })
                 val destination = File(dir, name)
@@ -275,6 +344,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                 failed += "${track.displayName.ifBlank { track.title }}: ${e.message ?: "copy failed"}"
             }
         }
+        onProgress?.invoke(tracks.size, tracks.size, "Complete", 1.0f)
         return PortableExportResult(tracks.size, copied, reused, failed, dir.path)
     }
 

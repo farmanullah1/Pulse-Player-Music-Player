@@ -56,6 +56,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -149,6 +150,20 @@ fun BackupScreen(vm: MainViewModel) {
         ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) vm.previewFavoritesFolder(uri)
+    }
+
+    val portableCustomFolderExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            vm.exportFavoritesToPulseFolder(uri)
+        }
     }
 
     val legacyWritePermissionLauncher = rememberLauncherForActivityResult(
@@ -570,6 +585,50 @@ fun BackupScreen(vm: MainViewModel) {
                             Text("Export to Music/Pulse Player ($favCount)", fontWeight = FontWeight.Bold)
                         }
 
+                        if (archiveOp.inProgress) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = archiveOp.stage,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (archiveOp.progressFraction > 0f) {
+                                        Text(
+                                            text = "${(archiveOp.progressFraction * 100).toInt()}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                                LinearProgressIndicator(
+                                    progress = { archiveOp.progressFraction },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(CircleShape),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surface
+                                )
+                            }
+                        }
+
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
                                 onClick = { portableFolderImportLauncher.launch(null) },
@@ -599,11 +658,24 @@ fun BackupScreen(vm: MainViewModel) {
                                 Text("Import JSON", fontWeight = FontWeight.Bold)
                             }
                         }
-                        TextButton(
-                            onClick = { legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json") },
-                            enabled = favCount > 0 && !archiveOp.inProgress,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                        ) { Text("Export JSON copy elsewhere", color = MaterialTheme.colorScheme.primary) }
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { portableCustomFolderExportLauncher.launch(null) },
+                                enabled = favCount > 0 && !archiveOp.inProgress
+                            ) {
+                                Text("Export to custom folder...", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(
+                                onClick = { legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json") },
+                                enabled = favCount > 0 && !archiveOp.inProgress
+                            ) {
+                                Text("Export JSON only", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                 }
             }

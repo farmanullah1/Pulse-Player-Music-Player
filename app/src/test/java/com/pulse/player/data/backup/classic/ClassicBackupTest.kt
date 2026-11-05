@@ -129,5 +129,34 @@ class ClassicBackupTest {
         val fail3 = FavoritesCodec.decode("""{"schema": "pulseplayer.favorites", "schemaVersion": 999}""")
         assertTrue(fail3 is FavoritesCodec.Decoded.Fail)
     }
+
+    @Test
+    fun fullBackupImportedTracksAreIncludedAndMatched() {
+        val copiedTrack = sampleTrack(
+            id = "copy:123456",
+            title = "Imported From Full Backup",
+            artist = "Restored Artist",
+            album = "Restored Album",
+            durationMs = 210000L,
+            displayName = "restored_track.mp3",
+            sizeBytes = 4500000L
+        ).copy(sourceType = "COPIED")
+
+        val addedMap = mapOf(copiedTrack.id to 1700000050000L)
+        val json = FavoritesCodec.encode(listOf(copiedTrack), addedMap)
+        assertTrue(json.contains("Imported From Full Backup"))
+        assertTrue(json.contains("restored_track.mp3"))
+
+        val decoded = FavoritesCodec.decode(json)
+        assertTrue(decoded is FavoritesCodec.Decoded.Ok)
+        val ok = decoded as FavoritesCodec.Decoded.Ok
+        assertEquals(1, ok.items.size)
+
+        val matcher = FavoritesMatcher(listOf(copiedTrack), emptySet())
+        val matchResults = matcher.match(ok.items)
+        assertEquals(1, matchResults.size)
+        assertTrue(matchResults[0] is MatchResult.Matched)
+        assertEquals("copy:123456", (matchResults[0] as MatchResult.Matched).track.id)
+    }
 }
 

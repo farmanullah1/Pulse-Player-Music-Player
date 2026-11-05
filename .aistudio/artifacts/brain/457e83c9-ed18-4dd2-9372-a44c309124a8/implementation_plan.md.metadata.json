@@ -1,6 +1,6 @@
 {
-  "summary": "Comprehensive implementation plan for Pulse Player error handling and feature enhancements:\n- Unified error dispatch and global Snackbar system in AppShell\n- Playback resilience with automatic fallback and missing track skip\n- Safe AudioFx initialization and status diagnostics\n- Library scanner error recovery and scan summary dialog\n- Storage and SAF backup validation with user-friendly error dialogs\n- In-app Diagnostics & Error Log screen/dialog in Settings\n- Missing track badges and auto-cleanup for unreachable audio files",
-  "updatedAt": "2026-11-03T12:52:11.117743743Z",
+  "summary": "Implementation plan for enhancing the Classic Backup (Favourites JSON) portable export and import system in Pulse Player. Preserves pulseplayer.favorites v1 format with fuzzy matching, includes both auto-created Music/Pulse Player (MediaStore/Environment) and custom SAF folder destinations, exports copied favorites alongside library favorites with byte-for-byte copy and reuse deduplication, provides real-time progress callbacks and error telemetry, and verifies that importing from the folder on a new device seamlessly restores all favorites.",
+  "updatedAt": "2026-11-05T12:35:19.028438846Z",
   "requestFeedback": true,
   "userFacing": true
 }
