@@ -1,0 +1,6 @@
+{
+  "summary": "Architectural implementation plan for the Classic Backup (Favourites JSON) feature.\n- Resolves the MediaStore error by retargeting portable backup to 'Download/Pulse Player' using MediaStore.Downloads.\n- Preserves the pulseplayer.favorites v1 JSON schema and fuzzy matching algorithm.\n- Performs byte-for-byte audio file copies of all favorite tracks (including tracks imported via Full Backup).\n- Supports deduplication (reusing existing files when size matches) and provides real-time progress callbacks and error telemetry.\n- Delivers a one-tap auto-detect import from Download/Pulse Player alongside a SAF folder picker option.\n- Stabilizes Gradle build configuration by aligning single-target debug build without flavor race conditions.",
+  "updatedAt": "2026-11-05T12:54:42.048328164Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
