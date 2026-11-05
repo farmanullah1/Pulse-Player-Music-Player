@@ -44,4 +44,21 @@ class SeekStyleTest {
         assertEquals(null, resolveSwipeAction(40f))
         assertEquals(null, resolveSwipeAction(-30f))
     }
+
+    @Test
+    fun miniPlayerSwipeThresholdDetectsDirectionCorrectly() {
+        val miniSwipeThreshold = 70f
+
+        fun resolveMiniSwipeAction(dragDelta: Float): String? =
+            when {
+                dragDelta < -miniSwipeThreshold -> "NEXT"
+                dragDelta > miniSwipeThreshold -> "PREVIOUS"
+                else -> null
+            }
+
+        assertEquals("NEXT", resolveMiniSwipeAction(-85f))
+        assertEquals("PREVIOUS", resolveMiniSwipeAction(90f))
+        assertEquals(null, resolveMiniSwipeAction(50f))
+        assertEquals(null, resolveMiniSwipeAction(-40f))
+    }
 }

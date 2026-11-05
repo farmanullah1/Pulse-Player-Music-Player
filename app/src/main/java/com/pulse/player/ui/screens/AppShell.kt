@@ -183,6 +183,8 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                         s = ps,
                         pos = vm.player.position,
                         onToggle = vm.player::togglePlay,
+                        onNext = vm.player::next,
+                        onPrevious = vm.player::previous,
                         onQueue = { vm.openQueue() },
                         onExpand = { vm.openNowPlaying() },
                         modifier = Modifier

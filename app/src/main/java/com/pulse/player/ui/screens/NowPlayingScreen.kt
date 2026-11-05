@@ -67,6 +67,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -96,7 +97,9 @@ import com.pulse.player.data.scan.ArtworkLoader
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.playback.PlayerController
 import com.pulse.player.playback.RingtoneHelper
+import com.pulse.player.playback.Track
 import com.pulse.player.ui.components.Artwork
+import com.pulse.player.ui.components.AudioSignalPathBadge
 import com.pulse.player.ui.components.AuroraBackground
 import com.pulse.player.ui.components.GlowArtwork
 import com.pulse.player.ui.components.HeartButton
@@ -181,7 +184,18 @@ fun NowPlayingScreen(vm: MainViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
-                Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {},
+                            onVerticalDrag = { _, dragAmount ->
+                                if (dragAmount > 25f) {
+                                    vm.closeNowPlaying()
+                                }
+                            }
+                        )
+                    },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = vm::closeNowPlaying) {
@@ -262,7 +276,19 @@ fun NowPlayingScreen(vm: MainViewModel) {
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(8.dp))
+
+            AudioSignalPathBadge(
+                track = Track(
+                    id = s.mediaId ?: "current",
+                    title = s.title,
+                    artist = s.artist,
+                    uri = s.artworkUri ?: ""
+                ),
+                eqActive = true
+            )
+
+            Spacer(Modifier.height(14.dp))
 
             SeekBar(
                 position = vm.player.position,
@@ -730,20 +756,29 @@ fun LyricsView(
                 ) {
                     itemsIndexed(lrcLines) { idx, line ->
                         val isActive = idx == activeIdx
-                        Text(
-                            text = line.text,
-                            style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
-                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                            textAlign = TextAlign.Center,
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    else Color.Transparent
+                                )
                                 .clickable(enabled = line.timeMs >= 0) {
                                     val target = (line.timeMs - lrcOffsetMs).coerceAtLeast(0L)
                                     vm.player.seekTo(target)
                                 }
-                                .padding(vertical = 8.dp, horizontal = 24.dp)
-                        )
+                                .padding(vertical = 10.dp, horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = line.text,
+                                style = if (isActive) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+                                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Normal,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }

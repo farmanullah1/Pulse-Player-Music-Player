@@ -6,6 +6,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,11 +30,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,10 +56,15 @@ fun MiniPlayer(
     onToggle: () -> Unit,
     onQueue: () -> Unit,
     onExpand: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNext: (() -> Unit)? = null,
+    onPrevious: (() -> Unit)? = null
 ) {
     val rot = remember { Animatable(0f) }
     val reduced = LocalReducedMotion.current
+    val haptic = LocalHapticFeedback.current
+    var dragAccumulated by remember { mutableFloatStateOf(0f) }
+
     LaunchedEffect(s.isPlaying, reduced) {
         if (s.isPlaying && !reduced) {
             while (true) rot.animateTo(rot.value + 360f, tween(8000, easing = LinearEasing))
@@ -66,6 +77,27 @@ fun MiniPlayer(
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
             .height(64.dp)
+            .pointerInput(s.currentMediaId) {
+                if (onNext != null || onPrevious != null) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragAccumulated = 0f },
+                        onDragEnd = {
+                            if (dragAccumulated < -70f && onNext != null) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onNext()
+                            } else if (dragAccumulated > 70f && onPrevious != null) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onPrevious()
+                            }
+                            dragAccumulated = 0f
+                        },
+                        onDragCancel = { dragAccumulated = 0f },
+                        onHorizontalDrag = { _, dragAmount ->
+                            dragAccumulated += dragAmount
+                        }
+                    )
+                }
+            }
             .clickable(onClick = onExpand),
         shape = RoundedCornerShape(32.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
