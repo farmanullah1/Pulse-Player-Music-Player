@@ -203,9 +203,9 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
                 ) { data ->
                     Snackbar(
                         snackbarData = data,
-                        containerColor = Pulse.SurfaceCard,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        actionColor = Pulse.Cyan,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        actionColor = MaterialTheme.colorScheme.primary,
                         shape = RoundedCornerShape(12.dp)
                     )
                 }

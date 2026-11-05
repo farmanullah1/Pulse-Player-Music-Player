@@ -150,18 +150,18 @@ fun QueueSheet(vm: MainViewModel) {
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isCurrent) Pulse.Cyan else Color.White
+                                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     track.artist,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextMid
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             IconButton(onClick = { vm.player.removeFromQueue(index) }) {
-                                Icon(Icons.Rounded.Close, "Remove", tint = Pulse.TextLow)
+                                Icon(Icons.Rounded.Close, "Remove", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -241,7 +241,7 @@ fun SleepSheet(vm: MainViewModel) {
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = Color.White)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             ) {
                 Text("Stop after this track")
             }

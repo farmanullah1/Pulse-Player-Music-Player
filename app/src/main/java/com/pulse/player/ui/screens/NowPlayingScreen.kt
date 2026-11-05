@@ -281,9 +281,12 @@ fun NowPlayingScreen(vm: MainViewModel) {
             AudioSignalPathBadge(
                 track = Track(
                     id = s.mediaId ?: "current",
+                    uri = s.artworkUri ?: "",
                     title = s.title,
                     artist = s.artist,
-                    uri = s.artworkUri ?: ""
+                    album = s.album,
+                    durationMs = s.durationMs,
+                    isFavorite = fav
                 ),
                 eqActive = true
             )
@@ -488,16 +491,16 @@ fun PlayerThemeHost(vm: MainViewModel, s: PlaybackUiState, glowColor: Color = Pu
     var dragAccumulated by remember { mutableFloatStateOf(0f) }
 
     Box(
-        modifier = Modifier.pointerInput(s.currentMediaId) {
+        modifier = Modifier.pointerInput(s.mediaId) {
             detectHorizontalDragGestures(
                 onDragStart = { dragAccumulated = 0f },
                 onDragEnd = {
                     if (dragAccumulated < -80f) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        vm.playerController.next()
+                        vm.player.next()
                     } else if (dragAccumulated > 80f) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        vm.playerController.previous()
+                        vm.player.previous()
                     }
                     dragAccumulated = 0f
                 },

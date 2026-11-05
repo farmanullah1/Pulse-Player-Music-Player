@@ -553,7 +553,7 @@ fun BackupScreen(vm: MainViewModel) {
                         Text(
                             text = "Creates Music/Pulse Player, saves the unchanged pulseplayer.favorites v1 JSON, and copies each favourite audio file beside it. Move or paste this folder to another device, then import the folder to fuzzy-match favourites.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         Button(
@@ -563,7 +563,7 @@ fun BackupScreen(vm: MainViewModel) {
                                 .fillMaxWidth()
                                 .testTag("portable_export_button"),
                             shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet, contentColor = Color.White)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
                         ) {
                             Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
@@ -579,7 +579,7 @@ fun BackupScreen(vm: MainViewModel) {
                                     .testTag("portable_import_button"),
                                 shape = CircleShape
                             ) {
-                                Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = Pulse.Violet)
+                                Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(6.dp))
                                 Text("Import Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                             }
@@ -592,7 +592,7 @@ fun BackupScreen(vm: MainViewModel) {
                                     .weight(1f)
                                     .testTag("legacy_import_button_secondary"),
                                 shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = Color.White)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                             ) {
                                 Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
@@ -603,7 +603,7 @@ fun BackupScreen(vm: MainViewModel) {
                             onClick = { legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json") },
                             enabled = favCount > 0 && !archiveOp.inProgress,
                             modifier = Modifier.align(Alignment.CenterHorizontally)
-                        ) { Text("Export JSON copy elsewhere", color = Pulse.TextMid) }
+                        ) { Text("Export JSON copy elsewhere", color = MaterialTheme.colorScheme.primary) }
                     }
                 }
             }

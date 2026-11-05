@@ -55,8 +55,8 @@ fun SearchScreen(vm: MainViewModel) {
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = 8.dp),
-                placeholder = { Text("Search songs, artists, albums", color = Pulse.TextMid) },
-                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = Pulse.Cyan) },
+                placeholder = { Text("Search songs, artists, albums", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                leadingIcon = { Icon(Icons.Rounded.Search, null, tint = MaterialTheme.colorScheme.primary) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { vm.searchQuery.value = "" }) {
@@ -67,12 +67,12 @@ fun SearchScreen(vm: MainViewModel) {
                 singleLine = true,
                 shape = CircleShape,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Pulse.Cyan,
-                    unfocusedBorderColor = Pulse.Outline,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedContainerColor = Pulse.Surface,
-                    unfocusedContainerColor = Pulse.Surface
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
                 )
             )
         }
@@ -84,7 +84,7 @@ fun SearchScreen(vm: MainViewModel) {
                     .padding(40.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Type something to search your library", color = Pulse.TextMid)
+                Text("Type something to search your library", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else if (results.isEmpty()) {
             Box(
@@ -93,7 +93,7 @@ fun SearchScreen(vm: MainViewModel) {
                     .padding(40.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No matching songs found for \"$query\"", color = Pulse.TextMid)
+                Text("No matching songs found for \"$query\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(

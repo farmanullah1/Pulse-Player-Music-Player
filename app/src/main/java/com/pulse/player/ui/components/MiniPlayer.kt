@@ -77,7 +77,7 @@ fun MiniPlayer(
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
             .height(64.dp)
-            .pointerInput(s.currentMediaId) {
+            .pointerInput(s.mediaId) {
                 if (onNext != null || onPrevious != null) {
                     detectHorizontalDragGestures(
                         onDragStart = { dragAccumulated = 0f },

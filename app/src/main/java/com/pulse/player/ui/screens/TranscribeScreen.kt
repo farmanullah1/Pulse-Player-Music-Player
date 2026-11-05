@@ -452,22 +452,25 @@ fun TranscribeScreen(vm: MainViewModel) {
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(tracks.take(30)) { t ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        showTrackPicker = false
-                                        vm.transcribeTrack(t, customPrompt)
-                                    }
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Surface(
+                                onClick = {
+                                    showTrackPicker = false
+                                    vm.transcribeTrack(t, customPrompt)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color.Transparent,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Rounded.LibraryMusic, null, tint = Pulse.Cyan, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(t.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(t.artist, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Rounded.LibraryMusic, null, tint = Pulse.Cyan, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(t.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(t.artist, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                    }
                                 }
                             }
                         }

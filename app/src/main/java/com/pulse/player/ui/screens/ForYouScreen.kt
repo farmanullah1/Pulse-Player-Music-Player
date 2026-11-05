@@ -226,7 +226,7 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(Pulse.PlumTop, Pulse.Elevated)))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onPlay)
             .padding(16.dp)
     ) {
@@ -240,7 +240,7 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
                 Text(
                     text = "Continue listening",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Pulse.Cyan
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = track.title,
@@ -254,7 +254,7 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Pulse.TextMid
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Box(
@@ -304,17 +304,17 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(Pulse.Surface)
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp)
         ) {
             Box(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
-                    .background(Pulse.Elevated),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.Headphones, null, tint = Pulse.Cyan, modifier = Modifier.size(32.dp))
+                Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
             }
             Text(
                 text = if (scanning) "Scanning your music library…" else "Your music library is empty",
@@ -329,14 +329,14 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                     "Pulse Player plays local audio stored on your phone or SD card. Grant audio access or choose a Music folder to begin."
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Pulse.TextMid,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             if (scanning) {
                 androidx.compose.material3.LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
-                    color = Pulse.Cyan,
-                    trackColor = Pulse.Outline
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.outlineVariant
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -368,7 +368,7 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                 enabled = !scanning,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             ) {
                 Icon(Icons.Rounded.Refresh, null)
@@ -381,7 +381,7 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                 shape = CircleShape,
                 enabled = !scanning
             ) {
-                Icon(Icons.Rounded.FolderOpen, null, tint = Pulse.Cyan)
+                Icon(Icons.Rounded.FolderOpen, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Text("Choose Music Folder", color = MaterialTheme.colorScheme.onSurface)
             }

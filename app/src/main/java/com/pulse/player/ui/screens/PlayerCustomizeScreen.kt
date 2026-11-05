@@ -369,13 +369,13 @@ private fun LayoutsTab(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(if (isSelected) Pulse.Cyan else MaterialTheme.colorScheme.surfaceVariant),
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             mode.icon,
                             contentDescription = null,
-                            tint = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -597,13 +597,13 @@ private fun ButtonsTab(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(if (isSelected) Pulse.Cyan else MaterialTheme.colorScheme.surfaceVariant),
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             preset.icon,
                             contentDescription = null,
-                            tint = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -845,8 +845,8 @@ private fun ColorsAndSkinsTab(
                         onClick = { onSetThemeMode(mode) },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Pulse.Cyan.copy(alpha = 0.2f),
-                            selectedLabelColor = Pulse.Cyan
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                            selectedLabelColor = MaterialTheme.colorScheme.primary
                         )
                     )
                 }

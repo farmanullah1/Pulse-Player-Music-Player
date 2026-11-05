@@ -143,7 +143,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                     )
                     Text(
                         "Your library is clean. Every title and artist combination is unique.",
-                        color = Pulse.TextMid,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -167,7 +167,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                             Icon(
                                 Icons.Rounded.Info,
                                 null,
-                                tint = Pulse.Cyan,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(24.dp)
                             )
                             Column {
@@ -180,7 +180,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                 Text(
                                     "Pulse Player never modifies or deletes your audio files. Use the copy button to inspect paths and remove unwanted copies in your device file manager, then rescan.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextMid
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -213,19 +213,19 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                     Text(
                                         text = group.artist,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Pulse.TextMid
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 Box(
                                     Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(Pulse.Elevated)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
                                         "${group.count} copies",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Pulse.Cyan,
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -236,7 +236,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Pulse.Elevated)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -251,7 +251,7 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                         Text(
                                             text = "${formatTime(track.durationMs)} · ${track.sizeBytes / 1024 / 1024} MB · ${track.folderPath}",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Pulse.TextMid
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 
