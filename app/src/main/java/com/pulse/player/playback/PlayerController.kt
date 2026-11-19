@@ -20,11 +20,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import kotlin.math.pow
 import kotlin.random.Random
 
 @OptIn(UnstableApi::class)
@@ -38,6 +42,8 @@ class PlayerController(
     private var sleepJob: Job? = null
     private var reconnectJob: Job? = null
     private var snapshotDebounceJob: Job? = null
+    private var queueLoadJob: Job? = null
+    private var isChunkingQueue = false
     private var attempts = 0
 
     private var queueModel = QueueModel(emptyList(), null)
@@ -78,7 +84,7 @@ class PlayerController(
                     mc = c
                     attempts = 0
                     c.addListener(listener)
-                    sync(c)
+                    sync(c, rebuildQueue = true)
                     updateTicker(c.isPlaying)
                 } else {
                     c.release()
@@ -93,6 +99,7 @@ class PlayerController(
         reconnectJob?.cancel()
         tickJob?.cancel()
         snapshotDebounceJob?.cancel()
+        queueLoadJob?.cancel()
         mc?.removeListener(listener)
         future?.let { MediaController.releaseFuture(it) }
         future = null
@@ -136,7 +143,17 @@ class PlayerController(
             var counter = 0
             while (isActive) {
                 delay(250)
-                mc?.let { _pos.value = it.currentPosition }
+                mc?.let { c ->
+                    val pos = c.currentPosition
+                    _pos.value = pos
+                    val st = _state.value
+                    val loopStart = st.abLoopStartMs
+                    val loopEnd = st.abLoopEndMs
+                    if (loopStart != null && loopEnd != null && loopEnd > loopStart && pos >= loopEnd) {
+                        c.seekTo(loopStart)
+                        _pos.value = loopStart
+                    }
+                }
                 counter++
                 if (counter >= 60) { // 60 * 250ms = 15s periodic save while playing
                     counter = 0
@@ -148,7 +165,11 @@ class PlayerController(
 
     private val listener = object : Player.Listener {
         override fun onEvents(p: Player, e: Player.Events) {
-            sync(p)
+            val rebuildQueue = e.containsAny(
+                Player.EVENT_TIMELINE_CHANGED,
+                Player.EVENT_MEDIA_METADATA_CHANGED
+            )
+            sync(p, rebuildQueue = rebuildQueue)
             if (e.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                 updateTicker(p.isPlaying)
                 if (!p.isPlaying) {
@@ -169,6 +190,7 @@ class PlayerController(
                         }
                     }
                 }
+                _state.update { it }
                 saveSnapshotNow()
             }
             if (e.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
@@ -177,7 +199,7 @@ class PlayerController(
         }
     }
 
-    private fun sync(c: Player) {
+    private fun sync(c: Player, rebuildQueue: Boolean = false) {
         val md = c.mediaMetadata
         val isSeekable = c.isCurrentMediaItemSeekable && c.duration != C.TIME_UNSET && c.duration > 0
         val curId = c.currentMediaItem?.mediaId
@@ -197,20 +219,25 @@ class PlayerController(
                 shuffle = queueModel.shuffleEnabled, // Media3 shuffle stays disabled
                 repeat = c.repeatMode,
                 speed = c.playbackParameters.speed,
+                abLoopStartMs = if (it.mediaId != curId) null else it.abLoopStartMs,
+                abLoopEndMs = if (it.mediaId != curId) null else it.abLoopEndMs,
                 canSeek = isSeekable
             )
         }
-        _queue.value = (0 until c.mediaItemCount).map { i ->
-            val m = c.getMediaItemAt(i)
-            Track(
-                id = m.mediaId,
-                uri = m.localConfiguration?.uri?.toString().orEmpty(),
-                title = m.mediaMetadata.title?.toString().orEmpty(),
-                artist = m.mediaMetadata.artist?.toString().orEmpty(),
-                album = m.mediaMetadata.albumTitle?.toString().orEmpty(),
-                durationMs = 0L,
-                isFavorite = false
-            )
+        if (rebuildQueue && !isChunkingQueue) {
+            val count = c.mediaItemCount
+            _queue.value = List(count) { i ->
+                val m = c.getMediaItemAt(i)
+                Track(
+                    id = m.mediaId,
+                    uri = m.localConfiguration?.uri?.toString().orEmpty(),
+                    title = m.mediaMetadata.title?.toString().orEmpty(),
+                    artist = m.mediaMetadata.artist?.toString().orEmpty(),
+                    album = m.mediaMetadata.albumTitle?.toString().orEmpty(),
+                    durationMs = 0L,
+                    isFavorite = false
+                )
+            }
         }
         _pos.value = c.currentPosition
     }
@@ -223,6 +250,7 @@ class PlayerController(
                 .setTitle(title)
                 .setArtist(artist)
                 .setAlbumTitle(album)
+                .setArtworkUri(uri.takeIf { it.isNotBlank() }?.let(android.net.Uri::parse))
                 .build()
         )
         .build()
@@ -248,23 +276,70 @@ class PlayerController(
 
     fun playQueue(tracks: List<Track>, startIdx: Int = 0, shuffle: Boolean = false) {
         if (tracks.isEmpty()) return
-        tracks.forEach { itemCache[it.id] = it.toItem() }
-        val ids = tracks.map { it.id }.distinct()
-        val startId = ids.getOrNull(startIdx) ?: ids.firstOrNull()
-        queueModel = QueueModel(ids, startId)
-        if (shuffle) {
-            queueModel.enableShuffle(Random.nextLong())
+        queueLoadJob?.cancel()
+        val snapshot = tracks.toList()
+        queueLoadJob = scope.launch {
+            val prepared = withContext(Dispatchers.Default) {
+                val builtMap = HashMap<String, MediaItem>(snapshot.size)
+                val trackMap = HashMap<String, Track>(snapshot.size)
+                val ids = ArrayList<String>(snapshot.size)
+                for (t in snapshot) {
+                    ensureActive()
+                    if (t.id !in builtMap) {
+                        builtMap[t.id] = t.toItem()
+                        trackMap[t.id] = t
+                        ids += t.id
+                    }
+                }
+                val startId = ids.getOrNull(startIdx) ?: ids.firstOrNull()
+                val model = QueueModel(ids, startId)
+                if (shuffle) {
+                    model.enableShuffle(Random.nextLong())
+                }
+                val activeIds = model.active
+                val items = activeIds.mapNotNull { builtMap[it] }
+                val activeTracks = activeIds.mapNotNull { trackMap[it] }
+                val activeIndex = activeIds.indexOf(startId).coerceAtLeast(0)
+                Triple(model, builtMap, Triple(items, activeTracks, activeIndex))
+            }
+            val (model, builtMap, payload) = prepared
+            val (items, activeTracks, activeIndex) = payload
+            itemCache.putAll(builtMap)
+            queueModel = model
+            _queue.value = activeTracks
+            _state.update { it.copy(shuffle = model.shuffleEnabled) }
+            val c = mc
+            if (c != null && items.isNotEmpty()) {
+                val safeIndex = activeIndex.coerceIn(0, items.lastIndex)
+                if (items.size <= 400) {
+                    c.setMediaItems(items, safeIndex, 0L)
+                    c.prepare()
+                    c.play()
+                } else {
+                    isChunkingQueue = true
+                    try {
+                        c.setMediaItems(listOf(items[safeIndex]), 0, 0L)
+                        c.prepare()
+                        c.play()
+                        var insertPos = 0
+                        for (chunk in items.subList(0, safeIndex).chunked(250)) {
+                            ensureActive()
+                            c.addMediaItems(insertPos, chunk)
+                            insertPos += chunk.size
+                            yield()
+                        }
+                        for (chunk in items.subList(safeIndex + 1, items.size).chunked(250)) {
+                            ensureActive()
+                            c.addMediaItems(chunk)
+                            yield()
+                        }
+                    } finally {
+                        isChunkingQueue = false
+                    }
+                }
+            }
+            saveSnapshotNow()
         }
-        val activeIds = queueModel.active
-        val items = activeIds.mapNotNull { itemCache[it] }
-        val activeIndex = activeIds.indexOf(startId).coerceAtLeast(0)
-        mc?.let {
-            it.setMediaItems(items, activeIndex, 0L)
-            it.prepare()
-            it.play()
-        }
-        _state.update { it.copy(shuffle = queueModel.shuffleEnabled) }
-        saveSnapshotNow()
     }
 
     fun playExternal(uri: android.net.Uri) {
@@ -359,18 +434,59 @@ class PlayerController(
     }
 
     fun setPlaybackParameters(speed: Float, lockPitch: Boolean) {
-        _state.update { it.copy(speed = speed, pitchLocked = lockPitch) }
-        mc?.playbackParameters = PlaybackParameters(speed, if (lockPitch) 1f else speed)
+        applyPlaybackParameters(speed, lockPitch, _state.value.pitchSemitones)
+    }
+
+    fun applyPlaybackParameters(speed: Float, lockPitch: Boolean, pitchSemitones: Float) {
+        val safeSpeed = speed.coerceIn(0.5f, 2.0f)
+        val safeSemi = pitchSemitones.coerceIn(-6f, 6f)
+        val semiFactor = 2.0.pow(safeSemi.toDouble() / 12.0).toFloat()
+        val basePitch = if (lockPitch) 1f else safeSpeed
+        val finalPitch = (basePitch * semiFactor).coerceIn(0.4f, 2.5f)
+        _state.update { it.copy(speed = safeSpeed, pitchLocked = lockPitch, pitchSemitones = safeSemi) }
+        mc?.playbackParameters = PlaybackParameters(safeSpeed, finalPitch)
     }
 
     fun setSpeed(s: Float) {
-        val lock = _state.value.pitchLocked
-        setPlaybackParameters(s, lock)
+        applyPlaybackParameters(s, _state.value.pitchLocked, _state.value.pitchSemitones)
     }
 
     fun setPitchLocked(lock: Boolean) {
-        val spd = _state.value.speed
-        setPlaybackParameters(spd, lock)
+        applyPlaybackParameters(_state.value.speed, lock, _state.value.pitchSemitones)
+    }
+
+    fun setPitchSemitones(semitones: Float) {
+        applyPlaybackParameters(_state.value.speed, _state.value.pitchLocked, semitones)
+    }
+
+    fun setAbLoopA(posMs: Long? = null) {
+        val pos = (posMs ?: mc?.currentPosition ?: _pos.value).coerceAtLeast(0L)
+        _state.update { st ->
+            val end = st.abLoopEndMs?.takeIf { it > pos + 300L }
+            st.copy(abLoopStartMs = pos, abLoopEndMs = end)
+        }
+    }
+
+    fun setAbLoopB(posMs: Long? = null) {
+        val pos = (posMs ?: mc?.currentPosition ?: _pos.value).coerceAtLeast(0L)
+        _state.update { st ->
+            val start = st.abLoopStartMs ?: 0L
+            if (pos <= start + 300L) {
+                st.copy(queueNotice = "Loop point B must be after point A")
+            } else {
+                st.copy(abLoopStartMs = start, abLoopEndMs = pos)
+            }
+        }
+    }
+
+    fun clearAbLoop() {
+        _state.update { it.copy(abLoopStartMs = null, abLoopEndMs = null) }
+    }
+
+    fun setSleepFadeSec(sec: Int) {
+        val safe = sec.coerceIn(0, 30)
+        _state.update { it.copy(sleepFadeSec = safe) }
+        PlaybackEngine.setSleepFadeDurationMs(safe * 1000L)
     }
 
     fun setSkipSilence(enabled: Boolean) {
@@ -514,7 +630,7 @@ class PlayerController(
         tracks.forEach { itemCache[it.id] = it.toItem() }
         val startId = ids.getOrNull(index) ?: ids.firstOrNull()
         queueModel = QueueModel(ids, startId)
-        c.setMediaItems(tracks.map { it.toItem() }, index.coerceIn(0, tracks.lastIndex), pos)
+        c.setMediaItemsChunked(tracks.map { it.toItem() }, index.coerceIn(0, tracks.lastIndex), pos)
         c.prepare()
     }
 
@@ -527,7 +643,7 @@ class PlayerController(
         activeTracks.forEach { itemCache[it.id] = it.toItem() }
         val curIndex = activeIds.indexOf(queueModel.currentId).coerceAtLeast(0)
         val items = activeTracks.map { it.toItem() }
-        c.setMediaItems(items, curIndex, restored.positionMs)
+        c.setMediaItemsChunked(items, curIndex, restored.positionMs)
         c.prepare()
         if (restored.startPaused) {
             c.pause()

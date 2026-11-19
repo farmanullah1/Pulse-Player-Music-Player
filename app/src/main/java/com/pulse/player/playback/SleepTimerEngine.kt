@@ -20,11 +20,14 @@ class SleepTimerEngine(
     val state = _state.asStateFlow()
 
     private var job: Job? = null
+    @Volatile var fadeDurationMs: Long = FADE_MS
+
     companion object { const val FADE_MS = 10_000L }
 
     fun start(minutes: Int) {
         cancel()
         val end = clock() + minutes * 60_000L
+        val targetFadeMs = fadeDurationMs.coerceAtLeast(0L)
         _state.value = State(remainingMs = minutes * 60_000L)
         job = scope.launch {
             var faded = false
@@ -32,7 +35,7 @@ class SleepTimerEngine(
                 val left = end - clock()
                 _state.value = State(remainingMs = left.coerceAtLeast(0))
                 if (left <= 0) break
-                if (!faded && left <= FADE_MS) {
+                if (targetFadeMs > 0L && !faded && left <= targetFadeMs) {
                     faded = true
                     t.fadeTo(0f, left, TransitionReason.SleepTimer)
                 }

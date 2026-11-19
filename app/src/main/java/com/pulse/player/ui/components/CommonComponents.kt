@@ -11,7 +11,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -42,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +59,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,18 +67,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pulse.player.playback.Track
+import com.pulse.player.ui.theme.LocalDarkTheme
 import com.pulse.player.ui.theme.LocalReducedMotion
 import com.pulse.player.ui.theme.Pulse
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+val LocalBottomOverlayPadding = compositionLocalOf { 0.dp }
+
 fun Modifier.interactionSource(s: MutableInteractionSource): Modifier =
     this.indication(s, ripple())
 
 fun Modifier.pressScale(enabled: Boolean = true): Modifier = composed {
     val reduced = LocalReducedMotion.current
-    val scrim = Color.Black.copy(alpha = 0.85f)
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val s by animateFloatAsState(
@@ -98,7 +104,10 @@ fun AuroraBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val reduced = LocalReducedMotion.current
-    val scrim = Color.Black.copy(alpha = 0.85f)
+    val isDark = LocalDarkTheme.current
+    val bg = MaterialTheme.colorScheme.background
+    val secondary = MaterialTheme.colorScheme.secondary
+    val scrim = if (isDark) Color.Black.copy(alpha = 0.85f) else bg.copy(alpha = 0.72f)
     val t by if (reduced) {
         remember { mutableFloatStateOf(0f) }
     } else {
@@ -112,12 +121,14 @@ fun AuroraBackground(
             label = "t"
         )
     }
-    val a1 by animateColorAsState(accent.darkened(0.55f), tween(500), label = "a1")
-    val a2 by animateColorAsState(Pulse.Violet.copy(alpha = .55f), tween(500), label = "a2")
+    val a1Target = if (isDark) accent.darkened(0.55f) else accent.copy(alpha = 0.24f)
+    val a2Target = if (isDark) Pulse.Violet.copy(alpha = .55f) else secondary.copy(alpha = 0.18f)
+    val a1 by animateColorAsState(a1Target, tween(500), label = "a1")
+    val a2 by animateColorAsState(a2Target, tween(500), label = "a2")
 
     Box(
         modifier = modifier
-            .background(MaterialTheme.colorScheme.background)
+            .background(bg)
             .drawBehind {
                 val w = size.width
                 val h = size.height
@@ -133,7 +144,7 @@ fun AuroraBackground(
                     )
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(a2.copy(alpha = .35f), Color.Transparent),
+                            colors = listOf(a2.copy(alpha = if (isDark) 0.35f else 0.18f), Color.Transparent),
                             center = Offset(w * (0.9f - 0.3f * t), h * 0.55f),
                             radius = r2
                         )
@@ -222,7 +233,7 @@ fun HeartButton(
         Icon(
             imageVector = if (on) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
             contentDescription = if (on) "Remove from favourites" else "Add to favourites",
-            tint = if (on) Pulse.Cyan else Pulse.TextMid,
+            tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.scale(scale.value)
         )
     }
@@ -230,7 +241,7 @@ fun HeartButton(
 
 @Composable
 fun PlayingBars(
-    color: Color = Pulse.Cyan,
+    color: Color = MaterialTheme.colorScheme.primary,
     active: Boolean = true,
     modifier: Modifier = Modifier
 ) {
@@ -295,39 +306,69 @@ fun WidgetTile(
     subtitle: String? = null,
     onClick: () -> Unit
 ) {
+    val isDark = LocalDarkTheme.current
+    val baseAccent = colors.firstOrNull() ?: MaterialTheme.colorScheme.primary
+    val accent = if (isDark) baseAccent else lerp(baseAccent, MaterialTheme.colorScheme.onSurface, 0.22f)
+
     Box(
         modifier = modifier
-            .height(96.dp)
+            .height(104.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(colors.map { it.copy(alpha = 0.85f) }))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(
+                BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.7f else 0.85f)
+                ),
+                RoundedCornerShape(20.dp)
+            )
             .pressScale()
             .clickable(onClick = onClick)
-            .padding(16.dp)
+            .padding(14.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+        Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(24.dp)
-        )
-        Column(Modifier.align(Alignment.BottomStart)) {
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(accent.copy(alpha = if (isDark) 0.18f else 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(end = 36.dp)
+        ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             subtitle?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -360,7 +401,7 @@ fun SquareCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall,
-            color = Pulse.TextMid
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -379,23 +420,27 @@ fun SectionHeader(
             Box(
                 Modifier
                     .clip(CircleShape)
-                    .background(Pulse.Magenta)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
         Spacer(Modifier.weight(1f))
         action?.let {
             TextButton(onAction) {
-                Text(it, color = Pulse.Cyan)
+                Text(it, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
 }
 
+private val DATE_FORMAT = object : ThreadLocal<SimpleDateFormat>() {
+    override fun initialValue() = SimpleDateFormat("MM-dd", Locale.getDefault())
+}
+
 fun formatDate(ms: Long): String =
-    SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(ms))
+    (DATE_FORMAT.get() ?: SimpleDateFormat("MM-dd", Locale.getDefault())).format(Date(ms))
 
 fun formatTime(ms: Long): String {
     val s = (ms / 1000).toInt()

@@ -1,6 +1,0 @@
-{
-  "summary": "Implementation plan for enhancing the Classic Backup (Favourites JSON) portable export and import system in Pulse Player. Preserves pulseplayer.favorites v1 format with fuzzy matching, includes both auto-created Music/Pulse Player (MediaStore/Environment) and custom SAF folder destinations, exports copied favorites alongside library favorites with byte-for-byte copy and reuse deduplication, provides real-time progress callbacks and error telemetry, and verifies that importing from the folder on a new device seamlessly restores all favorites.",
-  "updatedAt": "2026-11-05T12:35:19.028438846Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

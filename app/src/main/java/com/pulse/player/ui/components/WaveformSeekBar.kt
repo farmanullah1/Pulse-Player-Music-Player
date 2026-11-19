@@ -52,7 +52,9 @@ fun WaveformSeekBar(
     inactiveColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
     barCount: Int = 48,
     barSpacing: Dp = 3.dp,
-    height: Dp = 48.dp
+    height: Dp = 48.dp,
+    abStartFraction: Float? = null,
+    abEndFraction: Float? = null
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
@@ -163,6 +165,37 @@ fun WaveformSeekBar(
                     topLeft = Offset(x, y),
                     size = Size(barWidth, barHeight),
                     cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+                )
+            }
+
+            // A-B loop highlighted span and boundary markers
+            val aFrac = abStartFraction?.coerceIn(0f, 1f)
+            val bFrac = abEndFraction?.coerceIn(0f, 1f)
+            if (aFrac != null && bFrac != null && bFrac > aFrac) {
+                val ax = width * aFrac
+                val bx = width * bFrac
+                drawRect(
+                    color = activeColor.copy(alpha = 0.16f),
+                    topLeft = Offset(ax, 0f),
+                    size = Size((bx - ax).coerceAtLeast(2f), totalHeight)
+                )
+            }
+            aFrac?.let { f ->
+                val ax = width * f
+                drawLine(
+                    color = activeColor.copy(alpha = 0.85f),
+                    start = Offset(ax, 0f),
+                    end = Offset(ax, totalHeight),
+                    strokeWidth = 2.dp.toPx()
+                )
+            }
+            bFrac?.let { f ->
+                val bx = width * f
+                drawLine(
+                    color = activeColor.copy(alpha = 0.85f),
+                    start = Offset(bx, 0f),
+                    end = Offset(bx, totalHeight),
+                    strokeWidth = 2.dp.toPx()
                 )
             }
 

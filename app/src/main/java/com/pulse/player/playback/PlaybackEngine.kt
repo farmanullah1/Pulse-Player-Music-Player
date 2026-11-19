@@ -36,9 +36,17 @@ object PlaybackEngine {
         private set
     @Volatile var fadeEnabled = true
     @Volatile var crossfadeMs: Long = 0L
+    @Volatile var sleepFadeMs: Long = SleepTimerEngine.FADE_MS
     val errorEvents = MutableStateFlow<ErrorPolicy.TrackError?>(null)
 
     fun isAttached(): Boolean = exo != null && ::sleep.isInitialized && ::errors.isInitialized
+
+    fun setSleepFadeDurationMs(ms: Long) {
+        sleepFadeMs = ms.coerceAtLeast(0L)
+        if (::sleep.isInitialized) {
+            sleep.fadeDurationMs = sleepFadeMs
+        }
+    }
 
     private var trackerTickerJob: Job? = null
 
@@ -68,7 +76,9 @@ object PlaybackEngine {
         scope = s
         exo = player
         transitions = AudioTransitionController(s) { player.volume = it }
-        sleep = SleepTimerEngine(s, player, transitions)
+        sleep = SleepTimerEngine(s, player, transitions).apply {
+            fadeDurationMs = sleepFadeMs
+        }
         errors = ErrorPolicy(player) { trackId ->
             s.launch(Dispatchers.IO) {
                 db.tracks().markUnavailable(trackId)

@@ -34,23 +34,42 @@ import com.pulse.player.data.backup.sniff
 import com.pulse.player.data.backup.stage
 import com.pulse.player.data.db.PlaylistEntity
 import com.pulse.player.data.db.TrackEntity
+import com.pulse.player.data.db.BookmarkEntity
 import com.pulse.player.data.favorites.FavItem
 import com.pulse.player.data.backup.classic.FavoritesRepository
 import com.pulse.player.data.scan.SampleMusicHelper
+import com.pulse.player.data.scan.ScanState
 import com.pulse.player.data.settings.ThemeMode
 import com.pulse.player.data.settings.ColorSource
+import com.pulse.player.data.settings.FontStylePreset
+import com.pulse.player.data.settings.SeekStylePreset
+import com.pulse.player.data.scan.ArtworkLoader
+import androidx.compose.ui.graphics.Color
+import androidx.palette.graphics.Palette
 import com.pulse.player.playback.Track
 import com.pulse.player.playback.toTrack
+import com.pulse.player.ui.components.firstLetter
+import com.pulse.player.ui.components.formatTime
+import com.pulse.player.ui.screens.AlbumItem
+import com.pulse.player.ui.screens.ArtistItem
+import com.pulse.player.ui.screens.FolderItem
 import com.pulse.player.ui.screens.PlayerLayoutMode
 import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.theme.Pulse as PulseColors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -64,11 +83,12 @@ import com.pulse.player.data.scan.norm
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Calendar
+import kotlin.random.Random
 
 sealed interface TranscriptionState {
     data object Idle : TranscriptionState
     data object Recording : TranscriptionState
-    data class Transcribing(val progressText: String = "Transcribing with gemini-3.5-transcribe...") : TranscriptionState
+    data class Transcribing(val progressText: String = "Transcribing audio & syncing lyrics…") : TranscriptionState
     data class Success(val result: TranscriptionResult, val audioFile: File?, val timestamp: Long = System.currentTimeMillis()) : TranscriptionState
     data class Error(val message: String) : TranscriptionState
 }
@@ -80,7 +100,37 @@ sealed interface MusicGenState {
     data class Error(val message: String) : MusicGenState
 }
 
-enum class SortField { TITLE, ARTIST, DATE_ADDED, DURATION }
+enum class SortField(val label: String) {
+    TITLE("Title"),
+    ARTIST("Artist"),
+    DATE_ADDED("Date Added"),
+    DURATION("Duration")
+}
+
+enum class EntitySortMode(val label: String) {
+    NAME_ASC("Name (A–Z)"),
+    NAME_DESC("Name (Z–A)"),
+    COUNT_DESC("Most Songs")
+}
+
+enum class SearchScope(val label: String) {
+    ALL("All"),
+    SONGS("Songs"),
+    ARTISTS("Artists"),
+    ALBUMS("Albums"),
+    FOLDERS("Folders"),
+    FAVORITES("Favourites")
+}
+
+data class LibraryFilterState(
+    val favoritesOnly: Boolean = false,
+    val hiResOnly: Boolean = false,
+    val longOnly: Boolean = false,
+    val unplayedOnly: Boolean = false
+) {
+    val activeCount: Int
+        get() = listOf(favoritesOnly, hiResOnly, longOnly, unplayedOnly).count { it }
+}
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application.app
@@ -101,7 +151,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _nowPlayingOpen = MutableStateFlow(false)
     val nowPlayingOpen: StateFlow<Boolean> = _nowPlayingOpen.asStateFlow()
 
+    val activeHomeTab = MutableStateFlow("For you")
+
+    fun selectHomeTab(name: String) {
+        activeHomeTab.value = name
+        _nowPlayingOpen.value = false
+        if (_screen.value !is Screen.Home) {
+            backStack.clear()
+            backStack.push(Screen.Home)
+            _screen.value = Screen.Home
+        }
+    }
+
     fun go(s: Screen) {
+        _nowPlayingOpen.value = false
+        if (s is Screen.Home) {
+            backStack.clear()
+            backStack.push(Screen.Home)
+            _screen.value = Screen.Home
+            return
+        }
+        if (_screen.value == s) return
         backStack.push(s)
         _screen.value = s
     }
@@ -121,18 +191,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Sheets & Dialogs
     val queueOpen = MutableStateFlow(false)
     val sleepOpen = MutableStateFlow(false)
+    val audioControlsOpen = MutableStateFlow(false)
+    val sortFilterSheetOpen = MutableStateFlow(false)
     val addToPlaylistOpen = MutableStateFlow<Track?>(null)
     val trackMenuTrack = MutableStateFlow<Track?>(null)
     val createPlaylistOpen = MutableStateFlow(false)
     val importPreview = MutableStateFlow<FavoritesRepository.Preview?>(null)
     val songDetailsTrack = MutableStateFlow<Track?>(null)
     val tagEditorTrack = MutableStateFlow<Track?>(null)
+    val batchTagTracksOpen = MutableStateFlow<List<Track>?>(null)
 
     fun openQueue() { queueOpen.value = true }
     fun closeQueue() { queueOpen.value = false }
     fun openSleepSheet() { sleepOpen.value = true }
     fun openSleep() { openSleepSheet() }
     fun closeSleepSheet() { sleepOpen.value = false }
+    fun openAudioControls() { audioControlsOpen.value = true }
+    fun closeAudioControls() { audioControlsOpen.value = false }
+    fun openSortFilterSheet() { sortFilterSheetOpen.value = true }
+    fun closeSortFilterSheet() { sortFilterSheetOpen.value = false }
     fun openAddToPlaylist(t: Track? = null) { addToPlaylistOpen.value = t ?: currentPlayingTrack() }
     fun closeAddToPlaylist() { addToPlaylistOpen.value = null }
     fun openTrackMenu(t: Track) { trackMenuTrack.value = t }
@@ -140,6 +217,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openTrackOptions() { currentPlayingTrack()?.let { openTrackMenu(it) } }
     fun openTagEditor(t: Track? = null) { tagEditorTrack.value = t ?: currentPlayingTrack() }
     fun closeTagEditor() { tagEditorTrack.value = null }
+    fun openBatchTagEditor() {
+        val sel = selected.value
+        val targets = tracks.value.filter { it.id in sel }
+        if (targets.isNotEmpty()) batchTagTracksOpen.value = targets
+    }
+    fun closeBatchTagEditor() { batchTagTracksOpen.value = null }
 
     val snackbarMessage = MutableStateFlow<String?>(null)
     fun clearSnackbarMessage() { snackbarMessage.value = null }
@@ -150,8 +233,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Settings
     val themeMode: StateFlow<ThemeMode> = settings.themeMode.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.DARK)
-    val skinId: StateFlow<String> = settings.skinId.stateIn(viewModelScope, SharingStarted.Eagerly, "plum")
-    val playerThemeId: StateFlow<String> = settings.playerThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "classic")
+    val skinId: StateFlow<String> = settings.skinId.stateIn(viewModelScope, SharingStarted.Eagerly, "studio_amber")
+    val playerThemeId: StateFlow<String> = settings.playerThemeId.stateIn(viewModelScope, SharingStarted.Eagerly, "atmospheric_queue")
     val activePlayerLayout: StateFlow<PlayerLayoutMode> = settings.playerLayoutId
         .map { PlayerLayoutMode.fromId(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PlayerLayoutMode.ATMOSPHERIC_QUEUE)
@@ -176,14 +259,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         SharingStarted.Eagerly,
         listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
     )
-    // Dynamic accent driven by current artwork — updated by player layouts when art changes
-    val artworkAccent = MutableStateFlow(PulseColors.Cyan)
+    val fontStyle: StateFlow<FontStylePreset> =
+        settings.fontStyle.stateIn(viewModelScope, SharingStarted.Eagerly, FontStylePreset.MODERN)
+    val seekStyle: StateFlow<SeekStylePreset> =
+        settings.seekStyle.stateIn(viewModelScope, SharingStarted.Eagerly, SeekStylePreset.WAVEFORM)
+    val hiddenPlayerElements: StateFlow<Set<String>> =
+        settings.hiddenPlayerElements.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+    val customButtonOrder: StateFlow<List<String>> = settings.customButtonOrder.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        listOf("Shuffle", "Previous", "Play/Pause", "Next", "Repeat", "Favorite", "Queue", "More")
+    )
+    val forYouSectionOrder: StateFlow<List<String>> = settings.forYouSectionOrder.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        listOf("resume", "actions", "widgets", "recent", "top_picks")
+    )
+    val hiddenForYouSections: StateFlow<Set<String>> =
+        settings.hiddenForYouSections.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+    val sleepFadeSec: StateFlow<Int> =
+        settings.sleepFadeSec.stateIn(viewModelScope, SharingStarted.Eagerly, 10)
+    val splitPlayerUpperRatio: StateFlow<Float> =
+        settings.splitPlayerUpperRatio.stateIn(viewModelScope, SharingStarted.Eagerly, 0.40f)
+    val excludedFolders: StateFlow<Set<String>> =
+        settings.excludedFolders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    // Dynamic accent driven by current artwork via Android Palette extraction
+    val artworkAccent = MutableStateFlow(PulseColors.StudioAmber)
 
     fun setThemeMode(m: ThemeMode) = viewModelScope.launch { settings.setTheme(m) }
     fun setSkin(id: String) = viewModelScope.launch { settings.setSkin(id) }
-    fun applyPlayerTheme(id: String) = viewModelScope.launch { settings.setPlayerTheme(id) }
+    fun applyPlayerTheme(id: String) = viewModelScope.launch {
+        settings.setPlayerTheme(id)
+        settings.setPlayerLayout(PlayerLayoutMode.fromId(id).id)
+    }
     fun setPlayerLayout(mode: PlayerLayoutMode) = viewModelScope.launch {
         settings.setPlayerLayout(mode.id)
+        settings.setPlayerTheme(mode.id)
     }
     fun nextPlayerLayout() {
         val current = activePlayerLayout.value
@@ -199,7 +311,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         settings.setFade(v)
         com.pulse.player.playback.PlaybackEngine.fadeEnabled = v
     }
-    // Phase M2: new setter delegates
+    fun setSleepFadeSec(sec: Int) = viewModelScope.launch {
+        val safe = sec.coerceIn(0, 30)
+        settings.setSleepFadeSec(safe)
+        player.setSleepFadeSec(safe)
+    }
+    fun setSplitPlayerUpperRatio(ratio: Float) = viewModelScope.launch {
+        settings.setSplitPlayerUpperRatio(ratio.coerceIn(0.35f, 0.72f))
+    }
+    // Phase M2 & UI/UX customization delegates
     fun setColorSource(s: ColorSource) = viewModelScope.launch { settings.setColorSource(s) }
     fun setSeedColor(argb: Int) = viewModelScope.launch { settings.setSeedColor(argb) }
     fun setCornerRadius(dp: Int) = viewModelScope.launch { settings.setCornerRadius(dp) }
@@ -216,12 +336,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         com.pulse.player.playback.PlaybackEngine.crossfadeMs = s * 1000L
     }
     fun setHomeTabs(tabs: List<String>) = viewModelScope.launch { settings.setHomeTabs(tabs) }
+    fun setFontStyle(preset: FontStylePreset) = viewModelScope.launch { settings.setFontStyle(preset) }
+    fun setSeekStyle(preset: SeekStylePreset) = viewModelScope.launch { settings.setSeekStyle(preset) }
+    fun setPlayerElementVisible(key: String, visible: Boolean) = viewModelScope.launch {
+        settings.setPlayerElementVisible(key, visible)
+    }
+    fun clearHiddenPlayerElements() = viewModelScope.launch { settings.clearHiddenPlayerElements() }
+    fun setCustomButtonOrder(order: List<String>) = viewModelScope.launch { settings.setCustomButtonOrder(order) }
+    fun setForYouSectionOrder(order: List<String>) = viewModelScope.launch { settings.setForYouSectionOrder(order) }
+    fun setForYouSectionVisible(key: String, visible: Boolean) = viewModelScope.launch {
+        settings.setForYouSectionVisible(key, visible)
+    }
+    fun resetForYouLayout() = viewModelScope.launch { settings.resetForYouLayout() }
 
     init {
         viewModelScope.launch {
             settings.crossfadeSeconds.collect { sec ->
                 com.pulse.player.playback.PlaybackEngine.crossfadeMs = sec * 1000L
             }
+        }
+        viewModelScope.launch {
+            settings.sleepFadeSec.collect { sec ->
+                player.setSleepFadeSec(sec)
+            }
+        }
+        viewModelScope.launch {
+            player.state.map { it.artworkUri }
+                .distinctUntilChanged()
+                .collectLatest { artUri ->
+                    if (artUri.isNullOrBlank()) {
+                        artworkAccent.value = PulseColors.StudioAmber
+                        return@collectLatest
+                    }
+                    val extracted = withContext(Dispatchers.Default) {
+                        val bmp = runCatching { ArtworkLoader.load(app, artUri, 96) }.getOrNull()
+                            ?: return@withContext null
+                        val palette = runCatching { Palette.from(bmp).generate() }.getOrNull()
+                            ?: return@withContext null
+                        val argb = palette.getVibrantColor(
+                            palette.getLightVibrantColor(
+                                palette.getDominantColor(0)
+                            )
+                        )
+                        if (argb != 0) Color(argb) else null
+                    }
+                    artworkAccent.value = extracted ?: PulseColors.StudioAmber
+                }
         }
     }
 
@@ -230,13 +390,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val scanProgress: StateFlow<Int> = scanner.progress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val scanState: StateFlow<ScanState> = scanner.state
+    val audioPermissionDenied = MutableStateFlow(false)
+    val scanWarningDismissed = MutableStateFlow(false)
+
+    fun setAudioPermissionDenied(denied: Boolean) {
+        audioPermissionDenied.value = denied
+    }
+
+    fun dismissScanWarning() {
+        scanWarningDismissed.value = true
+    }
 
     val tracks: StateFlow<List<Track>> = db.tracks().observeAll(minMs = 0L)
+        .conflate()
         .map { list -> list.map { it.toTrack() } }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val totalLibraryMs: StateFlow<Long> = tracks
+        .map { list -> list.sumOf { it.durationMs.coerceAtLeast(0L) } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
     val missingTracks: StateFlow<List<Track>> = db.tracks().observeMissing()
+        .conflate()
         .map { list -> list.map { it.toTrack() } }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val missingCount: StateFlow<Int> = db.tracks().observeMissingCount()
@@ -267,19 +447,157 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Sorting
+    // Unified Filtering & Sorting
     val sortField = MutableStateFlow(SortField.TITLE)
     val sortAscending = MutableStateFlow(true)
+    val entitySortMode = MutableStateFlow(EntitySortMode.NAME_ASC)
+    val filterState = MutableStateFlow(LibraryFilterState())
 
-    val sortedTracks: StateFlow<List<Track>> = combine(tracks, sortField, sortAscending) { list, field, asc ->
-        val sorted = when (field) {
-            SortField.TITLE -> list.sortedBy { it.title.lowercase() }
-            SortField.ARTIST -> list.sortedBy { it.artist.lowercase() }
-            SortField.DATE_ADDED -> list.sortedByDescending { it.dateAddedMs }
-            SortField.DURATION -> list.sortedByDescending { it.durationMs }
+    fun setSortField(field: SortField) {
+        if (sortField.value == field) {
+            sortAscending.value = !sortAscending.value
+        } else {
+            sortField.value = field
+            sortAscending.value = field != SortField.DATE_ADDED && field != SortField.DURATION
         }
-        if (!asc && field != SortField.DATE_ADDED && field != SortField.DURATION) sorted.reversed() else sorted
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    fun toggleSortOrder() {
+        sortAscending.value = !sortAscending.value
+    }
+
+    fun setEntitySortMode(mode: EntitySortMode) {
+        entitySortMode.value = mode
+    }
+
+    fun toggleFilterFavorites() = filterState.update { it.copy(favoritesOnly = !it.favoritesOnly) }
+    fun toggleFilterHiRes() = filterState.update { it.copy(hiResOnly = !it.hiResOnly) }
+    fun toggleFilterLong() = filterState.update { it.copy(longOnly = !it.longOnly) }
+    fun toggleFilterUnplayed() = filterState.update { it.copy(unplayedOnly = !it.unplayedOnly) }
+    fun resetFilters() { filterState.value = LibraryFilterState() }
+
+    fun isHiResTrack(t: Track): Boolean {
+        val mime = t.mimeType.orEmpty()
+        val codec = t.codec
+        val uri = t.uri
+        return codec.equals("FLAC", true) || codec.equals("WAV", true) || codec.equals("ALAC", true) ||
+            mime.contains("flac", true) || mime.contains("wav", true) || mime.contains("alac", true) ||
+            uri.endsWith(".flac", true) || uri.endsWith(".wav", true) || uri.endsWith(".alac", true)
+    }
+
+    private val neverPlayedIds: StateFlow<Set<String>> = db.tracks().neverPlayed()
+        .map { list -> list.mapTo(HashSet()) { it.track.id } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val filteredTracks: StateFlow<List<Track>> = combine(tracks, filterState, neverPlayedIds) { list, filter, unplayed ->
+        if (filter.activeCount == 0) {
+            list
+        } else {
+            list.filter { t ->
+                (!filter.favoritesOnly || t.isFavorite) &&
+                    (!filter.hiResOnly || isHiResTrack(t)) &&
+                    (!filter.longOnly || t.durationMs >= 420_000L) &&
+                    (!filter.unplayedOnly || t.id in unplayed)
+            }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val sortedTracks: StateFlow<List<Track>> = combine(filteredTracks, sortField, sortAscending) { list, field, asc ->
+        sortTrackList(list, field, asc)
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun sortTrackList(list: List<Track>, field: SortField, asc: Boolean): List<Track> {
+        val sorted = when (field) {
+            SortField.TITLE -> list.sortedBy { it.normTitle.ifEmpty { it.title.lowercase() } }
+            SortField.ARTIST -> list.sortedBy { it.normArtist.ifEmpty { it.artist.lowercase() } }
+            SortField.DATE_ADDED -> list.sortedBy { it.dateAddedMs }
+            SortField.DURATION -> list.sortedBy { it.durationMs }
+        }
+        return if (asc) sorted else sorted.reversed()
+    }
+
+    private fun buildAlphabetIndex(list: List<Track>): Map<Char, Int> = buildMap {
+        list.forEachIndexed { index, track ->
+            val letter = firstLetter(track.title)
+            if (letter !in this) put(letter, index)
+        }
+    }
+
+    val songsAlphabetIndex: StateFlow<Map<Char, Int>> = sortedTracks
+        .map { buildAlphabetIndex(it) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val missingAlphabetIndex: StateFlow<Map<Char, Int>> = missingTracks
+        .map { buildAlphabetIndex(it) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val albums: StateFlow<List<AlbumItem>> = combine(filteredTracks, entitySortMode) { list, sort ->
+        val grouped = list.groupBy { it.album.ifBlank { "Unknown Album" } }
+            .map { (name, group) ->
+                val firstWithArt = group.firstOrNull { it.uri.isNotBlank() }
+                AlbumItem(name, group.first().artist, firstWithArt?.uri, group.size)
+            }
+        when (sort) {
+            EntitySortMode.NAME_ASC -> grouped.sortedBy { it.name.lowercase() }
+            EntitySortMode.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase() }
+            EntitySortMode.COUNT_DESC -> grouped.sortedByDescending { it.count }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val artists: StateFlow<List<ArtistItem>> = combine(filteredTracks, entitySortMode) { list, sort ->
+        val grouped = list.groupBy { it.artist.ifBlank { "Unknown Artist" } }
+            .map { (name, group) ->
+                val albumCount = group.mapTo(HashSet()) { it.album }.size
+                ArtistItem(name, group.size, albumCount)
+            }
+        when (sort) {
+            EntitySortMode.NAME_ASC -> grouped.sortedBy { it.name.lowercase() }
+            EntitySortMode.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase() }
+            EntitySortMode.COUNT_DESC -> grouped.sortedByDescending { it.trackCount }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val folders: StateFlow<List<FolderItem>> = combine(filteredTracks, entitySortMode) { list, sort ->
+        val grouped = list.groupBy { it.folder.ifBlank { "Music" } }
+            .map { (path, group) ->
+                FolderItem(path = path, name = path.substringAfterLast('/'), count = group.size)
+            }
+        when (sort) {
+            EntitySortMode.NAME_ASC -> grouped.sortedBy { it.name.lowercase() }
+            EntitySortMode.NAME_DESC -> grouped.sortedByDescending { it.name.lowercase() }
+            EntitySortMode.COUNT_DESC -> grouped.sortedByDescending { it.count }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentTracks: StateFlow<List<Track>> = tracks
+        .map { list -> list.sortedByDescending { it.dateAddedMs }.take(12) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // History-backed Detail collections
+    val topPlayedTracks: StateFlow<List<Track>> = combine(db.stats().observeTopIds(25), tracks) { ids, all ->
+        if (ids.isEmpty()) emptyList() else {
+            val map = all.associateBy { it.id }
+            ids.mapNotNull { map[it] }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val recentlyPlayedTracks: StateFlow<List<Track>> = combine(db.stats().observeRecentIds(30), tracks) { ids, all ->
+        if (ids.isEmpty()) emptyList() else {
+            val map = all.associateBy { it.id }
+            ids.mapNotNull { map[it] }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Selection
     val selected = MutableStateFlow<Set<String>>(emptySet())
@@ -312,6 +630,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         ps.mediaId != null && ps.mediaId in favs
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    /** Favorited tracks currently hidden by an excluded folder or missing from device storage. */
+    val hiddenFavorites: StateFlow<List<com.pulse.player.data.db.TrackWithFav>> = combine(
+        db.favorites().observeTracks(),
+        excludedFolders
+    ) { favTracks, excluded ->
+        favTracks.filter { item ->
+            val t = item.track
+            !t.available || excluded.any { ex -> t.folderPath.startsWith(ex, ignoreCase = true) }
+        }
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun toggleFavorite(id: String) = viewModelScope.launch(Dispatchers.IO) {
         db.favorites().toggle(id, System.currentTimeMillis())
     }
@@ -333,7 +663,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 durationMs = it.durationMs
             )
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun playAt(i: Int) = player.playAt(i)
     fun removeAt(i: Int) = player.removeAt(i)
@@ -363,7 +694,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 importedAtMs = System.currentTimeMillis()
             )
             db.lyrics().put(entity)
-        }.onFailure {
+        }.onFailure { err ->
+            ErrorDispatcher.post(
+                category = ErrorCategory.STORAGE,
+                title = "Lyrics Import Failed",
+                message = "Couldn't read that lyrics file.",
+                technicalDetails = err.stackTraceToString()
+            )
             snackbarMessage.value = "Couldn't read that file"
         }
     }
@@ -372,9 +709,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         db.lyrics().remove(trackId)
     }
 
+    // Bookmarks
+    fun bookmarksFor(trackId: String?): Flow<List<BookmarkEntity>> =
+        if (trackId.isNullOrBlank()) flowOf(emptyList()) else db.bookmarks().forTrack(trackId)
+
+    fun addBookmark(trackId: String, positionMs: Long, label: String = "") = viewModelScope.launch(Dispatchers.IO) {
+        val safePos = positionMs.coerceAtLeast(0L)
+        val cleanLabel = label.trim().ifBlank { "Moment @ ${formatTime(safePos)}" }
+        db.bookmarks().add(
+            BookmarkEntity(
+                trackId = trackId,
+                positionMs = safePos,
+                label = cleanLabel,
+                createdAtMs = System.currentTimeMillis()
+            )
+        )
+        withContext(Dispatchers.Main) {
+            snackbarMessage.value = "Saved bookmark at ${formatTime(safePos)}"
+        }
+    }
+
+    fun deleteBookmark(id: Long) = viewModelScope.launch(Dispatchers.IO) {
+        db.bookmarks().remove(id)
+    }
+
     // Playlists
     val playlists: StateFlow<List<PlaylistEntity>> = db.playlists().observePlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun playlistName(id: Long): Flow<String> =
+        db.playlists().observeById(id).map { it?.name ?: "Playlist" }
+
+    fun playlistTracks(id: Long): Flow<List<Track>> =
+        db.playlists().observeTracks(id)
+            .map { list -> list.map { it.toTrack() } }
+            .flowOn(Dispatchers.Default)
 
     // Smart Playlists
     val neverPlayed: StateFlow<List<Track>> = db.tracks().neverPlayed()
@@ -399,6 +768,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun renamePlaylist(id: Long, name: String) = viewModelScope.launch(Dispatchers.IO) {
+        val clean = name.trim()
+        if (clean.isNotBlank()) {
+            db.playlists().rename(id, clean)
+            withContext(Dispatchers.Main) { snackbarMessage.value = "Renamed playlist to '$clean'" }
+        }
+    }
+
     fun deletePlaylist(id: Long) = viewModelScope.launch(Dispatchers.IO) {
         db.playlists().delete(id)
     }
@@ -413,6 +790,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 addedAtMs = System.currentTimeMillis()
             )
         )
+    }
+
+    fun removeTrackFromPlaylist(playlistId: Long, trackId: String) = viewModelScope.launch(Dispatchers.IO) {
+        db.playlists().removeTrack(playlistId, trackId)
+    }
+
+    fun reorderPlaylistTracks(playlistId: Long, orderedIds: List<String>) = viewModelScope.launch(Dispatchers.IO) {
+        db.playlists().reorderTracks(playlistId, orderedIds)
     }
 
     fun addSelectedToPlaylist(playlistId: Long) = viewModelScope.launch(Dispatchers.IO) {
@@ -475,6 +860,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             withContext(Dispatchers.Main) {
                 snackbarMessage.value = "Failed to update tags: ${err.message}"
+            }
+        }
+    }
+
+    fun batchUpdateTags(
+        ids: List<String>,
+        artist: String?,
+        album: String?,
+        genre: String?,
+        year: Int?,
+        onDone: (() -> Unit)? = null
+    ) = viewModelScope.launch(Dispatchers.IO) {
+        if (ids.isEmpty()) return@launch
+        val cleanArtist = artist?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanAlbum = album?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanGenre = genre?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanYear = year?.takeIf { it > 0 }
+        if (cleanArtist == null && cleanAlbum == null && cleanGenre == null && cleanYear == null) {
+            withContext(Dispatchers.Main) {
+                snackbarMessage.value = "Enter at least one field to update"
+            }
+            return@launch
+        }
+        runCatching {
+            db.tracks().updateTagsBatch(
+                ids = ids,
+                artist = cleanArtist,
+                normArtist = cleanArtist?.let(::norm),
+                album = cleanAlbum,
+                normAlbum = cleanAlbum?.let(::norm),
+                genre = cleanGenre,
+                year = cleanYear
+            )
+        }.onSuccess {
+            withContext(Dispatchers.Main) {
+                clearSelect()
+                batchTagTracksOpen.value = null
+                snackbarMessage.value = "Updated tags for ${ids.size} songs"
+                onDone?.invoke()
+            }
+        }.onFailure { err ->
+            ErrorDispatcher.post(
+                category = ErrorCategory.STORAGE,
+                title = "Batch Tag Update Failed",
+                message = err.message ?: "Failed to update tags for selection",
+                technicalDetails = err.stackTraceToString()
+            )
+            withContext(Dispatchers.Main) {
+                snackbarMessage.value = "Batch update failed: ${err.message}"
             }
         }
     }
@@ -576,19 +1010,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         clearSelect()
     }
 
-    private fun currentPlayingTrack(): Track? {
+    fun currentPlayingTrack(): Track? {
         val curId = player.state.value.mediaId ?: return null
         return tracks.value.firstOrNull { it.id == curId }
     }
 
-    // Scan
+    // Quick Shuffle Shortcuts
+    fun shuffleAll() {
+        val list = tracks.value
+        if (list.isEmpty()) {
+            snackbarMessage.value = "No songs in library to shuffle"
+            return
+        }
+        player.playQueue(list.shuffled(Random(System.currentTimeMillis())), 0)
+    }
+
+    fun shuffleFavorites() {
+        val list = tracks.value.filter { it.isFavorite }
+        if (list.isEmpty()) {
+            snackbarMessage.value = "No favourites yet"
+            return
+        }
+        player.playQueue(list.shuffled(Random(System.currentTimeMillis())), 0)
+    }
+
+    fun shuffleUnplayed() {
+        val list = neverPlayed.value
+        if (list.isEmpty()) {
+            snackbarMessage.value = "All library tracks have been played!"
+            return
+        }
+        player.playQueue(list.shuffled(Random(System.currentTimeMillis())), 0)
+    }
+
+    fun shuffleRecentlyAdded() {
+        val list = tracks.value.sortedByDescending { it.dateAddedMs }.take(50)
+        if (list.isEmpty()) {
+            snackbarMessage.value = "No recently added songs"
+            return
+        }
+        player.playQueue(list.shuffled(Random(System.currentTimeMillis())), 0)
+    }
+
+    // Scan & Folder Exclusions
     fun scan() = viewModelScope.launch {
+        scanWarningDismissed.value = false
         val minDur = settings.minDurationSec.first() * 1000L
         val excluded = settings.excludedFolders.first()
         scanner.scanMediaStore(minDur, excluded)
         val trees = settings.safTrees.first()
         trees.forEach { uriStr ->
             runCatching { scanner.scanSafTree(Uri.parse(uriStr), minDur) }
+                .onFailure { err ->
+                    ErrorDispatcher.post(
+                        category = ErrorCategory.SCAN,
+                        title = "Folder Scan Failed",
+                        message = err.message ?: "Unable to scan linked music folder.",
+                        technicalDetails = err.stackTraceToString()
+                    )
+                }
         }
         refreshStats()
     }
@@ -599,12 +1079,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun scanTree(uri: Uri) = addSafFolder(uri)
 
+    fun excludeFolder(path: String) = viewModelScope.launch {
+        if (path.isBlank()) return@launch
+        settings.addExcludedFolders(setOf(path))
+        snackbarMessage.value = "Excluded ${path.substringAfterLast('/')}"
+        scan()
+    }
+
+    fun unexcludeFolder(path: String) = viewModelScope.launch {
+        settings.removeExcludedFolder(path)
+        snackbarMessage.value = "Restored ${path.substringAfterLast('/')}"
+        scan()
+    }
+
+    fun clearExcludedFolders() = viewModelScope.launch {
+        settings.clearExcludedFolders()
+        snackbarMessage.value = "Cleared excluded folders"
+        scan()
+    }
+
     // Backup & Transfer
     val exportStatus = MutableStateFlow<String?>(null)
 
     fun exportFavorites(uri: Uri) = viewModelScope.launch {
         val res = favoritesRepo.export(uri)
-        exportStatus.value = if (res.isSuccess) "Exported ${res.getOrNull()} favourites" else "Export failed: ${res.exceptionOrNull()?.message}"
+        if (res.isSuccess) {
+            exportStatus.value = "Exported ${res.getOrNull()} favourites"
+        } else {
+            val err = res.exceptionOrNull()
+            val msg = "Export failed: ${err?.message ?: "Unknown error"}"
+            exportStatus.value = msg
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Favourites Export Failed", msg, err?.stackTraceToString())
+        }
     }
 
     fun exportFavoritesToPulseFolder(customTreeUri: Uri? = null) = viewModelScope.launch {
@@ -652,7 +1158,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (res.isSuccess) {
             importPreview.value = res.getOrNull()
         } else {
-            exportStatus.value = "Import preview failed: ${res.exceptionOrNull()?.message}"
+            val err = res.exceptionOrNull()
+            val msg = "Import preview failed: ${err?.message ?: "Unknown error"}"
+            exportStatus.value = msg
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Import Preview Failed", msg, err?.stackTraceToString())
         }
     }
 
@@ -669,7 +1178,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             importPreview.value = res.getOrNull()
             exportStatus.value = "Folder scanned. Review the fuzzy matches before importing."
         } else {
-            exportStatus.value = "Folder import failed: ${res.exceptionOrNull()?.message}"
+            val err = res.exceptionOrNull()
+            val msg = "Folder import failed: ${err?.message ?: "Unknown error"}"
+            exportStatus.value = msg
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Folder Import Failed", msg, err?.stackTraceToString())
         }
     }
 
@@ -685,9 +1197,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             importPreview.value = res.getOrNull()
             exportStatus.value = "Download/Pulse Player scanned. Review fuzzy matches before importing."
         } else {
-            val err = "Auto-detect failed: ${res.exceptionOrNull()?.message}"
+            val ex = res.exceptionOrNull()
+            val err = "Auto-detect failed: ${ex?.message ?: "Unknown error"}"
             exportStatus.value = err
             archiveOperation.value = BackupOperationState(inProgress = false, errorMessage = err)
+            ErrorDispatcher.post(ErrorCategory.BACKUP, "Auto-Detect Failed", err, ex?.stackTraceToString())
         }
     }
 
@@ -963,15 +1477,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Search
     val searchQuery = MutableStateFlow("")
+    val searchScope = MutableStateFlow(SearchScope.ALL)
 
-    val searchResults: StateFlow<List<Track>> = combine(tracks, searchQuery) { list, q ->
-        if (q.isBlank()) emptyList()
-        else list.filter {
-            it.title.contains(q, ignoreCase = true) ||
-                    it.artist.contains(q, ignoreCase = true) ||
-                    it.album.contains(q, ignoreCase = true)
+    fun setSearchScope(scope: SearchScope) {
+        searchScope.value = scope
+    }
+
+    @OptIn(FlowPreview::class)
+    val searchResults: StateFlow<List<Track>> = combine(
+        tracks,
+        searchQuery.debounce(150),
+        searchScope,
+        sortField,
+        sortAscending
+    ) { list, q, scope, field, asc ->
+        if (q.isBlank() && scope != SearchScope.FAVORITES) {
+            emptyList()
+        } else {
+            val nq = norm(q)
+            val base = when (scope) {
+                SearchScope.FAVORITES -> list.filter { it.isFavorite }
+                else -> list
+            }
+            val matched = if (q.isBlank()) {
+                base
+            } else {
+                base.filter {
+                    val matchTitle = if (it.normTitle.isNotEmpty()) it.normTitle.contains(nq) else it.title.contains(q, ignoreCase = true)
+                    val matchArtist = if (it.normArtist.isNotEmpty()) it.normArtist.contains(nq) else it.artist.contains(q, ignoreCase = true)
+                    val matchAlbum = if (it.normAlbum.isNotEmpty()) it.normAlbum.contains(nq) else it.album.contains(q, ignoreCase = true)
+                    val matchFolder = it.folder.contains(q, ignoreCase = true)
+                    when (scope) {
+                        SearchScope.SONGS -> matchTitle
+                        SearchScope.ARTISTS -> matchArtist
+                        SearchScope.ALBUMS -> matchAlbum
+                        SearchScope.FOLDERS -> matchFolder
+                        SearchScope.ALL, SearchScope.FAVORITES -> matchTitle || matchArtist || matchAlbum || matchFolder
+                    }
+                }
+            }
+            sortTrackList(matched, field, asc)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.conflate()
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(FlowPreview::class)
+    val searchArtistResults: StateFlow<List<ArtistItem>> = combine(artists, searchQuery.debounce(150)) { list, q ->
+        if (q.isBlank()) emptyList() else list.filter { it.name.contains(q, ignoreCase = true) }.take(12)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(FlowPreview::class)
+    val searchAlbumResults: StateFlow<List<AlbumItem>> = combine(albums, searchQuery.debounce(150)) { list, q ->
+        if (q.isBlank()) emptyList() else list.filter { it.name.contains(q, ignoreCase = true) || it.artist.contains(q, ignoreCase = true) }.take(12)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    @OptIn(FlowPreview::class)
+    val searchFolderResults: StateFlow<List<FolderItem>> = combine(folders, searchQuery.debounce(150)) { list, q ->
+        if (q.isBlank()) emptyList() else list.filter { it.name.contains(q, ignoreCase = true) || it.path.contains(q, ignoreCase = true) }.take(12)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Queue restore
     private fun restoreLastQueue() = viewModelScope.launch {
@@ -993,7 +1557,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun transcribeTrack(track: Track, customPrompt: String? = null) = viewModelScope.launch {
-        transcriptionState.value = TranscriptionState.Transcribing("Transcribing '${track.title}' with gemini-3.5-transcribe...")
+        transcriptionState.value = TranscriptionState.Transcribing("Transcribing '${track.title}'...")
         val apiKey = settings.effectiveGeminiApiKey()
         val ctx = getApplication<Application>()
         val tempFile = File(ctx.cacheDir, "track_transcribe_${System.currentTimeMillis()}.mp3")
@@ -1007,7 +1571,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }.getOrDefault(false)
 
         if (!copied) {
-            transcriptionState.value = TranscriptionState.Error("Unable to read audio file for ${track.title}.")
+            val msg = "Unable to read audio file for ${track.title}."
+            transcriptionState.value = TranscriptionState.Error(msg)
+            ErrorDispatcher.post(ErrorCategory.STORAGE, "Audio Read Failed", msg)
             return@launch
         }
 
@@ -1015,7 +1581,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (res.isSuccess) {
             transcriptionState.value = TranscriptionState.Success(res.getOrThrow(), tempFile)
         } else {
-            transcriptionState.value = TranscriptionState.Error(res.exceptionOrNull()?.message ?: "Transcription failed")
+            val ex = res.exceptionOrNull()
+            val msg = ex?.message ?: "Transcription failed"
+            transcriptionState.value = TranscriptionState.Error(msg)
+            ErrorDispatcher.post(ErrorCategory.NETWORK, "Transcription Failed", msg, ex?.stackTraceToString())
         }
     }
 
@@ -1072,8 +1641,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val newTrack = entity.toTrackWithFav(false).toTrack()
             musicGenState.value = MusicGenState.Success(genResult, newTrack)
         } else {
-            val err = res.exceptionOrNull()?.message ?: "Music generation failed"
+            val ex = res.exceptionOrNull()
+            val err = ex?.message ?: "Music generation failed"
             musicGenState.value = MusicGenState.Error(err)
+            ErrorDispatcher.post(ErrorCategory.NETWORK, "Music Generation Failed", err, ex?.stackTraceToString())
         }
     }
 

@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.components.HeartButton
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.screens.SeekBar
 import com.pulse.player.ui.screens.TransportRow
@@ -69,6 +70,9 @@ fun VinylRecordPlayerLayout(
     modifier: Modifier = Modifier
 ) {
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+    val seekStyle by vm.seekStyle.collectAsStateWithLifecycle()
+    val abStartFrac = s.abLoopStartMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val abEndFrac = s.abLoopEndMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "vinyl_spin")
     val rotation by infiniteTransition.animateFloat(
@@ -251,12 +255,21 @@ fun VinylRecordPlayerLayout(
             }
         }
 
+        s.trackError?.let { err ->
+            Spacer(Modifier.height(10.dp))
+            PlaybackErrorBanner(
+                error = err,
+                onRetry = vm.player::retry,
+                onSkip = vm.player::skip
+            )
+        }
+
         Spacer(Modifier.height(14.dp))
 
         Text(
             text = s.title.ifBlank { "No track selected" },
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -264,7 +277,7 @@ fun VinylRecordPlayerLayout(
         Text(
             text = s.artist.ifBlank { "Unknown artist" },
             style = MaterialTheme.typography.bodyMedium,
-            color = Pulse.TextMid,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -274,6 +287,12 @@ fun VinylRecordPlayerLayout(
         SeekBar(
             position = vm.player.position,
             duration = s.durationMs,
+            isPlaying = s.isPlaying,
+            trackKey = s.mediaId ?: "default",
+            seekStyle = seekStyle,
+            onSelectStyle = vm::setSeekStyle,
+            abStartFraction = abStartFrac,
+            abEndFraction = abEndFrac,
             onSeek = vm.player::seekTo
         )
 
@@ -292,14 +311,14 @@ fun VinylRecordPlayerLayout(
                 on = fav,
                 onToggle = { vm.toggleFavoriteCurrent() }
             )
-            IconButton(onClick = { vm.openSleepSheet() }) {
-                Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
+            IconButton(onClick = { vm.openSleepSheet() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.openQueue() }) {
-                Icon(Icons.Rounded.QueueMusic, "Queue", tint = Color.White)
+            IconButton(onClick = { vm.openQueue() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.QueueMusic, "Queue", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.go(Screen.Equalizer) }) {
-                Icon(Icons.Rounded.Equalizer, "Equalizer", tint = Color.White)
+            IconButton(onClick = { vm.go(Screen.Equalizer) }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Equalizer, "Equalizer", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
     }

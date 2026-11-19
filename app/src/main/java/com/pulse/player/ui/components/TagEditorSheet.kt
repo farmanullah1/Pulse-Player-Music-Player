@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,6 +53,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.scan.ArtworkLoader
 import com.pulse.player.playback.Track
 import com.pulse.player.ui.viewmodel.MainViewModel
@@ -75,8 +78,8 @@ fun TagEditorSheet(
     var title by remember { mutableStateOf(track.title) }
     var artist by remember { mutableStateOf(track.artist) }
     var album by remember { mutableStateOf(track.album) }
-    var genre by remember { mutableStateOf("") }
-    var yearText by remember { mutableStateOf("") }
+    var genre by remember { mutableStateOf(track.genre) }
+    var yearText by remember { mutableStateOf(track.year.takeIf { it > 0 }?.toString().orEmpty()) }
     var trackNumberText by remember { mutableStateOf("") }
 
     var customArtSelected by remember { mutableStateOf(false) }
@@ -87,18 +90,30 @@ fun TagEditorSheet(
         if (uri != null) {
             scope.launch(Dispatchers.IO) {
                 runCatching {
-                    ctx.contentResolver.openInputStream(uri)?.use { inStream ->
+                    val inStream = ctx.contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("Cannot open selected image")
+                    inStream.use { input ->
                         val dir = File(ctx.filesDir, "custom_art").apply { mkdirs() }
                         val safeKey = track.id.replace(Regex("[^a-zA-Z0-9._-]"), "_")
                         val outFile = File(dir, "$safeKey.jpg")
                         FileOutputStream(outFile).use { outStream ->
-                            inStream.copyTo(outStream)
+                            input.copyTo(outStream)
                         }
                     }
                     ArtworkLoader.clearCache()
                     withContext(Dispatchers.Main) {
                         customArtSelected = true
                         vm.snackbarMessage.value = "Cover art updated"
+                    }
+                }.onFailure { err ->
+                    ErrorDispatcher.post(
+                        category = ErrorCategory.STORAGE,
+                        title = "Cover Art Update Failed",
+                        message = err.message ?: "Unable to save selected cover image",
+                        technicalDetails = err.stackTraceToString()
+                    )
+                    withContext(Dispatchers.Main) {
+                        vm.snackbarMessage.value = "Could not update cover art"
                     }
                 }
             }
@@ -114,8 +129,9 @@ fun TagEditorSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
+                .padding(bottom = 28.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {

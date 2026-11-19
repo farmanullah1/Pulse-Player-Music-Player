@@ -1,11 +1,11 @@
 package com.pulse.player.ui.screens
 
 import android.Manifest
-import android.net.Uri
 import android.os.Build
-import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,7 +26,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.SettingsBackupRestore
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.AlertDialog
@@ -44,8 +45,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -54,11 +55,15 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -69,11 +74,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.PulseTopBar
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -84,6 +93,7 @@ import java.util.Locale
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BackupScreen(vm: MainViewModel) {
+    BackHandler { vm.back() }
     val favCount by vm.favoriteCount.collectAsStateWithLifecycle()
     val allTracks by vm.tracks.collectAsStateWithLifecycle()
     val allPlaylists by vm.playlists.collectAsStateWithLifecycle()
@@ -96,6 +106,8 @@ fun BackupScreen(vm: MainViewModel) {
     val lastBackupJson by vm.lastBackupJson.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
 
+    // 0 = Quick Transfer, 1 = Full Archive
+    var selectedTab by remember { mutableIntStateOf(0) }
     var showReplaceConfirmDialog by remember { mutableStateOf(false) }
     var showClassicExportPreflight by remember { mutableStateOf(false) }
     var pendingUnmatchedList by remember { mutableStateOf<List<String>?>(null) }
@@ -188,57 +200,117 @@ fun BackupScreen(vm: MainViewModel) {
     ) { uri ->
         if (uri != null) {
             vm.addSafFolder(uri)
-            Toast.makeText(ctx, "Folder added to music library", Toast.LENGTH_SHORT).show()
+            vm.snackbarMessage.value = "Folder added to music library"
         }
     }
 
+    val bottomInset = LocalBottomOverlayPadding.current
+
     Column(Modifier.fillMaxSize()) {
-        // App Bar
-        Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        PulseTopBar(
+            title = "Backup & Transfer",
+            subtitle = "Quick favourites transfer & full library archive",
+            onBack = vm::back,
+            backTestTag = "backup_back_button"
+        )
+
+        // Material 3 Two-Tab Switcher
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary,
+            indicator = { tabPositions ->
+                if (selectedTab < tabPositions.size) {
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            divider = {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            }
         ) {
-            IconButton(
-                onClick = vm::back,
-                modifier = Modifier.testTag("backup_back_button")
-            ) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
-            }
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text("Backup & Restore", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-                Text("Dual System: Favourites JSON & Full Reference Backup", style = MaterialTheme.typography.labelSmall, color = Pulse.TextMid)
-            }
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                modifier = Modifier.testTag("backup_tab_quick_transfer"),
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.SwapHoriz, null, modifier = Modifier.size(18.dp))
+                        Text("Quick Transfer", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                modifier = Modifier.testTag("backup_tab_full_archive"),
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.SettingsBackupRestore, null, modifier = Modifier.size(18.dp))
+                        Text("Full Archive", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            )
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = bottomInset + 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Operation Progress Banner
+            // Shared Status & Progress Strip (visible across both tabs)
             if (archiveOp.inProgress) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(16.dp)
+                item(key = "op_progress") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(18.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.5.dp,
-                                    color = Pulse.Cyan
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(Modifier.width(12.dp))
-                                Text(archiveOp.stage, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = archiveOp.stage,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (archiveOp.progressFraction > 0f) {
+                                    Text(
+                                        text = "${(archiveOp.progressFraction * 100).toInt()}%",
+                                        style = MaterialTheme.typography.labelMedium.merge(TabularMono),
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                             if (archiveOp.progressFraction > 0f) {
                                 LinearProgressIndicator(
                                     progress = { archiveOp.progressFraction },
-                                    modifier = Modifier.fillMaxWidth().clip(CircleShape),
-                                    color = Pulse.Cyan,
-                                    trackColor = Pulse.Surface
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(CircleShape),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surface
                                 )
                             }
                         }
@@ -246,18 +318,20 @@ fun BackupScreen(vm: MainViewModel) {
                 }
             }
 
-            // Operation Result Banners
             if (archiveOp.completedMessage != null) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Mint.copy(alpha = 0.15f)),
-                        shape = RoundedCornerShape(16.dp)
+                item(key = "op_completed") {
+                    Surface(
+                        color = Pulse.Mint.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Pulse.Mint.copy(alpha = 0.35f))
                     ) {
                         Row(
-                            Modifier.padding(16.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Rounded.CheckCircle, null, tint = Pulse.Mint, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Rounded.CheckCircle, null, tint = Pulse.Mint, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 text = archiveOp.completedMessage.orEmpty(),
@@ -271,20 +345,23 @@ fun BackupScreen(vm: MainViewModel) {
             }
 
             if (archiveOp.errorMessage != null) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = Pulse.Coral.copy(alpha = 0.15f)),
-                        shape = RoundedCornerShape(16.dp)
+                item(key = "op_error") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.45f))
                     ) {
                         Row(
-                            Modifier.padding(16.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Rounded.ErrorOutline, null, tint = Pulse.Coral, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Rounded.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 text = archiveOp.errorMessage.orEmpty(),
-                                color = Pulse.Coral,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium
                             )
@@ -294,435 +371,465 @@ fun BackupScreen(vm: MainViewModel) {
             }
 
             if (exportStatus != null) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(16.dp)
+                item(key = "export_status") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     ) {
                         Text(
                             text = exportStatus.orEmpty(),
                             color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
 
-            // Last Verified Backup Card (if available)
-            if (!lastBackupJson.isNullOrBlank()) {
-                item {
-                    val lastRecord = runCatching { JSONObject(lastBackupJson!!) }.getOrNull()
-                    if (lastRecord != null) {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.History, null, tint = Pulse.Mint, modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Last Verified Backup", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                                }
-                                val stamp = lastRecord.optString("backupTime", "")
-                                val sizeBytes = lastRecord.optLong("sizeBytes", 0L)
-                                val songs = lastRecord.optInt("songs", 0)
-                                val lists = lastRecord.optInt("playlists", 0)
-                                Text("Backup ID: $stamp (${sizeBytes / 1024} KB)", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
-                                Text("Included: $songs songs with paths • $lists playlists", style = MaterialTheme.typography.labelSmall, color = Pulse.Mint)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ==========================================
-            // OPTION B: FULL ARCHIVE BACKUP (REFERENCE FORMAT)
-            // ==========================================
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Pulse.Cyan.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.SettingsBackupRestore, null, tint = Pulse.Cyan, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "OPTION B",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Pulse.Cyan,
-                                        modifier = Modifier
-                                            .background(Pulse.Cyan.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Full Backup (Reference Format)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                                }
-                                Text("Reference archive layout", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan)
-                            }
-                        }
-
-                        Text(
-                            text = "Create or restore a full backup using the reference ZIP-based .wav archive layout. Saves favourites, playlists, listening history, sort settings, and excluded folders.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
-                        )
-
-                        // Bundled Reference Fixture Inspection Button (Prompt 12 & 13)
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Info, null, tint = Pulse.Mint, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Bundled Reference Archive Fixture", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                                }
-                                Text(
-                                    "Inspect the included reference archive: ManualBackup_20261028_172204175.wav (13,509 songs, 41 playlists, settings, history).",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextMid
-                                )
-                                Button(
-                                    onClick = { vm.inspectSampleReferenceBackup() },
-                                    enabled = !archiveOp.inProgress,
+            if (selectedTab == 0) {
+                // ==========================================
+                // TAB 0: QUICK TRANSFER (FAVOURITES + AUDIO)
+                // ==========================================
+                item(key = "quick_transfer_overview") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("compat_inspect_sample_button"),
-                                    shape = CircleShape,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Mint, contentColor = MaterialTheme.colorScheme.onPrimary)
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(13.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Rounded.Unarchive, null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Inspect Sample Reference Archive", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        // Restore Full Backup (SAF Picker)
-                        OutlinedButton(
-                            onClick = { safBackupPickerLauncher.launch(arrayOf("*/*")) },
-                            enabled = !archiveOp.inProgress,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("compat_restore_button"),
-                            shape = CircleShape
-                        ) {
-                            Icon(Icons.Rounded.Download, null, tint = Pulse.Cyan)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Restore Full Backup (SAF)", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                        }
-
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Full Backup Categories:",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        // Category Checkboxes with Live Counts
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            CompatCategoryCheckbox(
-                                label = "Music tags (${allTracks.size} available songs)",
-                                flag = "tags",
-                                selected = compatExportCats.tags,
-                                onToggle = { vm.toggleExportCategory("tags") }
-                            )
-                            CompatCategoryCheckbox(
-                                label = "Playlists & Favourites ($favCount favourites, ${allPlaylists.size} playlists)",
-                                flag = "playlists",
-                                selected = compatExportCats.playlists,
-                                onToggle = { vm.toggleExportCategory("playlists") }
-                            )
-                            CompatCategoryCheckbox(
-                                label = "Listening history & monthly snapshots",
-                                flag = "recap",
-                                selected = compatExportCats.recap,
-                                onToggle = { vm.toggleExportCategory("recap") }
-                            )
-                            CompatCategoryCheckbox(
-                                label = "Sort settings",
-                                flag = "sort",
-                                selected = compatExportCats.sort,
-                                onToggle = { vm.toggleExportCategory("sort") }
-                            )
-                            CompatCategoryCheckbox(
-                                label = "Scan & excluded folder settings",
-                                flag = "scan",
-                                selected = compatExportCats.scan,
-                                onToggle = { vm.toggleExportCategory("scan") }
-                            )
-                        }
-
-                        // Switch: Save as .zip instead of .wav
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Save as .zip instead", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                                Text(
-                                    if (compatExportAsZip) "Will create standard .zip" else "Default .wav (reference naming)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Pulse.TextMid
-                                )
-                            }
-                            Switch(
-                                checked = compatExportAsZip,
-                                onCheckedChange = { vm.setCompatExportAsZip(it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Pulse.Cyan,
-                                    checkedTrackColor = Pulse.Cyan.copy(alpha = 0.5f)
-                                )
-                            )
-                        }
-
-                        if (!compatExportAsZip) {
-                            Text(
-                                "Notice: A .wav-named backup inside your Music folder can appear as an audio file in third-party media scanners. Keep backups in Documents or Backups.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Pulse.Coral
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                val stamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
-                                val ext = if (compatExportAsZip) "zip" else "wav"
-                                compatExportLauncher.launch("ManualBackup_$stamp.$ext")
-                            },
-                            enabled = !archiveOp.inProgress,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("compat_create_backup_button"),
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
-                        ) {
-                            Icon(Icons.Rounded.Upload, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Create Full Backup", fontWeight = FontWeight.Bold)
-                        }
-
-                        Text(
-                            text = "Writes the same layout as the reference file. Acceptance by other apps has not been tested.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Pulse.TextMid
-                        )
-                    }
-                }
-            }
-
-            // ==========================================
-            // OPTION A: EXISTING BACKUP (FAVORITES JSON)
-            // ==========================================
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Pulse.Violet.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.History, null, tint = Pulse.Violet, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "OPTION A",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Pulse.Violet,
-                                        modifier = Modifier
-                                            .background(Pulse.Violet.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    Icon(
+                                        Icons.Rounded.SwapHoriz,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(22.dp)
                                     )
-                                    Spacer(Modifier.width(8.dp))
-                        Text("Classic Backup (Favourites + Music)", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                 }
-                                Text("pulseplayer.favorites JSON format", style = MaterialTheme.typography.labelSmall, color = Pulse.Violet)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "Portable Favourites + Music",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "pulseplayer.favorites v1 JSON · $favCount saved",
+                                        style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
-                        }
 
-                        Text(
-                            text = "Creates Download/Pulse Player, saves the unchanged pulseplayer.favorites v1 JSON, and copies each favourite audio file beside it. Reuses existing files if already copied. Move or paste this folder to another device, then auto-detect or import to restore favourites.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                            Text(
+                                text = "Creates Download/Pulse Player, saves the pulseplayer.favorites v1 JSON, and copies each favourite audio file beside it (reusing already-copied files). Move that folder to a new phone, then tap Auto-Detect.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
 
-                        Button(
-                            onClick = { showClassicExportPreflight = true },
-                            enabled = favCount > 0 && !archiveOp.inProgress,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("portable_export_button"),
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
-                        ) {
-                            Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Export to Download/Pulse Player ($favCount)", fontWeight = FontWeight.Bold)
-                        }
+                            // Export section
+                            Text(
+                                text = "Send from this device",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
 
-                        if (archiveOp.inProgress) {
-                            Column(
+                            Button(
+                                onClick = { showClassicExportPreflight = true },
+                                enabled = favCount > 0 && !archiveOp.inProgress,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("portable_export_button"),
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                Icon(Icons.Rounded.Upload, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Export to Download/Pulse Player ($favCount)", fontWeight = FontWeight.Bold)
+                            }
+
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { portableCustomFolderExportLauncher.launch(null) },
+                                    enabled = favCount > 0 && !archiveOp.inProgress
                                 ) {
                                     Text(
-                                        text = archiveOp.stage,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        "Export to custom folder…",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.bodySmall
                                     )
-                                    if (archiveOp.progressFraction > 0f) {
-                                        Text(
-                                            text = "${(archiveOp.progressFraction * 100).toInt()}%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
                                 }
-                                LinearProgressIndicator(
-                                    progress = { archiveOp.progressFraction },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(CircleShape),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surface
-                                )
+                                TextButton(
+                                    onClick = { legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json") },
+                                    enabled = favCount > 0 && !archiveOp.inProgress
+                                ) {
+                                    Text(
+                                        "Export JSON only",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
-                        }
 
-                        // Auto-detect & Import options
-                        Button(
-                            onClick = { vm.importFavoritesFromDownloadFolder() },
-                            enabled = !archiveOp.inProgress,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("portable_auto_detect_button"),
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Pulse.Violet,
-                                contentColor = Color.White
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+
+                            // Import section
+                            Text(
+                                text = "Receive on this device",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                        ) {
-                            Icon(Icons.Rounded.SettingsBackupRestore, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Auto-Detect from Download/Pulse Player", fontWeight = FontWeight.Bold)
-                        }
 
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(
-                                onClick = { portableFolderImportLauncher.launch(null) },
+                            Button(
+                                onClick = { vm.importFavoritesFromDownloadFolder() },
                                 enabled = !archiveOp.inProgress,
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("portable_import_button"),
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("portable_auto_detect_button"),
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            ) {
+                                Icon(Icons.Rounded.SettingsBackupRestore, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Auto-Detect from Download/Pulse Player", fontWeight = FontWeight.Bold)
+                            }
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedButton(
+                                    onClick = { portableFolderImportLauncher.launch(null) },
+                                    enabled = !archiveOp.inProgress,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("portable_import_button"),
+                                    shape = CircleShape
+                                ) {
+                                    Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Pick Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
+                                    onClick = { legacyImportLauncher.launch(arrayOf("application/json", "*/*")) },
+                                    enabled = !archiveOp.inProgress,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("legacy_import_button_secondary"),
+                                    shape = CircleShape
+                                ) {
+                                    Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Import JSON", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Dedicated Music Folder (SAF)
+                item(key = "dedicated_music_folder") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(11.dp))
+                                        .background(Pulse.Mint.copy(alpha = 0.16f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Rounded.FolderOpen, null, tint = Pulse.Mint, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    "Dedicated Music Folder",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Text(
+                                text = "Link a folder (SAF) on internal storage or SD card where copied music lives. Pulse Player indexes it for offline playback.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(
+                                onClick = { safFolderLauncher.launch(null) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("choose_folder_button"),
                                 shape = CircleShape
                             ) {
-                                Icon(Icons.Rounded.FolderOpen, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Pick Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                Text("Choose Music Folder", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
                             }
+                        }
+                    }
+                }
+            } else {
+                // ==========================================
+                // TAB 1: FULL ARCHIVE BACKUP (REFERENCE FORMAT)
+                // ==========================================
+                if (!lastBackupJson.isNullOrBlank()) {
+                    item(key = "last_verified_backup") {
+                        val lastRecord = runCatching { JSONObject(lastBackupJson!!) }.getOrNull()
+                        if (lastRecord != null) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                shape = RoundedCornerShape(18.dp),
+                                border = BorderStroke(1.dp, Pulse.Mint.copy(alpha = 0.35f))
+                            ) {
+                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Rounded.History, null, tint = Pulse.Mint, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "Last Verified Backup",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    val stamp = lastRecord.optString("backupTime", "")
+                                    val sizeBytes = lastRecord.optLong("sizeBytes", 0L)
+                                    val songs = lastRecord.optInt("songs", 0)
+                                    val lists = lastRecord.optInt("playlists", 0)
+                                    Text(
+                                        "Backup ID: $stamp (${sizeBytes / 1024} KB)",
+                                        style = MaterialTheme.typography.bodySmall.merge(TabularMono),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Included: $songs songs with paths · $lists playlists",
+                                        style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                                        color = Pulse.Mint
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item(key = "full_archive_card") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(13.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.SettingsBackupRestore,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        "Full Library Archive",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "Reference ZIP / .wav archive format",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "Create or restore a full archive saving favourites, playlists, listening history, sort settings, and excluded folders.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedButton(
+                                onClick = { safBackupPickerLauncher.launch(arrayOf("*/*")) },
+                                enabled = !archiveOp.inProgress,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("compat_restore_button"),
+                                shape = CircleShape
+                            ) {
+                                Icon(Icons.Rounded.Download, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Restore Full Backup (SAF)", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+
+                            Text(
+                                "Categories to Include:",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                CompatCategoryCheckbox(
+                                    label = "Music tags (${allTracks.size} available songs)",
+                                    flag = "tags",
+                                    selected = compatExportCats.tags,
+                                    onToggle = { vm.toggleExportCategory("tags") }
+                                )
+                                CompatCategoryCheckbox(
+                                    label = "Playlists & Favourites ($favCount favourites, ${allPlaylists.size} playlists)",
+                                    flag = "playlists",
+                                    selected = compatExportCats.playlists,
+                                    onToggle = { vm.toggleExportCategory("playlists") }
+                                )
+                                CompatCategoryCheckbox(
+                                    label = "Listening history & monthly snapshots",
+                                    flag = "recap",
+                                    selected = compatExportCats.recap,
+                                    onToggle = { vm.toggleExportCategory("recap") }
+                                )
+                                CompatCategoryCheckbox(
+                                    label = "Sort settings",
+                                    flag = "sort",
+                                    selected = compatExportCats.sort,
+                                    onToggle = { vm.toggleExportCategory("sort") }
+                                )
+                                CompatCategoryCheckbox(
+                                    label = "Scan & excluded folder settings",
+                                    flag = "scan",
+                                    selected = compatExportCats.scan,
+                                    onToggle = { vm.toggleExportCategory("scan") }
+                                )
+                            }
+
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Save as .zip instead", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(
+                                        if (compatExportAsZip) "Will create standard .zip" else "Default .wav (reference naming)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = compatExportAsZip,
+                                    onCheckedChange = { vm.setCompatExportAsZip(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                )
+                            }
+
+                            if (!compatExportAsZip) {
+                                Text(
+                                    "Notice: A .wav-named backup inside your Music folder can appear as an audio file in third-party media scanners. Keep backups in Documents or Backups.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Pulse.Coral
+                                )
+                            }
+
                             Button(
                                 onClick = {
-                                    legacyImportLauncher.launch(arrayOf("application/json", "*/*"))
+                                    val stamp = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US).format(Date())
+                                    val ext = if (compatExportAsZip) "zip" else "wav"
+                                    compatExportLauncher.launch("ManualBackup_$stamp.$ext")
                                 },
                                 enabled = !archiveOp.inProgress,
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("legacy_import_button_secondary"),
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("compat_create_backup_button"),
                                 shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
                             ) {
-                                Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Import JSON", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = { portableCustomFolderExportLauncher.launch(null) },
-                                enabled = favCount > 0 && !archiveOp.inProgress
-                            ) {
-                                Text("Export to custom folder...", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-                            }
-                            TextButton(
-                                onClick = { legacyExportLauncher.launch("PulsePlayer_Favorites_${LocalDate.now()}.json") },
-                                enabled = favCount > 0 && !archiveOp.inProgress
-                            ) {
-                                Text("Export JSON only", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Icon(Icons.Rounded.Upload, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Create Full Backup", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
-            }
 
-            // Dedicated Music Folder (SAF)
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.FolderOpen, null, tint = Pulse.Mint, modifier = Modifier.size(24.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text("Dedicated Music Folder", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        Text(
-                            text = "Select a folder (SAF) where you store copied music files. Pulse Player scans and indexes it for offline playback.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
-                        )
-                        OutlinedButton(
-                            onClick = { safFolderLauncher.launch(null) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("choose_folder_button"),
-                            shape = CircleShape
-                        ) {
-                            Text("Choose Music Folder", color = MaterialTheme.colorScheme.onSurface)
+                // Bundled Reference Fixture Card
+                item(key = "bundled_reference_fixture") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.Info, null, tint = Pulse.Mint, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Bundled Reference Archive Fixture",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Text(
+                                "Inspect the included reference archive: ManualBackup_20261028_172204175.wav (13,509 songs, 41 playlists, settings, history).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(
+                                onClick = { vm.inspectSampleReferenceBackup() },
+                                enabled = !archiveOp.inProgress,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("compat_inspect_sample_button"),
+                                shape = CircleShape
+                            ) {
+                                Icon(Icons.Rounded.Unarchive, null, modifier = Modifier.size(18.dp), tint = Pulse.Mint)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Inspect Sample Reference Archive", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -730,7 +837,7 @@ fun BackupScreen(vm: MainViewModel) {
         }
     }
 
-    // Modal: Full Backup Restore Preview Dialog (Prompt 10)
+    // Modal: Full Backup Restore Preview Dialog
     compatPreview?.let { preview ->
         val selectedCategories by vm.compatSelectedCategories.collectAsStateWithLifecycle()
         val replaceMode by vm.compatReplaceMode.collectAsStateWithLifecycle()
@@ -738,7 +845,7 @@ fun BackupScreen(vm: MainViewModel) {
         Dialog(onDismissRequest = vm::dismissCompatPreview) {
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -748,14 +855,12 @@ fun BackupScreen(vm: MainViewModel) {
                         Text("Backup Restore Preview", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
 
-                    // Metadata banner
                     val backupTime = preview.staged.meta["backupTime"] as? String ?: "Unknown time"
                     val device = preview.staged.meta["deviceId"] as? String ?: "Unknown device"
                     val ver = preview.staged.meta["versionName"] as? String ?: "1.0.0"
                     Text("Backup Date: $backupTime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Source: Device $device (v$ver)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                    // Resolution Stats Breakdown
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         shape = RoundedCornerShape(12.dp)
@@ -782,7 +887,6 @@ fun BackupScreen(vm: MainViewModel) {
                         }
                     }
 
-                    // Category selection checkboxes
                     Text("Categories to restore:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Column {
                         CompatCategoryCheckbox(
@@ -811,7 +915,6 @@ fun BackupScreen(vm: MainViewModel) {
                         )
                     }
 
-                    // Conflict resolution
                     Text("Conflict Mode:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(
@@ -858,7 +961,6 @@ fun BackupScreen(vm: MainViewModel) {
             }
         }
 
-        // Replace confirmation dialog
         if (showReplaceConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showReplaceConfirmDialog = false },
@@ -884,14 +986,14 @@ fun BackupScreen(vm: MainViewModel) {
                         Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                titleContentColor = Pulse.Coral,
-                textContentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                titleContentColor = MaterialTheme.colorScheme.error,
+                textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 
-    // Modal: Full Backup Restore Report Dialog (Prompt 10)
+    // Modal: Full Backup Restore Report Dialog
     compatReport?.let { report ->
         AlertDialog(
             onDismissRequest = vm::dismissCompatReport,
@@ -939,7 +1041,7 @@ fun BackupScreen(vm: MainViewModel) {
                     Text("Done", fontWeight = FontWeight.Bold)
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -950,9 +1052,9 @@ fun BackupScreen(vm: MainViewModel) {
             onDismissRequest = { showClassicExportPreflight = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Backup, null, tint = Pulse.Violet, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Rounded.Backup, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Classic Backup Preflight", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Quick Transfer Preflight", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
             },
             text = {
@@ -976,7 +1078,10 @@ fun BackupScreen(vm: MainViewModel) {
                         showClassicExportPreflight = false
                         exportPortableBackup()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Violet)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Text("Export Favorites & Music", fontWeight = FontWeight.Bold)
                 }
@@ -995,7 +1100,8 @@ fun BackupScreen(vm: MainViewModel) {
                         Text("Cancel")
                     }
                 }
-            }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     }
 }
@@ -1010,6 +1116,8 @@ private fun CompatCategoryCheckbox(
     Row(
         Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onToggle)
             .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically

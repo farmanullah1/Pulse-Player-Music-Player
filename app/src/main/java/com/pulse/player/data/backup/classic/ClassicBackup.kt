@@ -10,6 +10,8 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import androidx.room.withTransaction
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.backup.common.BackupKind
 import com.pulse.player.data.backup.common.BackupSniffer
 import com.pulse.player.data.backup.common.LimitedStream
@@ -581,7 +583,9 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                         volumeId = "download_primary",
                         genre = genre
                     )
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.w("ClassicBackup", "Skipped audio metadata for ${file.name}", e)
+                }
             }
             mmr.release()
 
@@ -590,7 +594,14 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                     db.tracks().upsertAll(scanned)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            ErrorDispatcher.post(
+                category = ErrorCategory.BACKUP,
+                title = "Backup Folder Indexing Warning",
+                message = "Some audio files in Download/$PORTABLE_FOLDER_NAME could not be indexed.",
+                technicalDetails = e.message
+            )
+        }
     }
 
     data class Preview(

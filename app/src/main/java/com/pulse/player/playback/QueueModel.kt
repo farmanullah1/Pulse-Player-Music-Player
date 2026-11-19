@@ -86,13 +86,52 @@ fun MediaController.reorderAroundCurrent(order: List<MediaItem>, currentId: Stri
     val idx = order.indexOfFirst { it.mediaId == currentId }
     require(idx >= 0) { "currentId $currentId not found in order" }
     if (cur < 0 || mediaItemCount == 0) {
-        setMediaItems(order, idx, currentPosition.coerceAtLeast(0L))
+        setMediaItemsChunked(order, idx, currentPosition.coerceAtLeast(0L))
         prepare()
         return
     }
     if (cur < mediaItemCount - 1) removeMediaItems(cur + 1, mediaItemCount)
     if (cur > 0) removeMediaItems(0, cur)
-    if (idx > 0) addMediaItems(0, order.subList(0, idx))
-    if (idx + 1 < order.size) addMediaItems(order.subList(idx + 1, order.size))      // the playing item is never touched
+    if (idx > 0) {
+        var insertPos = 0
+        for (chunk in order.subList(0, idx).chunked(250)) {
+            addMediaItems(insertPos, chunk)
+            insertPos += chunk.size
+        }
+    }
+    if (idx + 1 < order.size) {
+        for (chunk in order.subList(idx + 1, order.size).chunked(250)) {
+            addMediaItems(chunk)
+        }
+    } // the playing item is never touched
+}
+
+fun MediaController.setMediaItemsChunked(
+    items: List<MediaItem>,
+    startIndex: Int,
+    startPositionMs: Long
+) {
+    if (items.isEmpty()) {
+        clearMediaItems()
+        return
+    }
+    val safeIndex = startIndex.coerceIn(0, items.lastIndex)
+    if (items.size <= 400) {
+        setMediaItems(items, safeIndex, startPositionMs)
+        return
+    }
+    setMediaItems(listOf(items[safeIndex]), 0, startPositionMs)
+    if (safeIndex > 0) {
+        var insertPos = 0
+        for (chunk in items.subList(0, safeIndex).chunked(250)) {
+            addMediaItems(insertPos, chunk)
+            insertPos += chunk.size
+        }
+    }
+    if (safeIndex + 1 < items.size) {
+        for (chunk in items.subList(safeIndex + 1, items.size).chunked(250)) {
+            addMediaItems(chunk)
+        }
+    }
 }
 

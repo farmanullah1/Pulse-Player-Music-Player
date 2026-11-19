@@ -26,6 +26,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -36,7 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.pulse.player.playback.Track
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.LocalListDensity
+import com.pulse.player.ui.theme.TabularMono
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -57,6 +60,29 @@ fun TrackRow(
 ) {
     val offsetX = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val swipeDirection by remember {
+        derivedStateOf {
+            val v = offsetX.value
+            when {
+                v > 20f -> 1
+                v < -20f -> -1
+                else -> 0
+            }
+        }
+    }
+    val density = LocalListDensity.current
+    val vPad = when (density) {
+        0 -> 5.dp
+        2 -> 12.dp
+        else -> 8.dp
+    }
+    val artSize = when (density) {
+        0 -> 44.dp
+        2 -> 58.dp
+        else -> 52.dp
+    }
+    val subtitle = remember(t.artist, t.album) { "${t.artist} · ${t.album}" }
+    val formattedDate = remember(t.dateAddedMs) { if (t.dateAddedMs > 0) formatDate(t.dateAddedMs) else null }
 
     Box(
         modifier = modifier
@@ -64,9 +90,8 @@ fun TrackRow(
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
     ) {
         // Swipe background hints
-        if (!selectMode && (onSwipeRightQueue != null || onSwipeLeftFavorite != null)) {
-            val curOffset = offsetX.value
-            if (curOffset > 20f) {
+        if (!selectMode && swipeDirection != 0 && (onSwipeRightQueue != null || onSwipeLeftFavorite != null)) {
+            if (swipeDirection > 0) {
                 // Swiping right: Queue hint
                 Box(
                     modifier = Modifier
@@ -82,7 +107,7 @@ fun TrackRow(
                         modifier = Modifier.size(24.dp)
                     )
                 }
-            } else if (curOffset < -20f) {
+            } else if (swipeDirection < 0) {
                 // Swiping left: Favorite hint
                 Box(
                     modifier = Modifier
@@ -131,12 +156,15 @@ fun TrackRow(
                     }
                 }
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .background(
+                    if (swipeDirection != 0) MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+                    else Color.Transparent
+                )
+                .padding(horizontal = 16.dp, vertical = vPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
         Box {
-            Artwork(t.uri, 52.dp, radius = 10.dp, px = 128)
+            Artwork(t.uri, artSize, radius = 10.dp, px = 128)
             if (current) {
                 Box(
                     Modifier
@@ -158,7 +186,7 @@ fun TrackRow(
                 color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "${t.artist} · ${t.album}",
+                text = subtitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
@@ -168,14 +196,17 @@ fun TrackRow(
         if (selectMode) {
             Checkbox(checked = selected, onCheckedChange = { onClick() })
         } else {
-            if (t.dateAddedMs > 0) {
+            if (formattedDate != null) {
                 Text(
-                    text = formatDate(t.dateAddedMs),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    text = formattedDate,
+                    style = MaterialTheme.typography.bodySmall.merge(TabularMono),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
                 )
             }
-            IconButton(onClick = onMore) {
+            IconButton(
+                onClick = onMore,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
                     Icons.Rounded.MoreVert,
                     "More actions for ${t.title}",

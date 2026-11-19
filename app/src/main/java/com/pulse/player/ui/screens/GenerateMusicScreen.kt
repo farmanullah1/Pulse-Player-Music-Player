@@ -1,10 +1,8 @@
 package com.pulse.player.ui.screens
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -25,15 +23,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -41,7 +38,6 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -69,7 +65,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -78,13 +73,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pulse.player.playback.Track
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.PulseTopBar
 import com.pulse.player.ui.components.formatTime
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
 import com.pulse.player.ui.viewmodel.MusicGenState
 import kotlin.math.sin
@@ -92,6 +89,8 @@ import kotlin.math.sin
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun GenerateMusicScreen(vm: MainViewModel) {
+    BackHandler { vm.back() }
+
     val ctx = LocalContext.current
     val genState by vm.musicGenState.collectAsStateWithLifecycle()
     val allTracks by vm.tracks.collectAsStateWithLifecycle()
@@ -113,52 +112,42 @@ fun GenerateMusicScreen(vm: MainViewModel) {
         "Dark ambient cyberpunk drone with futuristic synthesizers"
     )
 
+    val bottomInset = LocalBottomOverlayPadding.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Pulse.Bg)
+            .background(Color.Transparent)
     ) {
-        // Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { vm.back() },
-                modifier = Modifier.testTag("gen_music_back_button")
-            ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+        PulseTopBar(
+            title = "Music Studio",
+            subtitle = "Compose original instrumentals from a prompt",
+            onBack = { vm.back() },
+            backTestTag = "gen_music_back_button",
+            actions = {
+                IconButton(
+                    onClick = { showApiKeyDialog = true },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("gen_music_api_key_button")
+                ) {
+                    Icon(
+                        Icons.Rounded.Key,
+                        contentDescription = "Configure API Key",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "AI Music Generator",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Powered by Google Lyria ($selectedModel)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Pulse.Cyan
-                )
-            }
-            IconButton(
-                onClick = { showApiKeyDialog = true },
-                modifier = Modifier.testTag("gen_music_api_key_button")
-            ) {
-                Icon(Icons.Rounded.Key, contentDescription = "Configure API Key", tint = Pulse.Cyan)
-            }
-        }
+        )
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset + 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Model Selector Card
+            // Length / Quality Selector Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -167,7 +156,7 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
-                            text = "Lyria Model Selection",
+                            text = "Composition Length",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -177,20 +166,20 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                             FilterChip(
                                 selected = selectedModel == "lyria-3-clip-preview",
                                 onClick = { selectedModel = "lyria-3-clip-preview" },
-                                label = { Text("lyria-3-clip-preview (Clip ~30s)") },
+                                label = { Text("Quick Clip (~30s)") },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Pulse.Cyan,
-                                    selectedLabelColor = Color.Black
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                                 ),
                                 modifier = Modifier.testTag("model_clip_chip")
                             )
                             FilterChip(
                                 selected = selectedModel == "lyria-3-pro-preview",
                                 onClick = { selectedModel = "lyria-3-pro-preview" },
-                                label = { Text("lyria-3-pro-preview (Full)") },
+                                label = { Text("Full Track") },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Pulse.Cyan,
-                                    selectedLabelColor = Color.Black
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                                 ),
                                 modifier = Modifier.testTag("model_pro_chip")
                             )
@@ -220,7 +209,11 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                             )
                             if (promptText.isNotBlank()) {
                                 TextButton(onClick = { promptText = "" }) {
-                                    Text("Clear", color = Pulse.Cyan, style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        "Clear",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
                             }
                         }
@@ -233,15 +226,15 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                             placeholder = {
                                 Text(
                                     "Describe instruments, mood, tempo, genre or melody...",
-                                    color = Pulse.TextMid,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Pulse.Cyan,
-                                unfocusedBorderColor = Pulse.Outline,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -252,9 +245,9 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                         Spacer(Modifier.height(14.dp))
 
                         Text(
-                            text = "Quick Inspiration:",
+                            text = "Quick Inspiration",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Pulse.TextMid,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold
                         )
 
@@ -267,13 +260,13 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                             inspirations.forEach { tag ->
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    color = Pulse.Elevated,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                     modifier = Modifier.clickable { promptText = tag }
                                 ) {
                                     Text(
                                         text = tag,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Pulse.Cyan,
+                                        color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     )
                                 }
@@ -287,7 +280,7 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                         Button(
                             onClick = {
                                 if (promptText.isBlank()) {
-                                    Toast.makeText(ctx, "Please enter a music prompt first.", Toast.LENGTH_SHORT).show()
+                                    vm.snackbarMessage.value = "Enter a music prompt first"
                                 } else {
                                     vm.generateMusic(promptText, selectedModel)
                                 }
@@ -297,21 +290,32 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                 .fillMaxWidth()
                                 .height(52.dp)
                                 .testTag("generate_music_submit_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             if (isGenerating) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(22.dp),
-                                    color = Color.Black,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(Modifier.width(10.dp))
-                                Text("Composing with Google Lyria...", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Composing your track...",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
                             } else {
-                                Icon(Icons.Rounded.AutoAwesome, null, tint = Color.Black)
+                                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.onPrimary)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Generate Music", color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Generate Music",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -333,7 +337,11 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                     .padding(28.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                AnimatedEqualizerBars(Modifier.size(160.dp, 60.dp))
+                                AnimatedEqualizerBars(
+                                    modifier = Modifier.size(160.dp, 60.dp),
+                                    topColor = MaterialTheme.colorScheme.secondary,
+                                    bottomColor = MaterialTheme.colorScheme.primary
+                                )
                                 Spacer(Modifier.height(16.dp))
                                 Text(
                                     "Composing musical audio...",
@@ -343,9 +351,9 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Synthesizing audio stems using ${s.model}",
+                                    if (s.model.contains("pro")) "Rendering full-length composition..." else "Rendering quick studio clip...",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.Cyan
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -357,16 +365,16 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF3B151E))
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                         ) {
                             Column(Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Close, null, tint = Pulse.Magenta)
+                                    Icon(Icons.Rounded.Close, null, tint = MaterialTheme.colorScheme.error)
                                     Spacer(Modifier.width(10.dp))
                                     Text(
                                         "Generation Failed",
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
                                         style = MaterialTheme.typography.titleSmall
                                     )
                                 }
@@ -374,18 +382,21 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                 Text(
                                     s.message,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFFFB4AB)
+                                    color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(
                                         onClick = { showApiKeyDialog = true },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Magenta)
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        )
                                     ) {
-                                        Text("Check API Key", color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Check API Key")
                                     }
                                     TextButton(onClick = { vm.resetMusicGenState() }) {
-                                        Text("Dismiss", color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
                                     }
                                 }
                             }
@@ -407,7 +418,7 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Rounded.Check, null, tint = Pulse.Cyan)
+                                        Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.width(8.dp))
                                         Text(
                                             "Song Generated!",
@@ -418,11 +429,11 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = Pulse.Cyan.copy(alpha = 0.15f)
+                                        color = MaterialTheme.colorScheme.primaryContainer
                                     ) {
                                         Text(
-                                            s.result.model,
-                                            color = Pulse.Cyan,
+                                            if (s.result.model.contains("pro")) "Full Track" else "Quick Clip",
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             style = MaterialTheme.typography.labelSmall,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
@@ -435,7 +446,7 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(16.dp))
-                                        .background(Pulse.Bg)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -444,11 +455,21 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                             .size(54.dp)
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(
-                                                Brush.linearGradient(listOf(Pulse.Magenta, Pulse.Cyan))
+                                                Brush.linearGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.primary,
+                                                        MaterialTheme.colorScheme.secondary
+                                                    )
+                                                )
                                             ),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
+                                        Icon(
+                                            Icons.Rounded.MusicNote,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(28.dp)
+                                        )
                                     }
                                     Spacer(Modifier.width(16.dp))
                                     Column(Modifier.weight(1f)) {
@@ -461,9 +482,9 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            "Google Lyria • ${formatTime(s.track.durationMs)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Pulse.TextMid
+                                            "Studio Synthesis • ${formatTime(s.track.durationMs)}",
+                                            style = MaterialTheme.typography.bodySmall.merge(TabularMono),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -476,14 +497,17 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                 ) {
                                     Button(
                                         onClick = { vm.playQueue(listOf(s.track), 0) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
                                         modifier = Modifier
                                             .weight(1.2f)
                                             .testTag("play_generated_track_button")
                                     ) {
-                                        Icon(Icons.Rounded.PlayArrow, null, tint = Color.Black)
+                                        Icon(Icons.Rounded.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary)
                                         Spacer(Modifier.width(6.dp))
-                                        Text("Play Now", color = Color.Black, fontWeight = FontWeight.Bold)
+                                        Text("Play Now", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                                     }
 
                                     OutlinedButton(
@@ -497,11 +521,27 @@ fun GenerateMusicScreen(vm: MainViewModel) {
 
                                     OutlinedButton(
                                         onClick = {
-                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                type = "audio/mp3"
-                                                putExtra(Intent.EXTRA_STREAM, Uri.fromFile(s.result.file))
+                                            runCatching {
+                                                val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                                                    ctx,
+                                                    "${ctx.packageName}.files",
+                                                    s.result.file
+                                                )
+                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "audio/*"
+                                                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                ctx.startActivity(Intent.createChooser(shareIntent, "Share Generated Song"))
+                                            }.onFailure { err ->
+                                                ErrorDispatcher.post(
+                                                    ErrorCategory.STORAGE,
+                                                    "Unable to share generated song",
+                                                    err.message ?: "No compatible app found to share audio.",
+                                                    err.stackTraceToString()
+                                                )
+                                                vm.snackbarMessage.value = "Unable to share generated song"
                                             }
-                                            ctx.startActivity(Intent.createChooser(shareIntent, "Share Generated Song"))
                                         },
                                         modifier = Modifier.weight(1f)
                                     ) {
@@ -518,11 +558,11 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                 else -> Unit
             }
 
-            // History of AI Generated Tracks in library
+            // History of Generated Tracks in library
             if (aiTracks.isNotEmpty()) {
                 item {
                     Text(
-                        "Your AI Creations (${aiTracks.size})",
+                        "Your Studio Creations (${aiTracks.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -548,10 +588,10 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Pulse.Cyan.copy(alpha = 0.2f)),
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Rounded.MusicNote, null, tint = Pulse.Cyan)
+                                Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
@@ -564,13 +604,16 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    "${track.artist} • ${formatTime(track.durationMs)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextMid
+                                    "${track.album} • ${formatTime(track.durationMs)}",
+                                    style = MaterialTheme.typography.bodySmall.merge(TabularMono),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            IconButton(onClick = { vm.playQueue(listOf(track), 0) }) {
-                                Icon(Icons.Rounded.PlayArrow, "Play", tint = Pulse.Cyan)
+                            IconButton(
+                                onClick = { vm.playQueue(listOf(track), 0) },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(Icons.Rounded.PlayArrow, "Play", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -584,26 +627,26 @@ fun GenerateMusicScreen(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { showApiKeyDialog = false },
             title = {
-                Text("Gemini / Lyria API Key", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                Text("Music Studio API Key", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
                     Text(
-                        "Set your Google API key in Pulse Settings to generate music with Lyria.",
+                        "Set your personal API key in Pulse Settings to generate music.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
                         value = tempApiKey,
                         onValueChange = { tempApiKey = it },
-                        placeholder = { Text("AIzaSy...", color = Pulse.TextMid) },
+                        placeholder = { Text("AIzaSy...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Pulse.Cyan,
-                            unfocusedBorderColor = Pulse.Outline,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -614,13 +657,16 @@ fun GenerateMusicScreen(vm: MainViewModel) {
                     onClick = {
                         if (tempApiKey.isNotBlank()) {
                             vm.setGeminiApiKey(tempApiKey)
-                            Toast.makeText(ctx, "API Key saved!", Toast.LENGTH_SHORT).show()
+                            vm.snackbarMessage.value = "API key saved"
                         }
                         showApiKeyDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Text("Save Key", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Save Key", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -634,7 +680,11 @@ fun GenerateMusicScreen(vm: MainViewModel) {
 }
 
 @Composable
-fun AnimatedEqualizerBars(modifier: Modifier = Modifier) {
+fun AnimatedEqualizerBars(
+    modifier: Modifier = Modifier,
+    topColor: Color = MaterialTheme.colorScheme.secondary,
+    bottomColor: Color = MaterialTheme.colorScheme.primary
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "eq")
     val phase by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -657,7 +707,7 @@ fun AnimatedEqualizerBars(modifier: Modifier = Modifier) {
             val y = size.height - barHeight
             drawRoundRect(
                 brush = Brush.verticalGradient(
-                    listOf(Pulse.Magenta, Pulse.Cyan),
+                    listOf(topColor, bottomColor),
                     startY = y,
                     endY = size.height
                 ),

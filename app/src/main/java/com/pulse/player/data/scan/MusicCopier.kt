@@ -5,6 +5,8 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.db.IdentityModel
 import com.pulse.player.data.db.PulseDb
 import com.pulse.player.data.db.TrackEntity
@@ -80,7 +82,14 @@ object MusicCopier {
                 createdDocUri?.let { uri ->
                     runCatching { DocumentsContract.deleteDocument(ctx.contentResolver, uri) }
                 }
-                failed.add("${srcUri.lastPathSegment ?: "File"}: ${e.message}")
+                val label = srcUri.lastPathSegment ?: "File"
+                ErrorDispatcher.post(
+                    category = ErrorCategory.STORAGE,
+                    title = "Music Copy Failed",
+                    message = "Failed to copy $label to destination folder.",
+                    technicalDetails = e.message
+                )
+                failed.add("$label: ${e.message}")
             }
         }
 
@@ -143,7 +152,9 @@ object MusicCopier {
                 if (!mYear.isNullOrBlank()) year = mYear.toIntOrNull() ?: 0
                 mmr.release()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("MusicCopier", "Metadata read fallback for $displayName", e)
+        }
 
         return TrackEntity(
             id = copyId,

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +23,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Headphones
@@ -54,10 +54,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.app
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.db.ArtistStat
 import com.pulse.player.data.db.TrackEntity
 import com.pulse.player.ui.components.Artwork
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.PulseTopBar
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -75,6 +80,8 @@ data class RecapData(
 
 @Composable
 fun RecapScreen(vm: MainViewModel) {
+    BackHandler { vm.back() }
+
     val ctx = LocalContext.current
     val db = ctx.app.db
     val streak by vm.streakDays.collectAsStateWithLifecycle()
@@ -114,17 +121,10 @@ fun RecapScreen(vm: MainViewModel) {
         }
     }
 
+    val bottomInset = LocalBottomOverlayPadding.current
+
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = vm::back) {
-                Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
-            }
-            Spacer(Modifier.width(8.dp))
-            Text("Monthly Recap", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-        }
+        PulseTopBar(title = "Monthly Recap", onBack = vm::back)
 
         Row(
             Modifier
@@ -133,16 +133,16 @@ fun RecapScreen(vm: MainViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { currentMonth = currentMonth.minusMonths(1) }) {
+            IconButton(onClick = { currentMonth = currentMonth.minusMonths(1) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.ChevronLeft, "Previous month", tint = MaterialTheme.colorScheme.onSurface)
             }
             Text(
                 text = currentMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Pulse.Cyan
+                color = MaterialTheme.colorScheme.primary
             )
-            IconButton(onClick = { currentMonth = currentMonth.plusMonths(1) }) {
+            IconButton(onClick = { currentMonth = currentMonth.plusMonths(1) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.ChevronRight, "Next month", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
@@ -163,10 +163,10 @@ fun RecapScreen(vm: MainViewModel) {
                         Modifier
                             .size(64.dp)
                             .clip(CircleShape)
-                            .background(Pulse.Elevated),
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Headphones, null, tint = Pulse.Cyan, modifier = Modifier.size(32.dp))
+                        Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                     }
                     Text(
                         "No listening history for this month",
@@ -177,7 +177,7 @@ fun RecapScreen(vm: MainViewModel) {
                     Text(
                         "Listen to some tracks and your statistics, top songs, and listening badges will appear here.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -185,7 +185,7 @@ fun RecapScreen(vm: MainViewModel) {
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset + 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
@@ -196,26 +196,33 @@ fun RecapScreen(vm: MainViewModel) {
                         Column(
                             Modifier
                                 .fillMaxWidth()
-                                .background(Brush.linearGradient(listOf(Pulse.PlumTop, Pulse.Surface)))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    )
+                                )
                                 .padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             val hours = (r.totalMs / 3_600_000L).toInt()
                             val minutes = ((r.totalMs % 3_600_000L) / 60_000L).toInt()
-                            Text("Total Listening Time", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                            Text("Total Listening Time", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = if (hours > 0) "$hours h $minutes min" else "$minutes minutes",
-                                style = MaterialTheme.typography.headlineMedium,
+                                style = MaterialTheme.typography.headlineMedium.merge(TabularMono),
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             if (streak > 0) {
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "$streak day active streak 🔥",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Pulse.Cyan,
+                                    text = "$streak day active streak",
+                                    style = MaterialTheme.typography.bodyMedium.merge(TabularMono),
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -236,9 +243,9 @@ fun RecapScreen(vm: MainViewModel) {
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Rounded.WorkspacePremium, null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Rounded.WorkspacePremium, null, tint = Color.White, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text(badge, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                                        Text(badge, style = MaterialTheme.typography.bodySmall, color = Color.White, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -257,12 +264,23 @@ fun RecapScreen(vm: MainViewModel) {
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("${idx + 1}", fontWeight = FontWeight.Bold, color = Pulse.Cyan, modifier = Modifier.width(28.dp))
+                            Text(
+                                "${idx + 1}",
+                                style = MaterialTheme.typography.titleSmall.merge(TabularMono),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(28.dp)
+                            )
                             Artwork(track.uri, 44.dp, radius = 8.dp, px = 128)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(track.title, maxLines = 1, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                                Text("${track.artist} · $plays plays", maxLines = 1, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "${track.artist} · $plays plays",
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall.merge(TabularMono)
+                                )
                             }
                         }
                     }
@@ -279,10 +297,21 @@ fun RecapScreen(vm: MainViewModel) {
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("${idx + 1}", fontWeight = FontWeight.Bold, color = Pulse.Cyan, modifier = Modifier.width(28.dp))
+                            Text(
+                                "${idx + 1}",
+                                style = MaterialTheme.typography.titleSmall.merge(TabularMono),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(28.dp)
+                            )
                             Column(Modifier.weight(1f)) {
                                 Text(artistStat.artist, maxLines = 1, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                                Text("${artistStat.plays} plays", maxLines = 1, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "${artistStat.plays} plays",
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall.merge(TabularMono)
+                                )
                             }
                         }
                     }
@@ -291,32 +320,45 @@ fun RecapScreen(vm: MainViewModel) {
                 item {
                     Button(
                         onClick = {
-                            val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
-                            val canvas = Canvas(bitmap)
-                            canvas.drawColor(0xFF14101F.toInt())
-                            val paint = Paint().apply {
-                                color = android.graphics.Color.WHITE
-                                textSize = 40f
-                                isAntiAlias = true
+                            runCatching {
+                                val bitmap = Bitmap.createBitmap(800, 600, Bitmap.Config.ARGB_8888)
+                                val canvas = Canvas(bitmap)
+                                canvas.drawColor(0xFF14101F.toInt())
+                                val paint = Paint().apply {
+                                    color = android.graphics.Color.WHITE
+                                    textSize = 40f
+                                    isAntiAlias = true
+                                }
+                                canvas.drawText("Pulse Player - ${currentMonth.format(DateTimeFormatter.ofPattern("MMM yyyy"))} Recap", 50f, 100f, paint)
+                                paint.textSize = 30f
+                                canvas.drawText("Total listening: ${r.totalMs / 60000} minutes", 50f, 180f, paint)
+                                val file = File(ctx.cacheDir, "recap.png")
+                                file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 95, it) }
+                                val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+                                val share = Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/png"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                ctx.startActivity(Intent.createChooser(share, "Share Monthly Recap"))
+                            }.onFailure { err ->
+                                ErrorDispatcher.post(
+                                    ErrorCategory.STORAGE,
+                                    "Unable to share recap card",
+                                    err.message ?: "Could not generate or share recap image.",
+                                    err.stackTraceToString()
+                                )
+                                vm.snackbarMessage.value = "Unable to share recap card"
                             }
-                            canvas.drawText("Pulse Player - ${currentMonth.format(DateTimeFormatter.ofPattern("MMM yyyy"))} Recap", 50f, 100f, paint)
-                            paint.textSize = 30f
-                            canvas.drawText("Total listening: ${r.totalMs / 60000} minutes", 50f, 180f, paint)
-                            val file = File(ctx.cacheDir, "recap.png")
-                            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 95, it) }
-                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
-                            val share = Intent(Intent.ACTION_SEND).apply {
-                                type = "image/png"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            ctx.startActivity(Intent.createChooser(share, "Share Monthly Recap"))
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 12.dp),
                         shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan, contentColor = MaterialTheme.colorScheme.onPrimary)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
                     ) {
                         Icon(Icons.Rounded.Share, null)
                         Spacer(Modifier.width(8.dp))

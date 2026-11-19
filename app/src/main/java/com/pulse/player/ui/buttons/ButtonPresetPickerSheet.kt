@@ -145,7 +145,7 @@ private fun ButtonPresetCard(
                     Icon(
                         Icons.Rounded.Check,
                         contentDescription = null,
-                        tint = androidx.compose.ui.graphics.Color.Black,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(12.dp)
                     )
                 }

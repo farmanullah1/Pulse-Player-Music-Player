@@ -59,9 +59,9 @@ import androidx.media3.common.Player
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.components.HeartButton
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.screens.SeekBar
-import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
 
 @Composable
@@ -73,6 +73,9 @@ fun MinimalistPlayerLayout(
     modifier: Modifier = Modifier
 ) {
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+    val seekStyle by vm.seekStyle.collectAsStateWithLifecycle()
+    val abStartFrac = s.abLoopStartMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val abEndFrac = s.abLoopEndMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
 
     Column(
         modifier = modifier
@@ -106,7 +109,7 @@ fun MinimalistPlayerLayout(
                         .size(190.dp)
                         .shadow(16.dp, RoundedCornerShape(24.dp))
                         .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(24.dp)),
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Artwork(
@@ -117,16 +120,17 @@ fun MinimalistPlayerLayout(
                     )
                 }
 
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(24.dp))
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.08f)
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
                 ) {
                     Text(
                         text = "MINIMAL FOCUS",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Pulse.Cyan,
+                        color = MaterialTheme.colorScheme.primary,
                         letterSpacing = 2.sp,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
@@ -134,13 +138,13 @@ fun MinimalistPlayerLayout(
                     )
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
                 Text(
                     text = s.title.ifBlank { "No track selected" },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis,
@@ -152,11 +156,20 @@ fun MinimalistPlayerLayout(
                 Text(
                     text = s.artist.ifBlank { "Unknown artist" },
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Pulse.TextMid,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                s.trackError?.let { err ->
+                    Spacer(Modifier.height(12.dp))
+                    PlaybackErrorBanner(
+                        error = err,
+                        onRetry = vm.player::retry,
+                        onSkip = vm.player::skip
+                    )
+                }
             }
         }
 
@@ -170,6 +183,12 @@ fun MinimalistPlayerLayout(
             SeekBar(
                 position = vm.player.position,
                 duration = s.durationMs,
+                isPlaying = s.isPlaying,
+                trackKey = s.mediaId ?: "default",
+                seekStyle = seekStyle,
+                onSelectStyle = vm::setSeekStyle,
+                abStartFraction = abStartFrac,
+                abEndFraction = abEndFrac,
                 onSeek = vm.player::seekTo
             )
 
@@ -178,8 +197,8 @@ fun MinimalistPlayerLayout(
             // Minimalist Rounded Pill for playback transport
             Surface(
                 shape = RoundedCornerShape(32.dp),
-                color = Color.White.copy(alpha = 0.08f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -189,20 +208,20 @@ fun MinimalistPlayerLayout(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = vm.player::toggleShuffle) {
+                    IconButton(onClick = vm.player::toggleShuffle, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.Shuffle,
                             contentDescription = "Shuffle",
-                            tint = if (s.shuffle) Pulse.Cyan else Pulse.TextMuted,
+                            tint = if (s.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }
 
-                    IconButton(onClick = vm.player::previous) {
+                    IconButton(onClick = vm.player::previous, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.SkipPrevious,
                             contentDescription = "Previous",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -211,8 +230,8 @@ fun MinimalistPlayerLayout(
                         onClick = vm.player::togglePlay,
                         modifier = Modifier.size(60.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Pulse.Cyan,
-                            contentColor = Color.Black
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
                         AnimatedContent(
@@ -228,20 +247,20 @@ fun MinimalistPlayerLayout(
                         }
                     }
 
-                    IconButton(onClick = vm.player::next) {
+                    IconButton(onClick = vm.player::next, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.SkipNext,
                             contentDescription = "Next",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(28.dp)
                         )
                     }
 
-                    IconButton(onClick = vm.player::cycleRepeat) {
+                    IconButton(onClick = vm.player::cycleRepeat, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = if (s.repeat == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                             contentDescription = "Repeat",
-                            tint = if (s.repeat != Player.REPEAT_MODE_OFF) Pulse.Cyan else Pulse.TextMuted,
+                            tint = if (s.repeat != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -260,14 +279,14 @@ fun MinimalistPlayerLayout(
                     on = fav,
                     onToggle = { vm.toggleFavoriteCurrent() }
                 )
-                IconButton(onClick = { vm.openSleepSheet() }) {
-                    Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
+                IconButton(onClick = { vm.openSleepSheet() }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = MaterialTheme.colorScheme.onSurface)
                 }
-                IconButton(onClick = { vm.openQueue() }) {
-                    Icon(Icons.Rounded.QueueMusic, "Queue", tint = Color.White)
+                IconButton(onClick = { vm.openQueue() }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Rounded.QueueMusic, "Queue", tint = MaterialTheme.colorScheme.onSurface)
                 }
-                IconButton(onClick = { vm.go(Screen.Equalizer) }) {
-                    Icon(Icons.Rounded.Equalizer, "Equalizer", tint = Color.White)
+                IconButton(onClick = { vm.go(Screen.Equalizer) }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Rounded.Equalizer, "Equalizer", tint = MaterialTheme.colorScheme.onSurface)
                 }
             }
         }

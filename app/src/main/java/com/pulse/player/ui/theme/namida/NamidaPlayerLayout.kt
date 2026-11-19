@@ -8,17 +8,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +34,7 @@ import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
@@ -61,10 +61,13 @@ import androidx.media3.common.Player
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.components.AudioSignalPathBadge
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.components.WaveformSeekBar
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.screens.Screen
+import com.pulse.player.ui.theme.LocalDarkTheme
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
 
 /**
@@ -87,27 +90,30 @@ fun NamidaPlayerLayout(
 
     val cfg = LocalConfiguration.current
     val isWide = cfg.screenWidthDp >= 600
+    val isDark = LocalDarkTheme.current
 
-    val amberColor = Color(0xFFF1D6B6)
-    val obsidianDark = Color(0xFF1E1A17)
+    val accentColor = if (isDark) Color(0xFFF1D6B6) else Color(0xFF5D4028)
+    val onAccentColor = if (isDark) Color(0xFF1E1A17) else Color(0xFFFDFBF8)
+    val bgColors = if (isDark) {
+        listOf(Color(0xFF382F26), Color(0xFF1E1A17), Color(0xFF0F0D0B))
+    } else {
+        listOf(Color(0xFFF9F3EA), Color(0xFFF0E6D8), Color(0xFFE7DAC8))
+    }
+
+    val abStartFrac = s.abLoopStartMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val abEndFrac = s.abLoopEndMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val audioEffectsActive = s.speed != 1f || s.pitchSemitones != 0f || s.abLoopStartMs != null || s.abLoopEndMs != null
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF382F26),
-                        obsidianDark,
-                        Color(0xFF0F0D0B)
-                    )
-                )
-            )
+            .background(Brush.verticalGradient(bgColors))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 8.dp)
         ) {
             // Top Bar
@@ -116,17 +122,17 @@ fun NamidaPlayerLayout(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Rounded.KeyboardArrowDown, "Back", tint = amberColor)
+                    Icon(Icons.Rounded.KeyboardArrowDown, "Back", tint = accentColor)
                 }
                 Text(
                     text = "Namida Waveform",
                     modifier = Modifier.weight(1f),
-                    color = amberColor.copy(alpha = 0.85f),
+                    color = accentColor.copy(alpha = 0.85f),
                     style = MaterialTheme.typography.titleSmall,
                     textAlign = TextAlign.Center
                 )
                 IconButton(onClick = vm::openTrackOptions, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Rounded.MoreVert, "More", tint = amberColor)
+                    Icon(Icons.Rounded.MoreVert, "More", tint = accentColor)
                 }
             }
 
@@ -148,7 +154,7 @@ fun NamidaPlayerLayout(
                                 .aspectRatio(1f)
                                 .shadow(24.dp, RoundedCornerShape(28.dp)),
                             shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(0.06f))
+                            colors = CardDefaults.cardColors(containerColor = accentColor.copy(0.08f))
                         ) {
                             Artwork(uri = s.artworkUri, size = 320.dp, radius = 28.dp, px = 512)
                         }
@@ -159,7 +165,15 @@ fun NamidaPlayerLayout(
                         modifier = Modifier.weight(0.55f).fillMaxHeight(),
                         verticalArrangement = Arrangement.Center
                     ) {
-                        TrackHeader(s, currentTrack, fav, amberColor) {
+                        s.trackError?.let { err ->
+                            PlaybackErrorBanner(
+                                error = err,
+                                onRetry = vm.player::retry,
+                                onSkip = vm.player::skip,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                        }
+                        TrackHeader(s, currentTrack, fav, accentColor) {
                             s.mediaId?.let { vm.toggleFavorite(it) }
                         }
                         Spacer(Modifier.height(24.dp))
@@ -171,12 +185,22 @@ fun NamidaPlayerLayout(
                             enabled = canSeek,
                             isPlaying = s.isPlaying,
                             seedKey = s.mediaId ?: "default",
-                            activeColor = amberColor,
-                            inactiveColor = amberColor.copy(alpha = 0.25f)
+                            activeColor = accentColor,
+                            inactiveColor = accentColor.copy(alpha = 0.25f),
+                            abStartFraction = abStartFrac,
+                            abEndFraction = abEndFrac
                         )
-                        DurationRow(pos, s.durationMs, amberColor)
+                        DurationRow(pos, s.durationMs, accentColor)
                         Spacer(Modifier.height(24.dp))
-                        PlaybackControls(s, vm, amberColor)
+                        PlaybackControls(s, vm, accentColor, onAccentColor)
+                        Spacer(Modifier.height(16.dp))
+                        NamidaActionPills(
+                            accentColor = accentColor,
+                            audioEffectsActive = audioEffectsActive,
+                            onQueue = vm::openQueue,
+                            onAudioControls = vm::openAudioControls,
+                            onEqualizer = { vm.go(Screen.Equalizer) }
+                        )
                     }
                 }
             } else {
@@ -189,7 +213,7 @@ fun NamidaPlayerLayout(
                         .align(Alignment.CenterHorizontally)
                         .shadow(20.dp, RoundedCornerShape(24.dp)),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(0.06f))
+                    colors = CardDefaults.cardColors(containerColor = accentColor.copy(0.08f))
                 ) {
                     Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Artwork(uri = s.artworkUri, size = 300.dp, radius = 24.dp, px = 512)
@@ -198,13 +222,22 @@ fun NamidaPlayerLayout(
 
                 Spacer(Modifier.height(24.dp))
 
-                TrackHeader(s, currentTrack, fav, amberColor) {
+                TrackHeader(s, currentTrack, fav, accentColor) {
                     s.mediaId?.let { vm.toggleFavorite(it) }
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                // Interactive Audio Waveform Seekbar from Namida
+                s.trackError?.let { err ->
+                    PlaybackErrorBanner(
+                        error = err,
+                        onRetry = vm.player::retry,
+                        onSkip = vm.player::skip,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
+                // Interactive Audio Waveform Seekbar
                 WaveformSeekBar(
                     value = frac,
                     onValueChange = { targetFrac ->
@@ -213,51 +246,85 @@ fun NamidaPlayerLayout(
                     enabled = canSeek,
                     isPlaying = s.isPlaying,
                     seedKey = s.mediaId ?: "default",
-                    activeColor = amberColor,
-                    inactiveColor = amberColor.copy(alpha = 0.25f)
+                    activeColor = accentColor,
+                    inactiveColor = accentColor.copy(alpha = 0.25f),
+                    abStartFraction = abStartFrac,
+                    abEndFraction = abEndFrac
                 )
 
-                DurationRow(pos, s.durationMs, amberColor)
+                DurationRow(pos, s.durationMs, accentColor)
 
                 Spacer(Modifier.height(16.dp))
 
-                PlaybackControls(s, vm, amberColor)
+                PlaybackControls(s, vm, accentColor, onAccentColor)
 
                 Spacer(Modifier.weight(1f))
 
-                // Bottom Action Bar: Queue + Equalizer
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(amberColor.copy(alpha = 0.12f))
-                            .clickable { vm.openQueue() }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.QueueMusic, null, tint = amberColor, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Queue", color = amberColor, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+                NamidaActionPills(
+                    accentColor = accentColor,
+                    audioEffectsActive = audioEffectsActive,
+                    onQueue = vm::openQueue,
+                    onAudioControls = vm::openAudioControls,
+                    onEqualizer = { vm.go(Screen.Equalizer) },
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+        }
+    }
+}
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(amberColor.copy(alpha = 0.12f))
-                            .clickable { vm.go(Screen.Equalizer) }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.Equalizer, null, tint = amberColor, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Sound FX", color = amberColor, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
+@Composable
+private fun NamidaActionPills(
+    accentColor: Color,
+    audioEffectsActive: Boolean,
+    onQueue: () -> Unit,
+    onAudioControls: () -> Unit,
+    onEqualizer: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(accentColor.copy(alpha = 0.14f))
+                .clickable(onClick = onQueue)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.QueueMusic, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Queue", color = accentColor, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (audioEffectsActive) Pulse.Orange.copy(alpha = 0.22f) else accentColor.copy(alpha = 0.14f))
+                .clickable(onClick = onAudioControls)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Speed, null, tint = if (audioEffectsActive) Pulse.Orange else accentColor, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Speed / A-B", color = if (audioEffectsActive) Pulse.Orange else accentColor, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(accentColor.copy(alpha = 0.14f))
+                .clickable(onClick = onEqualizer)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Equalizer, null, tint = accentColor, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Sound FX", color = accentColor, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -288,7 +355,7 @@ private fun TrackHeader(
                 Text(
                     text = s.artist.ifBlank { "Unknown Artist" },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = accentColor.copy(alpha = 0.7f),
+                    color = accentColor.copy(alpha = 0.72f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -296,7 +363,7 @@ private fun TrackHeader(
                 AudioSignalPathBadge(track)
             }
         }
-        IconButton(onClick = onToggleFav) {
+        IconButton(onClick = onToggleFav, modifier = Modifier.size(48.dp)) {
             Icon(
                 imageVector = if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                 contentDescription = "Favorite",
@@ -314,13 +381,13 @@ private fun DurationRow(pos: Long, dur: Long, accentColor: Color) {
     ) {
         Text(
             text = formatTime(pos),
-            style = MaterialTheme.typography.labelSmall,
-            color = accentColor.copy(alpha = 0.7f)
+            style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+            color = accentColor.copy(alpha = 0.75f)
         )
         Text(
             text = if (dur > 0) formatTime(dur) else "--:--",
-            style = MaterialTheme.typography.labelSmall,
-            color = accentColor.copy(alpha = 0.7f)
+            style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+            color = accentColor.copy(alpha = 0.75f)
         )
     }
 }
@@ -329,14 +396,15 @@ private fun DurationRow(pos: Long, dur: Long, accentColor: Color) {
 private fun PlaybackControls(
     s: PlaybackUiState,
     vm: MainViewModel,
-    accentColor: Color
+    accentColor: Color,
+    onAccentColor: Color
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = vm::toggleShuffle) {
+        IconButton(onClick = vm::toggleShuffle, modifier = Modifier.size(48.dp)) {
             Icon(
                 Icons.Rounded.Shuffle,
                 "Shuffle",
@@ -352,7 +420,7 @@ private fun PlaybackControls(
             modifier = Modifier.size(72.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = accentColor,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor = onAccentColor
             ),
             shape = CircleShape
         ) {
@@ -366,7 +434,7 @@ private fun PlaybackControls(
         IconButton(onClick = vm.player::next, modifier = Modifier.size(52.dp)) {
             Icon(Icons.Rounded.SkipNext, "Next", tint = accentColor, modifier = Modifier.size(34.dp))
         }
-        IconButton(onClick = vm::cycleRepeat) {
+        IconButton(onClick = vm::cycleRepeat, modifier = Modifier.size(48.dp)) {
             Icon(
                 if (s.repeat == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                 "Repeat",

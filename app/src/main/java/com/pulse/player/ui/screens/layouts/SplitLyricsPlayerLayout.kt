@@ -51,10 +51,9 @@ import androidx.media3.common.Player
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.components.HeartButton
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.screens.LyricsView
-import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.screens.SeekBar
-import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
 
 @Composable
@@ -66,6 +65,9 @@ fun SplitLyricsPlayerLayout(
     modifier: Modifier = Modifier
 ) {
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+    val seekStyle by vm.seekStyle.collectAsStateWithLifecycle()
+    val abStartFrac = s.abLoopStartMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val abEndFrac = s.abLoopEndMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -88,6 +90,15 @@ fun SplitLyricsPlayerLayout(
 
         Spacer(Modifier.height(8.dp))
 
+        s.trackError?.let { err ->
+            PlaybackErrorBanner(
+                error = err,
+                onRetry = vm.player::retry,
+                onSkip = vm.player::skip,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
         // Lower Half: Persistent Track Info & Compact Console
         Surface(
             modifier = Modifier
@@ -99,9 +110,9 @@ fun SplitLyricsPlayerLayout(
                     )
                 },
             shape = RoundedCornerShape(24.dp),
-            color = Color.Black.copy(alpha = 0.45f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-            tonalElevation = 6.dp
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+            tonalElevation = 2.dp
         ) {
             Column(
                 modifier = Modifier
@@ -126,14 +137,14 @@ fun SplitLyricsPlayerLayout(
                             text = s.title.ifBlank { "No track selected" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = s.artist.ifBlank { "Unknown artist" },
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -149,6 +160,12 @@ fun SplitLyricsPlayerLayout(
                 SeekBar(
                     position = vm.player.position,
                     duration = s.durationMs,
+                    isPlaying = s.isPlaying,
+                    trackKey = s.mediaId ?: "default",
+                    seekStyle = seekStyle,
+                    onSelectStyle = vm::setSeekStyle,
+                    abStartFraction = abStartFrac,
+                    abEndFraction = abEndFrac,
                     onSeek = vm.player::seekTo
                 )
 
@@ -160,19 +177,19 @@ fun SplitLyricsPlayerLayout(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = vm.player::toggleShuffle) {
+                    IconButton(onClick = vm.player::toggleShuffle, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.Shuffle,
                             contentDescription = "Shuffle",
-                            tint = if (s.shuffle) Pulse.Cyan else Pulse.TextMuted,
+                            tint = if (s.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                    IconButton(onClick = vm.player::previous) {
+                    IconButton(onClick = vm.player::previous, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.SkipPrevious,
                             contentDescription = "Previous",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(30.dp)
                         )
                     }
@@ -180,8 +197,8 @@ fun SplitLyricsPlayerLayout(
                         onClick = vm.player::togglePlay,
                         modifier = Modifier.size(56.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
                         AnimatedContent(
@@ -196,19 +213,19 @@ fun SplitLyricsPlayerLayout(
                             )
                         }
                     }
-                    IconButton(onClick = vm.player::next) {
+                    IconButton(onClick = vm.player::next, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = Icons.Rounded.SkipNext,
                             contentDescription = "Next",
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(30.dp)
                         )
                     }
-                    IconButton(onClick = vm.player::cycleRepeat) {
+                    IconButton(onClick = vm.player::cycleRepeat, modifier = Modifier.size(48.dp)) {
                         Icon(
                             imageVector = if (s.repeat == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                             contentDescription = "Repeat",
-                            tint = if (s.repeat != Player.REPEAT_MODE_OFF) Pulse.Cyan else Pulse.TextMuted,
+                            tint = if (s.repeat != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }

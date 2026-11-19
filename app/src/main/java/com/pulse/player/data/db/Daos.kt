@@ -59,6 +59,12 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE available = 1")
     suspend fun availableOnce(): List<TrackEntity>
 
+    @Query("SELECT id, sizeBytes, dateModifiedMs FROM tracks WHERE sourceType = 'MEDIASTORE'")
+    suspend fun mediaStoreScanMeta(): List<TrackScanMeta>
+
+    @Query("SELECT id, sizeBytes, dateModifiedMs FROM tracks WHERE sourceType = 'SAF' AND folderUri = :treeUri")
+    suspend fun safScanMeta(treeUri: String): List<TrackScanMeta>
+
     @Upsert
     suspend fun upsertAll(items: List<TrackEntity>)
 
@@ -190,6 +196,37 @@ interface TrackDao {
         normArtist: String,
         normAlbum: String
     )
+
+    @Query("UPDATE tracks SET artist = :artist, normArtist = :normArtist WHERE id IN (:ids)")
+    suspend fun updateArtistBatch(ids: List<String>, artist: String, normArtist: String)
+
+    @Query("UPDATE tracks SET album = :album, normAlbum = :normAlbum WHERE id IN (:ids)")
+    suspend fun updateAlbumBatch(ids: List<String>, album: String, normAlbum: String)
+
+    @Query("UPDATE tracks SET genre = :genre WHERE id IN (:ids)")
+    suspend fun updateGenreBatch(ids: List<String>, genre: String)
+
+    @Query("UPDATE tracks SET year = :year WHERE id IN (:ids)")
+    suspend fun updateYearBatch(ids: List<String>, year: Int)
+
+    @Transaction
+    suspend fun updateTagsBatch(
+        ids: List<String>,
+        artist: String?,
+        normArtist: String?,
+        album: String?,
+        normAlbum: String?,
+        genre: String?,
+        year: Int?
+    ) {
+        if (ids.isEmpty()) return
+        ids.chunked(400).forEach { chunk ->
+            if (artist != null && normArtist != null) updateArtistBatch(chunk, artist, normArtist)
+            if (album != null && normAlbum != null) updateAlbumBatch(chunk, album, normAlbum)
+            if (genre != null) updateGenreBatch(chunk, genre)
+            if (year != null) updateYearBatch(chunk, year)
+        }
+    }
 }
 
 @Dao
@@ -264,6 +301,9 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists ORDER BY createdAtMs")
     suspend fun allPlaylistsOnce(): List<PlaylistEntity>
 
+    @Query("SELECT * FROM playlists WHERE id = :id LIMIT 1")
+    fun observeById(id: Long): Flow<PlaylistEntity?>
+
     @Query("SELECT COUNT(*) FROM playlist_tracks WHERE playlistId = :id")
     fun observeCount(id: Long): Flow<Int>
 
@@ -322,6 +362,22 @@ interface PlaylistDao {
 
     @Query("DELETE FROM playlist_tracks WHERE trackId IN (SELECT id FROM tracks WHERE available = 0)")
     suspend fun purgeMissingFromPlaylists(): Int
+
+    @Transaction
+    suspend fun reorderTracks(playlistId: Long, orderedTrackIds: List<String>) {
+        val existing = tracksForPlaylist(playlistId).associateBy { it.trackId }
+        clearTracks(playlistId)
+        val now = System.currentTimeMillis()
+        val updated = orderedTrackIds.distinct().mapIndexed { index, trackId ->
+            PlaylistTrackEntity(
+                playlistId = playlistId,
+                trackId = trackId,
+                position = index,
+                addedAtMs = existing[trackId]?.addedAtMs ?: now
+            )
+        }
+        if (updated.isNotEmpty()) insertPlaylistTracks(updated)
+    }
 
     @Transaction
     suspend fun delete(id: Long) {

@@ -31,7 +31,7 @@ import java.io.File
         CacheEntryEntity::class,
         WaveformEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class PulseDb : RoomDatabase() {
@@ -251,6 +251,15 @@ abstract class PulseDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_tracks_sourceType_available_sizeBytes_normTitle " +
+                    "ON tracks(sourceType, available, sizeBytes, normTitle)"
+                )
+            }
+        }
+
         fun backupDatabaseBeforeMigration(ctx: Context, oldVersion: Int) {
             try {
                 val dbFile = ctx.getDatabasePath("pulse.db")
@@ -262,7 +271,14 @@ abstract class PulseDb : RoomDatabase() {
                     val shm = File(dbFile.parentFile, "pulse.db-shm")
                     if (shm.exists()) shm.copyTo(File(dbFile.parentFile, "pulse.db-shm.bak-v$oldVersion"), overwrite = true)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                com.pulse.player.data.ErrorDispatcher.post(
+                    category = com.pulse.player.data.ErrorCategory.STORAGE,
+                    title = "Database migration backup skipped",
+                    message = e.message ?: "Unable to copy database backup prior to migration.",
+                    technicalDetails = e.stackTraceToString()
+                )
+            }
         }
     }
 }

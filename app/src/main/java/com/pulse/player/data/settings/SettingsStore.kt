@@ -3,6 +3,7 @@ package com.pulse.player.data.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -20,6 +21,20 @@ enum class ThemeMode { SYSTEM, DARK, AMOLED, LIGHT }
 
 /** Controls where the accent/seed color comes from. */
 enum class ColorSource { PULSE_PALETTE, MATERIAL_YOU, ARTWORK_DRIVEN, CUSTOM_SEED }
+
+/** Controls typography display & accent pairing across the app. */
+enum class FontStylePreset(val id: String, val label: String, val subtitle: String) {
+    MODERN("modern", "Modern Sans", "Geometric display headers with crisp UI sans"),
+    EDITORIAL("editorial", "Editorial Serif", "Classic serif titles paired with clean body text"),
+    TECHNICAL("technical", "Studio Mono", "Monospace accents with high-clarity sans")
+}
+
+/** Controls Now Playing progress seekbar visualization. */
+enum class SeekStylePreset(val id: String, val label: String) {
+    WAVEFORM("waveform", "Waveform"),
+    WAVY("wavy", "Wavy"),
+    LINEAR("classic", "Classic")
+}
 
 class SettingsStore(private val ctx: Context) {
     private object K {
@@ -59,14 +74,22 @@ class SettingsStore(private val ctx: Context) {
         val minFileSizeKb = intPreferencesKey("min_file_size_kb")         // 0 = no filter
         val crossfadeSecs = intPreferencesKey("crossfade_secs")            // 0..12 seconds
         val homeTabs = stringPreferencesKey("home_tabs_csv")
+        val fontStyle = stringPreferencesKey("font_style_preset")
+        val seekStyle = stringPreferencesKey("seek_style_preset")
+        val hiddenPlayerElements = stringSetPreferencesKey("hidden_player_elements")
+        val customButtonOrder = stringPreferencesKey("custom_button_order_csv")
+        val forYouOrder = stringPreferencesKey("for_you_order_csv")
+        val hiddenForYouSections = stringSetPreferencesKey("hidden_for_you_sections")
+        val sleepFadeSec = intPreferencesKey("sleep_fade_sec")
+        val splitPlayerUpperRatio = floatPreferencesKey("split_player_upper_ratio")
     }
 
     val themeMode: Flow<ThemeMode> = ctx.dataStore.data.map {
         runCatching { ThemeMode.valueOf(it[K.theme] ?: "DARK") }.getOrDefault(ThemeMode.DARK)
     }
 
-    val skinId: Flow<String> = ctx.dataStore.data.map { it[K.skin] ?: "plum" }
-    val playerThemeId: Flow<String> = ctx.dataStore.data.map { it[K.player] ?: "classic" }
+    val skinId: Flow<String> = ctx.dataStore.data.map { it[K.skin] ?: "studio_amber" }
+    val playerThemeId: Flow<String> = ctx.dataStore.data.map { it[K.player] ?: "atmospheric_queue" }
     val playerLayoutId: Flow<String> = ctx.dataStore.data.map { it[K.playerLayout] ?: "atmospheric_queue" }
     val wallpaperPath: Flow<String?> = ctx.dataStore.data.map { it[K.wallpaper] }
     val reducedMotion: Flow<Boolean> = ctx.dataStore.data.map { it[K.reduced] ?: false }
@@ -149,6 +172,17 @@ class SettingsStore(private val ctx: Context) {
         }
     }
 
+    suspend fun removeExcludedFolder(folder: String) {
+        ctx.dataStore.edit {
+            val cur = it[K.excluded] ?: emptySet()
+            it[K.excluded] = cur - folder
+        }
+    }
+
+    suspend fun clearExcludedFolders() {
+        ctx.dataStore.edit { it.remove(K.excluded) }
+    }
+
     suspend fun lastBackup(): String? = ctx.dataStore.data.first()[K.lastBackup]
     suspend fun setLastBackup(json: String) {
         ctx.dataStore.edit { it[K.lastBackup] = json }
@@ -212,6 +246,36 @@ class SettingsStore(private val ctx: Context) {
         val raw = it[K.homeTabs]?.split(",")?.map { s -> s.trim() }?.filter { s -> s.isNotBlank() }
         if (!raw.isNullOrEmpty()) raw else listOf("For you", "Songs", "Playlists", "Folders", "Albums", "Artists")
     }
+    val fontStyle: Flow<FontStylePreset> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.fontStyle]
+        FontStylePreset.entries.firstOrNull { it.id == raw } ?: FontStylePreset.MODERN
+    }
+    val seekStyle: Flow<SeekStylePreset> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.seekStyle]
+        SeekStylePreset.entries.firstOrNull { it.id == raw } ?: SeekStylePreset.WAVEFORM
+    }
+    val hiddenPlayerElements: Flow<Set<String>> = ctx.dataStore.data.map {
+        it[K.hiddenPlayerElements] ?: emptySet()
+    }
+    val customButtonOrder: Flow<List<String>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.customButtonOrder]?.split(",")?.map { s -> s.trim() }?.filter { s -> s.isNotBlank() }
+        if (!raw.isNullOrEmpty()) raw else listOf(
+            "Shuffle", "Previous", "Play/Pause", "Next", "Repeat", "Favorite", "Queue", "More"
+        )
+    }
+    val forYouSectionOrder: Flow<List<String>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.forYouOrder]?.split(",")?.map { s -> s.trim() }?.filter { s -> s.isNotBlank() }
+        if (!raw.isNullOrEmpty()) raw else listOf(
+            "resume", "actions", "widgets", "recent", "top_picks"
+        )
+    }
+    val hiddenForYouSections: Flow<Set<String>> = ctx.dataStore.data.map {
+        it[K.hiddenForYouSections] ?: emptySet()
+    }
+    val sleepFadeSec: Flow<Int> = ctx.dataStore.data.map { (it[K.sleepFadeSec] ?: 10).coerceIn(0, 30) }
+    val splitPlayerUpperRatio: Flow<Float> = ctx.dataStore.data.map {
+        (it[K.splitPlayerUpperRatio] ?: 0.40f).coerceIn(0.35f, 0.72f)
+    }
 
     suspend fun setColorSource(s: ColorSource) = ctx.dataStore.edit { it[K.colorSource] = s.name }
     suspend fun setSeedColor(argb: Int) = ctx.dataStore.edit { it[K.seedColor] = argb }
@@ -224,7 +288,32 @@ class SettingsStore(private val ctx: Context) {
     suspend fun setAlbumGridColumns(v: Int) = ctx.dataStore.edit { it[K.albumGridColumns] = v.coerceIn(2, 4) }
     suspend fun setMinFileSizeKb(v: Int) = ctx.dataStore.edit { it[K.minFileSizeKb] = v.coerceAtLeast(0) }
     suspend fun setCrossfadeSeconds(sec: Int) = ctx.dataStore.edit { it[K.crossfadeSecs] = sec.coerceIn(0, 12) }
+    suspend fun setSleepFadeSec(sec: Int) = ctx.dataStore.edit { it[K.sleepFadeSec] = sec.coerceIn(0, 30) }
+    suspend fun setSplitPlayerUpperRatio(ratio: Float) = ctx.dataStore.edit {
+        it[K.splitPlayerUpperRatio] = ratio.coerceIn(0.35f, 0.72f)
+    }
     suspend fun setHomeTabs(tabs: List<String>) = ctx.dataStore.edit { it[K.homeTabs] = tabs.joinToString(",") }
+    suspend fun setFontStyle(preset: FontStylePreset) = ctx.dataStore.edit { it[K.fontStyle] = preset.id }
+    suspend fun setSeekStyle(preset: SeekStylePreset) = ctx.dataStore.edit { it[K.seekStyle] = preset.id }
+    suspend fun setPlayerElementVisible(key: String, visible: Boolean) = ctx.dataStore.edit { prefs ->
+        val cur = prefs[K.hiddenPlayerElements] ?: emptySet()
+        prefs[K.hiddenPlayerElements] = if (visible) cur - key else cur + key
+    }
+    suspend fun clearHiddenPlayerElements() = ctx.dataStore.edit { it.remove(K.hiddenPlayerElements) }
+    suspend fun setCustomButtonOrder(order: List<String>) = ctx.dataStore.edit {
+        it[K.customButtonOrder] = order.joinToString(",")
+    }
+    suspend fun setForYouSectionOrder(order: List<String>) = ctx.dataStore.edit {
+        it[K.forYouOrder] = order.joinToString(",")
+    }
+    suspend fun setForYouSectionVisible(key: String, visible: Boolean) = ctx.dataStore.edit { prefs ->
+        val cur = prefs[K.hiddenForYouSections] ?: emptySet()
+        prefs[K.hiddenForYouSections] = if (visible) cur - key else cur + key
+    }
+    suspend fun resetForYouLayout() = ctx.dataStore.edit {
+        it.remove(K.forYouOrder)
+        it.remove(K.hiddenForYouSections)
+    }
 
     fun sortFor(screen: String, raw: Map<String, Any?>?): Pair<String, Int> {
         val o = raw?.get(screen) as? Map<*, *>

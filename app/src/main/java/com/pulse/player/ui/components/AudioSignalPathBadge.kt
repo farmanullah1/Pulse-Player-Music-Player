@@ -31,12 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pulse.player.playback.Track
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.TabularMono
 
 /**
  * Audio Signal Path & Quality Inspector adapted from Namida.
@@ -74,14 +73,13 @@ fun AudioSignalPathBadge(
             Icon(
                 imageVector = Icons.Rounded.Headphones,
                 contentDescription = null,
-                tint = Pulse.Cyan,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(12.dp)
             )
             Spacer(Modifier.width(4.dp))
             Text(
                 text = "$format · $sampleRate · $bitDepth",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.labelSmall.merge(TabularMono).copy(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 ),
@@ -95,7 +93,7 @@ fun AudioSignalPathBadge(
             onDismissRequest = { showDetails = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.GraphicEq, contentDescription = null, tint = Pulse.Cyan)
+                    Icon(Icons.Rounded.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
                     Text("Audio Signal Path", fontWeight = FontWeight.Bold)
                 }
@@ -104,13 +102,13 @@ fun AudioSignalPathBadge(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SignalPathStep("1. Source File", "$displayName (${format.uppercase()}, $sampleRate, $bitDepth)")
                     SignalPathStep("2. Decoder Engine", "Media3 ExoPlayer (Hardware Accelerated AudioTrack)")
-                    SignalPathStep("3. Sound Processing", if (eqActive) "Hardware Equalizer & Effects Active" else "Direct Passthrough (Bit-Perfect)")
-                    SignalPathStep("4. Audio Output Sink", "Android AudioHAL -> Connected Device (Direct PCM)")
+                    SignalPathStep("3. Sound Processing", if (eqActive) "Equalizer & Audio Effects Active" else "Direct Passthrough (Unaltered)")
+                    SignalPathStep("4. Audio Output Sink", "Android AudioHAL -> Connected Output")
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showDetails = false }) {
-                    Text("Close", color = Pulse.Cyan)
+                    Text("Close", color = MaterialTheme.colorScheme.primary)
                 }
             }
         )
@@ -120,8 +118,8 @@ fun AudioSignalPathBadge(
 @Composable
 private fun SignalPathStep(title: String, detail: String) {
     Column {
-        Text(title, style = MaterialTheme.typography.labelMedium, color = Pulse.Cyan, fontWeight = FontWeight.SemiBold)
-        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(0.75f))
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -2,6 +2,7 @@ package com.pulse.player.ui.components
 
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,25 +11,28 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.SdCard
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,13 +42,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -54,7 +61,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.AppError
 import com.pulse.player.data.ErrorCategory
 import com.pulse.player.data.scan.audioPermission
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.LocalPulseTokens
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,6 +77,13 @@ fun DiagnosticsDialog(
     val recentErrors by vm.recentErrors.collectAsStateWithLifecycle()
     val missingCount by vm.missingCount.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val tokens = LocalPulseTokens.current
+    var selectedCategory by remember { mutableStateOf<ErrorCategory?>(null) }
+
+    val filteredErrors = remember(recentErrors, selectedCategory) {
+        if (selectedCategory == null) recentErrors else recentErrors.filter { it.category == selectedCategory }
+    }
 
     val hasAudioPermission = ContextCompat.checkSelfPermission(
         ctx,
@@ -90,6 +105,7 @@ fun DiagnosticsDialog(
         ) {
             Column(
                 modifier = Modifier
+                    .navigationBarsPadding()
                     .padding(20.dp)
             ) {
                 // Header
@@ -103,13 +119,13 @@ fun DiagnosticsDialog(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Pulse.Cyan.copy(alpha = 0.2f)),
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Rounded.Build,
                                 contentDescription = null,
-                                tint = Pulse.Cyan,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -124,11 +140,11 @@ fun DiagnosticsDialog(
                             Text(
                                 "Hardware status & error events",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Pulse.TextMid
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Rounded.Close, "Close", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
@@ -148,7 +164,7 @@ fun DiagnosticsDialog(
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.GraphicEq, null, tint = Pulse.Cyan, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Rounded.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Audio Hardware & DSP", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 }
@@ -170,40 +186,66 @@ fun DiagnosticsDialog(
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.SdCard, null, tint = Pulse.Violet, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Rounded.SdCard, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Storage & Privacy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 }
 
                                 HardwareStatusRow("Audio Permission", if (hasAudioPermission) "Granted" else "Missing", isOk = hasAudioPermission)
                                 HardwareStatusRow("Missing Tracks", if (missingCount == 0) "0 (Clean)" else "$missingCount unreachable", isOk = missingCount == 0)
-                                HardwareStatusRow("Network Policy", "100% Offline (Zero permissions)", isOk = true)
+                                HardwareStatusRow("Network Policy", "100% Offline (Local library)", isOk = true)
                             }
                         }
                     }
 
                     // 3. Error Log
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Live Error Log (${recentErrors.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Live Error Log (${filteredErrors.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (recentErrors.isNotEmpty()) {
+                                    TextButton(onClick = vm::clearErrorLog) {
+                                        Text("Clear Log", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+                            }
                             if (recentErrors.isNotEmpty()) {
-                                TextButton(onClick = vm::clearErrorLog) {
-                                    Text("Clear Log", color = Pulse.Cyan, style = MaterialTheme.typography.labelMedium)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = selectedCategory == null,
+                                        onClick = { selectedCategory = null },
+                                        label = { Text("All (${recentErrors.size})") }
+                                    )
+                                    ErrorCategory.entries.forEach { cat ->
+                                        val count = recentErrors.count { it.category == cat }
+                                        if (count > 0) {
+                                            FilterChip(
+                                                selected = selectedCategory == cat,
+                                                onClick = { selectedCategory = if (selectedCategory == cat) null else cat },
+                                                label = { Text("${cat.name} ($count)") }
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    if (recentErrors.isEmpty()) {
+                    if (filteredErrors.isEmpty()) {
                         item {
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -215,17 +257,25 @@ fun DiagnosticsDialog(
                                         .padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Rounded.CheckCircle, null, tint = Pulse.Mint, modifier = Modifier.size(24.dp))
+                                    Icon(Icons.Rounded.CheckCircle, null, tint = tokens.success, modifier = Modifier.size(24.dp))
                                     Spacer(Modifier.width(12.dp))
                                     Column {
-                                        Text("No errors recorded", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("All audio pipelines and database queries are healthy.", style = MaterialTheme.typography.bodySmall, color = Pulse.TextMid)
+                                        Text(
+                                            if (recentErrors.isEmpty()) "No errors recorded" else "No errors in this category",
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            if (recentErrors.isEmpty()) "All audio pipelines and database queries are healthy." else "Select All to inspect other recorded events.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
                             }
                         }
                     } else {
-                        items(recentErrors, key = { it.id }) { err ->
+                        items(filteredErrors, key = { it.id }) { err ->
                             ErrorItemCard(err)
                         }
                     }
@@ -239,6 +289,29 @@ fun DiagnosticsDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (recentErrors.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = {
+                                val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                                val report = buildString {
+                                    appendLine("Pulse Player Diagnostics Report")
+                                    appendLine("Audio Permission: $hasAudioPermission | Missing Tracks: $missingCount | Session: ${fxStatus.sessionId}")
+                                    appendLine("---")
+                                    filteredErrors.forEach { e ->
+                                        appendLine("[${fmt.format(Date(e.timestampMs))}] [${e.category.name}] ${e.title}: ${e.message}")
+                                        e.technicalDetails?.let { appendLine("  Details: ${it.take(300)}") }
+                                    }
+                                }
+                                clipboard.setText(AnnotatedString(report))
+                                vm.snackbarMessage.value = "Diagnostics report copied"
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Rounded.ContentCopy, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Copy")
+                        }
+                    }
                     if (missingCount > 0) {
                         OutlinedButton(
                             onClick = { vm.cleanMissingTracks() },
@@ -252,9 +325,12 @@ fun DiagnosticsDialog(
                     Button(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
                     ) {
-                        Text("Close", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text("Close", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -264,25 +340,26 @@ fun DiagnosticsDialog(
 
 @Composable
 private fun HardwareStatusRow(label: String, value: String, isOk: Boolean) {
+    val tokens = LocalPulseTokens.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Pulse.TextMid)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(if (isOk) Pulse.Mint else Pulse.Coral)
+                    .background(if (isOk) tokens.success else tokens.error)
             )
             Spacer(Modifier.width(6.dp))
             Text(
                 value,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.merge(TabularMono),
                 fontWeight = FontWeight.SemiBold,
-                color = if (isOk) MaterialTheme.colorScheme.onSurface else Pulse.Coral
+                color = if (isOk) MaterialTheme.colorScheme.onSurface else tokens.error
             )
         }
     }
@@ -290,13 +367,15 @@ private fun HardwareStatusRow(label: String, value: String, isOk: Boolean) {
 
 @Composable
 private fun ErrorItemCard(err: AppError) {
+    val tokens = LocalPulseTokens.current
     val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(err.timestampMs))
     val categoryColor = when (err.category) {
-        ErrorCategory.PLAYBACK -> Pulse.Coral
-        ErrorCategory.SCAN -> Pulse.Sun
-        ErrorCategory.BACKUP -> Pulse.Cyan
-        ErrorCategory.AUDIO_FX -> Pulse.Purple
-        ErrorCategory.STORAGE -> Pulse.Orange
+        ErrorCategory.PLAYBACK -> tokens.error
+        ErrorCategory.SCAN -> tokens.warning
+        ErrorCategory.BACKUP -> MaterialTheme.colorScheme.primary
+        ErrorCategory.AUDIO_FX -> MaterialTheme.colorScheme.secondary
+        ErrorCategory.STORAGE -> tokens.warning
+        ErrorCategory.NETWORK -> MaterialTheme.colorScheme.tertiary
     }
 
     Card(
@@ -313,7 +392,7 @@ private fun ErrorItemCard(err: AppError) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(categoryColor.copy(alpha = 0.2f))
+                        .background(categoryColor.copy(alpha = 0.16f))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
@@ -323,7 +402,11 @@ private fun ErrorItemCard(err: AppError) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text(timeStr, style = MaterialTheme.typography.labelSmall, color = Pulse.TextMid)
+                Text(
+                    timeStr,
+                    style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             Text(
@@ -336,12 +419,12 @@ private fun ErrorItemCard(err: AppError) {
             Text(
                 err.message,
                 style = MaterialTheme.typography.bodySmall,
-                color = Pulse.TextMid
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (!err.technicalDetails.isNullOrBlank()) {
                 Surface(
-                    color = Color.Black.copy(alpha = 0.4f),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -349,8 +432,8 @@ private fun ErrorItemCard(err: AppError) {
                 ) {
                     Text(
                         err.technicalDetails,
-                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                        color = Pulse.TextMid,
+                        style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(6.dp)
                     )
                 }

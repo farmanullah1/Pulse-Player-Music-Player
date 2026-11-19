@@ -45,7 +45,8 @@ open class PulseApp : Application() {
             .addMigrations(
                 PulseDb.MIGRATION_1_2,
                 PulseDb.MIGRATION_2_3,
-                PulseDb.MIGRATION_3_4
+                PulseDb.MIGRATION_3_4,
+                PulseDb.MIGRATION_4_5
             )
             .build()
         settings = SettingsStore(this)

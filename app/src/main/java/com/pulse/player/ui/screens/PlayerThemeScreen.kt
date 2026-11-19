@@ -1,27 +1,24 @@
 package com.pulse.player.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.WorkspacePremium
 import androidx.compose.material3.Button
@@ -41,7 +38,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.PulseTopBar
+import com.pulse.player.ui.theme.LocalDarkTheme
 import com.pulse.player.ui.themes.PlayerThemes
 import com.pulse.player.ui.themes.ThemePreviewCard
 import com.pulse.player.ui.viewmodel.MainViewModel
@@ -53,28 +52,25 @@ fun PlayerThemeScreen(vm: MainViewModel) {
     val initialPage = PlayerThemes.indexOfFirst { it.id == used }.coerceAtLeast(0)
     val pager = rememberPagerState(initialPage = initialPage) { PlayerThemes.size }
     val cur = PlayerThemes[pager.currentPage]
-    val bgTop by animateColorAsState(cur.colors.first(), tween(500), label = "bg")
+    val isDark = LocalDarkTheme.current
+    val bgTop by animateColorAsState(
+        if (isDark) cur.colors.first().copy(alpha = 0.85f) else cur.colors.first().copy(alpha = 0.22f),
+        tween(500),
+        label = "bg"
+    )
+    val bgBottom = if (isDark) Color.Black else MaterialTheme.colorScheme.background
+
+    BackHandler { vm.back() }
+
+    val bottomInset = LocalBottomOverlayPadding.current
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(bgTop.copy(alpha = 0.85f), Color.Black)))
+            .background(Brush.verticalGradient(listOf(bgTop, bgBottom)))
     ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-        ) {
-            Row(
-                Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = vm::back) {
-                    Icon(Icons.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface)
-                }
-                Spacer(Modifier.width(8.dp))
-                Text("Player theme", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            }
+        Column(Modifier.fillMaxSize()) {
+            PulseTopBar(title = "Player Theme", onBack = vm::back)
 
             HorizontalPager(
                 state = pager,
@@ -100,25 +96,26 @@ fun PlayerThemeScreen(vm: MainViewModel) {
                 onClick = { vm.applyPlayerTheme(cur.id) },
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .padding(24.dp)
+                    .navigationBarsPadding()
+                    .padding(top = 16.dp, bottom = bottomInset.coerceAtLeast(16.dp))
                     .height(52.dp)
                     .widthIn(min = 220.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isUsing) MaterialTheme.colorScheme.onSurface.copy(0.18f) else Pulse.Orange,
-                    contentColor = Color.White
+                    containerColor = if (isUsing) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                    contentColor = if (isUsing) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 if (isUsing) {
                     Icon(Icons.Rounded.Check, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("USING", fontWeight = FontWeight.Bold)
+                    Text("Active Theme", fontWeight = FontWeight.Bold)
                 } else {
                     if (cur.special) {
                         Icon(Icons.Rounded.WorkspacePremium, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                     }
-                    Text("APPLY", fontWeight = FontWeight.Bold)
+                    Text("Apply Theme", fontWeight = FontWeight.Bold)
                 }
             }
         }

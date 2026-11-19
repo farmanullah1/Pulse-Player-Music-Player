@@ -1,7 +1,6 @@
 package com.pulse.player.ui.components
 
 import android.graphics.Bitmap
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -14,6 +13,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,8 +36,12 @@ fun Artwork(
     px: Int = 256
 ) {
     val ctx = LocalContext.current
-    val bmp by produceState<Bitmap?>(null, uri) {
-        value = uri?.let { ArtworkLoader.load(ctx, it, px) }
+    val cached = remember(uri, px) { uri?.let { ArtworkLoader.getCached(it, px) } }
+    val knownMissing = remember(uri) { uri == null || ArtworkLoader.hasNoArtwork(uri) }
+    val bmp by produceState<Bitmap?>(cached, uri, px) {
+        if (cached == null && !knownMissing && uri != null) {
+            value = ArtworkLoader.load(ctx, uri, px)
+        }
     }
     Box(
         modifier = modifier
@@ -45,28 +49,27 @@ fun Artwork(
             .clip(RoundedCornerShape(radius)),
         contentAlignment = Alignment.Center
     ) {
-        Crossfade(bmp, label = "art") { b ->
-            if (b != null) {
-                Image(
-                    bitmap = b.asImageBitmap(),
+        val b = bmp
+        if (b != null) {
+            Image(
+                bitmap = b.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.linearGradient(listOf(Pulse.Violet, Pulse.Magenta))),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.MusicNote,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    tint = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.size(size * 0.45f)
                 )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Brush.linearGradient(listOf(Pulse.Violet, Pulse.Magenta))),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.MusicNote,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.size(size * 0.45f)
-                    )
-                }
             }
         }
     }

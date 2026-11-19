@@ -28,7 +28,8 @@ object IdentityModel {
         Index("dateAddedMs"),
         Index("sourceType", "volumeId"),
         Index("genre"),
-        Index("language")
+        Index("language"),
+        Index("sourceType", "available", "sizeBytes", "normTitle")
     ]
 )
 data class TrackEntity(
@@ -175,6 +176,12 @@ data class DupGroup(
     val normTitle: String,
     val normArtist: String,
     val c: Int
+)
+
+data class TrackScanMeta(
+    val id: String,
+    val sizeBytes: Long,
+    val dateModifiedMs: Long
 )
 
 // ─── Schema v4 new tables ────────────────────────────────────────────────────

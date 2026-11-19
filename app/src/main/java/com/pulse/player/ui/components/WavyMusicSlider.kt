@@ -56,7 +56,9 @@ fun WavyMusicSlider(
     thumbColor: Color = MaterialTheme.colorScheme.primary,
     waveAmplitude: Dp = 4.dp,
     waveLength: Dp = 72.dp,
-    trackHeight: Dp = 4.dp
+    trackHeight: Dp = 4.dp,
+    abStartFraction: Float? = null,
+    abEndFraction: Float? = null
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
@@ -191,6 +193,41 @@ fun WavyMusicSlider(
                         cap = StrokeCap.Round
                     )
                 }
+            }
+
+            // A-B loop band & markers
+            val aFrac = abStartFraction?.coerceIn(0f, 1f)
+            val bFrac = abEndFraction?.coerceIn(0f, 1f)
+            if (aFrac != null && bFrac != null && bFrac > aFrac) {
+                val ax = width * aFrac
+                val bx = width * bFrac
+                drawLine(
+                    color = activeTrackColor.copy(alpha = 0.45f),
+                    start = Offset(ax, centerY),
+                    end = Offset(bx, centerY),
+                    strokeWidth = strokeWidthPx * 2f,
+                    cap = StrokeCap.Round
+                )
+            }
+            aFrac?.let { f ->
+                val ax = width * f
+                drawLine(
+                    color = activeTrackColor.copy(alpha = 0.9f),
+                    start = Offset(ax, centerY - 8.dp.toPx()),
+                    end = Offset(ax, centerY + 8.dp.toPx()),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+            bFrac?.let { f ->
+                val bx = width * f
+                drawLine(
+                    color = activeTrackColor.copy(alpha = 0.9f),
+                    start = Offset(bx, centerY - 8.dp.toPx()),
+                    end = Offset(bx, centerY + 8.dp.toPx()),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
             }
 
             // 3. Thumb (morphs from circle radius 7dp to vertical pill 20dp high, 4dp wide)

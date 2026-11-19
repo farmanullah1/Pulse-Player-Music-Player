@@ -135,7 +135,7 @@ private fun PlayPauseButton(
         Icon(
             imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
             contentDescription = null,
-            tint = Color.Black,
+            tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(size * 0.55f)
         )
     }

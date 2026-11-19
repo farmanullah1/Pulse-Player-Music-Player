@@ -10,6 +10,9 @@ import android.os.Build
 import android.util.LruCache
 import android.util.Size
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -17,6 +20,8 @@ data class ArtRef(val stableKey: String, val uri: String, val modifiedMs: Long)
 
 object ArtworkLoader {
     val sizes = intArrayOf(96, 192, 384, 768)
+    private val SAFE_KEY_REGEX = Regex("[^a-zA-Z0-9._-]")
+    private val decodeSemaphore = Semaphore(4)
 
     fun bucket(px: Int): Int = sizes.firstOrNull { it >= px } ?: sizes.last()
 
@@ -26,28 +31,42 @@ object ArtworkLoader {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
-    private val noArtworkCache = LruCache<String, Boolean>(2000)
+    private val noArtworkCache = LruCache<String, Boolean>(16_384)
 
     fun key(r: ArtRef, px: Int): String = "${r.stableKey}|${r.modifiedMs}|${bucket(px)}"
+
+    private fun noArtKey(r: ArtRef): String = "${r.stableKey}|${r.modifiedMs}"
+
+    fun getCached(r: ArtRef, px: Int): Bitmap? = cache.get(key(r, px))
+
+    fun getCached(uri: String, px: Int): Bitmap? = getCached(ArtRef(uri, uri, 0L), px)
+
+    fun hasNoArtwork(r: ArtRef): Boolean = noArtworkCache.get(noArtKey(r)) == true
+
+    fun hasNoArtwork(uri: String): Boolean = hasNoArtwork(ArtRef(uri, uri, 0L))
 
     suspend fun load(ctx: Context, r: ArtRef, px: Int): Bitmap? = withContext(Dispatchers.IO) {
         val b = bucket(px)
         val k = key(r, px)
+        val nk = noArtKey(r)
         cache.get(k)?.let { return@withContext it }
-        if (noArtworkCache.get(k) == true) return@withContext null
+        if (noArtworkCache.get(nk) == true) return@withContext null
 
+        ensureActive()
         val parsed = runCatching { Uri.parse(r.uri) }.getOrNull()
         if (parsed == null) {
-            noArtworkCache.put(k, true)
+            noArtworkCache.put(nk, true)
             return@withContext null
         }
 
+        val preferredConfig = if (b <= 384) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+
         // Check user-attached custom cover art in app filesDir
-        val safeKey = r.stableKey.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val safeKey = r.stableKey.replace(SAFE_KEY_REGEX, "_")
         val customArtFile = File(File(ctx.filesDir, "custom_art"), "$safeKey.jpg")
         if (customArtFile.exists() && customArtFile.length() > 0) {
             val customBmp = runCatching {
-                decodeSampledBitmap(customArtFile.absolutePath, b, b)
+                decodeSampledBitmap(customArtFile.absolutePath, b, b, preferredConfig)
             }.getOrNull()
             if (customBmp != null) {
                 cache.put(k, customBmp)
@@ -77,9 +96,10 @@ object ArtworkLoader {
             )
 
             for (candidate in candidateCovers) {
+                ensureActive()
                 if (candidate.exists() && candidate.length() > 0) {
                     val decoded = runCatching {
-                        decodeSampledBitmap(candidate.absolutePath, b, b)
+                        decodeSampledBitmap(candidate.absolutePath, b, b, preferredConfig)
                     }.getOrNull()
                     if (decoded != null) {
                         cache.put(k, decoded)
@@ -89,58 +109,66 @@ object ArtworkLoader {
             }
 
             val ext = file.extension.lowercase()
-            if (ext in listOf("wav", "wave", "pcm")) {
-                noArtworkCache.put(k, true)
+            if (ext == "wav" || ext == "wave" || ext == "pcm") {
+                noArtworkCache.put(nk, true)
                 return@withContext null
             }
         }
 
-        // Try ContentResolver thumbnail
-        val contentBmp = runCatching {
-            if (Build.VERSION.SDK_INT >= 29 && parsed.scheme == "content") {
-                runCatching {
-                    ctx.contentResolver.loadThumbnail(parsed, Size(b, b), null)
-                }.getOrNull()
+        decodeSemaphore.withPermit {
+            ensureActive()
+            cache.get(k)?.let { return@withPermit it }
+
+            // Try ContentResolver thumbnail
+            val contentBmp = runCatching {
+                if (Build.VERSION.SDK_INT >= 29 && parsed.scheme == "content") {
+                    runCatching {
+                        ctx.contentResolver.loadThumbnail(parsed, Size(b, b), null)
+                    }.getOrNull()
+                } else {
+                    null
+                }
+            }.getOrNull()
+
+            if (contentBmp != null) {
+                cache.put(k, contentBmp)
+                return@withPermit contentBmp
+            }
+
+            ensureActive()
+
+            // Try MediaMetadataRetriever
+            val retrievedBmp = runCatching {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    if (filePath != null) {
+                        retriever.setDataSource(filePath)
+                    } else {
+                        ctx.contentResolver.openFileDescriptor(parsed, "r")?.use { pfd ->
+                            retriever.setDataSource(pfd.fileDescriptor)
+                        }
+                    }
+                    val rawArt = retriever.embeddedPicture
+                    if (rawArt != null && rawArt.isNotEmpty()) {
+                        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeByteArray(rawArt, 0, rawArt.size, opts)
+                        opts.inSampleSize = calculateInSampleSize(opts, b, b)
+                        opts.inPreferredConfig = preferredConfig
+                        opts.inJustDecodeBounds = false
+                        BitmapFactory.decodeByteArray(rawArt, 0, rawArt.size, opts)
+                    } else null
+                } finally {
+                    retriever.release()
+                }
+            }.getOrNull()
+
+            if (retrievedBmp != null) {
+                cache.put(k, retrievedBmp)
+                retrievedBmp
             } else {
+                noArtworkCache.put(nk, true)
                 null
             }
-        }.getOrNull()
-
-        if (contentBmp != null) {
-            cache.put(k, contentBmp)
-            return@withContext contentBmp
-        }
-
-        // Try MediaMetadataRetriever
-        val retrievedBmp = runCatching {
-            val retriever = MediaMetadataRetriever()
-            try {
-                if (filePath != null) {
-                    retriever.setDataSource(filePath)
-                } else {
-                    ctx.contentResolver.openFileDescriptor(parsed, "r")?.use { pfd ->
-                        retriever.setDataSource(pfd.fileDescriptor)
-                    }
-                }
-                val rawArt = retriever.embeddedPicture
-                if (rawArt != null && rawArt.isNotEmpty()) {
-                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(rawArt, 0, rawArt.size, opts)
-                    opts.inSampleSize = calculateInSampleSize(opts, b, b)
-                    opts.inJustDecodeBounds = false
-                    BitmapFactory.decodeByteArray(rawArt, 0, rawArt.size, opts)
-                } else null
-            } finally {
-                retriever.release()
-            }
-        }.getOrNull()
-
-        if (retrievedBmp != null) {
-            cache.put(k, retrievedBmp)
-            retrievedBmp
-        } else {
-            noArtworkCache.put(k, true)
-            null
         }
     }
 
@@ -156,15 +184,22 @@ object ArtworkLoader {
     fun trim(level: Int) {
         if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
             cache.evictAll()
+            noArtworkCache.evictAll()
         } else if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             cache.trimToSize(cache.size() / 2)
         }
     }
 
-    private fun decodeSampledBitmap(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+    private fun decodeSampledBitmap(
+        path: String,
+        reqWidth: Int,
+        reqHeight: Int,
+        preferredConfig: Bitmap.Config = Bitmap.Config.RGB_565
+    ): Bitmap? {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, options)
         options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+        options.inPreferredConfig = preferredConfig
         options.inJustDecodeBounds = false
         return BitmapFactory.decodeFile(path, options)
     }

@@ -7,12 +7,16 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import androidx.room.withTransaction
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.db.IdentityModel
 import com.pulse.player.data.db.PulseDb
 import com.pulse.player.data.db.ScanSeenEntity
 import com.pulse.player.data.db.TrackEntity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -72,7 +76,9 @@ object SafScanner {
                 if (!mYear.isNullOrBlank()) year = mYear.toIntOrNull() ?: 0
             }
             mmr.release()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("SafScanner", "Metadata read failed for $name", e)
+        }
 
         val volumeId = docId.substringBefore(':', "external_primary").ifBlank { "external_primary" }
 
@@ -118,11 +124,13 @@ object SafScanner {
             return@withContext partial
         }
 
+        val existingMeta = db.tracks().safScanMeta(treeUri.toString()).associateBy { it.id }
         val seen = HashSet<String>()
         val seenEntities = ArrayList<ScanSeenEntity>()
         val rows = ArrayList<TrackEntity>()
 
         suspend fun walk(docId: String, display: String) {
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
             val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
             val cols = arrayOf(
                 Document.COLUMN_DOCUMENT_ID,
@@ -133,6 +141,7 @@ object SafScanner {
             )
             ctx.contentResolver.query(children, cols, null, null, null)?.use { c ->
                 while (c.moveToNext()) {
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     val id = c.getString(0) ?: continue
                     val name = c.getString(1) ?: continue
                     val mime = c.getString(2)
@@ -145,7 +154,7 @@ object SafScanner {
                     seen += tid
                     seenEntities += ScanSeenEntity(tid)
 
-                    val existing = db.tracks().byId(tid)
+                    val existing = existingMeta[tid]
                     if (existing != null && existing.sizeBytes == c.getLong(3) && existing.dateModifiedMs == c.getLong(4)) {
                         // Unchanged: skip metadata re-read
                     } else {
@@ -160,9 +169,15 @@ object SafScanner {
             walk(DocumentsContract.getTreeDocumentId(treeUri), treeName(treeUri))
             db.withTransaction {
                 if (rows.isNotEmpty()) {
-                    db.tracks().upsertAll(rows)
+                    rows.chunked(500).forEach { chunk ->
+                        db.tracks().upsertAll(chunk)
+                    }
                 }
-                db.scan().seen(seenEntities)
+                if (seenEntities.isNotEmpty()) {
+                    seenEntities.chunked(500).forEach { chunk ->
+                        db.scan().seen(chunk)
+                    }
+                }
                 db.scan().markSafUnseenForTree(treeUri.toString())
                 db.scan().clearSeen()
             }
@@ -172,6 +187,12 @@ object SafScanner {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            ErrorDispatcher.post(
+                category = ErrorCategory.SCAN,
+                title = "SAF Folder Scan Failed",
+                message = "Could not finish scanning ${treeName(treeUri)}. Check folder permission.",
+                technicalDetails = e.message
+            )
             val partial = ScanState.Partial(PartialReason.StorageUnavailable, null)
             state?.value = partial
             partial

@@ -19,6 +19,8 @@ import com.pulse.player.playback.Track
  */
 object SearchIndex {
 
+    private val WHITESPACE_REGEX = Regex("\\s+")
+
     data class SearchResult(
         val track: Track,
         val score: Float,
@@ -44,7 +46,7 @@ object SearchIndex {
         val q = norm(query)
         if (q.isBlank()) return emptyList()
 
-        val qTokens = q.split(Regex("\\s+")).filter { it.length >= 2 }
+        val qTokens = q.split(WHITESPACE_REGEX).filter { it.length >= 2 }
 
         return tracks
             .mapNotNull { track ->
@@ -56,26 +58,31 @@ object SearchIndex {
     }
 
     private fun scoreTrack(track: Track, query: String, queryTokens: List<String>): Pair<Float, Set<String>> {
-        val candidates = mapOf(
-            "title"  to norm(track.title),
-            "artist" to norm(track.artist),
-            "album"  to norm(track.album)
-        )
-
         var totalScore = 0f
-        val matchedFields = mutableSetOf<String>()
+        var matchedFields: MutableSet<String>? = null
 
-        for ((field, value) in candidates) {
-            val fieldScore = scoreField(query, queryTokens, value)
-            if (fieldScore > 0f) {
-                // Weight title higher than artist/album
-                val weight = if (field == "title") 1.0f else 0.7f
-                totalScore += fieldScore * weight
-                matchedFields.add(field)
-            }
+        val titleVal = track.normTitle.ifEmpty { norm(track.title) }
+        val titleScore = scoreField(query, queryTokens, titleVal)
+        if (titleScore > 0f) {
+            totalScore += titleScore
+            matchedFields = mutableSetOf("title")
         }
 
-        return totalScore to matchedFields
+        val artistVal = track.normArtist.ifEmpty { norm(track.artist) }
+        val artistScore = scoreField(query, queryTokens, artistVal)
+        if (artistScore > 0f) {
+            totalScore += artistScore * 0.7f
+            if (matchedFields == null) matchedFields = mutableSetOf("artist") else matchedFields.add("artist")
+        }
+
+        val albumVal = track.normAlbum.ifEmpty { norm(track.album) }
+        val albumScore = scoreField(query, queryTokens, albumVal)
+        if (albumScore > 0f) {
+            totalScore += albumScore * 0.7f
+            if (matchedFields == null) matchedFields = mutableSetOf("album") else matchedFields.add("album")
+        }
+
+        return totalScore to (matchedFields ?: emptySet())
     }
 
     private fun scoreField(query: String, queryTokens: List<String>, value: String): Float {
@@ -94,7 +101,7 @@ object SearchIndex {
         if (queryTokens.isNotEmpty() && queryTokens.all { value.contains(it) }) return 0.6f
 
         // 5. Any token is a prefix of a word in value
-        val valueWords = value.split(Regex("\\s+"))
+        val valueWords = value.split(WHITESPACE_REGEX)
         val prefixMatches = queryTokens.count { t -> valueWords.any { w -> w.startsWith(t) } }
         if (prefixMatches > 0) return 0.5f * (prefixMatches.toFloat() / queryTokens.size)
 

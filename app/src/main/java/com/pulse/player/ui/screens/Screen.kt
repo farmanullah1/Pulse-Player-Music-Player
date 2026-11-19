@@ -13,5 +13,6 @@ sealed interface Screen {
     data object Transcribe : Screen
     data object GenerateMusic : Screen
     data object Customize : Screen
+    data object ExcludedFolders : Screen
     data class Detail(val kind: String, val key: String) : Screen // album / artist / folder / playlist / system
 }

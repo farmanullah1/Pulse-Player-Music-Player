@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.components.HeartButton
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.screens.SeekBar
 import com.pulse.player.ui.screens.TransportRow
@@ -67,6 +68,9 @@ fun WaveformPlayerLayout(
     modifier: Modifier = Modifier
 ) {
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+    val seekStyle by vm.seekStyle.collectAsStateWithLifecycle()
+    val abStartFrac = s.abLoopStartMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val abEndFrac = s.abLoopEndMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "waveform_anim")
     val wavePhase by infiniteTransition.animateFloat(
@@ -176,17 +180,30 @@ fun WaveformPlayerLayout(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color.Black.copy(alpha = 0.35f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Pulse.Cyan.copy(alpha = 0.3f))
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (s.isPlaying) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                        else MaterialTheme.colorScheme.outlineVariant
+                    )
                 ) {
                     Text(
                         text = if (s.isPlaying) "SPECTRUM ANALYZER • ACTIVE" else "SPECTRUM ANALYZER • IDLE",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (s.isPlaying) Pulse.Cyan else Pulse.TextMuted,
+                        color = if (s.isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         letterSpacing = 1.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontSize = 9.sp,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+
+                s.trackError?.let { err ->
+                    Spacer(Modifier.height(10.dp))
+                    PlaybackErrorBanner(
+                        error = err,
+                        onRetry = vm.player::retry,
+                        onSkip = vm.player::skip
                     )
                 }
             }
@@ -197,7 +214,7 @@ fun WaveformPlayerLayout(
         Text(
             text = s.title.ifBlank { "No track selected" },
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -205,7 +222,7 @@ fun WaveformPlayerLayout(
         Text(
             text = s.artist.ifBlank { "Unknown artist" },
             style = MaterialTheme.typography.bodyMedium,
-            color = Pulse.TextMid,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -215,6 +232,12 @@ fun WaveformPlayerLayout(
         SeekBar(
             position = vm.player.position,
             duration = s.durationMs,
+            isPlaying = s.isPlaying,
+            trackKey = s.mediaId ?: "default",
+            seekStyle = seekStyle,
+            onSelectStyle = vm::setSeekStyle,
+            abStartFraction = abStartFrac,
+            abEndFraction = abEndFrac,
             onSeek = vm.player::seekTo
         )
 
@@ -233,14 +256,14 @@ fun WaveformPlayerLayout(
                 on = fav,
                 onToggle = { vm.toggleFavoriteCurrent() }
             )
-            IconButton(onClick = { vm.openSleepSheet() }) {
-                Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
+            IconButton(onClick = { vm.openSleepSheet() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.openQueue() }) {
-                Icon(Icons.Rounded.QueueMusic, "Queue", tint = Color.White)
+            IconButton(onClick = { vm.openQueue() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.QueueMusic, "Queue", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.go(Screen.Equalizer) }) {
-                Icon(Icons.Rounded.Equalizer, "Equalizer", tint = Color.White)
+            IconButton(onClick = { vm.go(Screen.Equalizer) }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Equalizer, "Equalizer", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
     }

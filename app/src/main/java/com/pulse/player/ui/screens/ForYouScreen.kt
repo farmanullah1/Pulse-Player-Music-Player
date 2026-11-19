@@ -3,11 +3,15 @@ package com.pulse.player.ui.screens
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,17 +30,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.HourglassEmpty
+import androidx.compose.material.icons.rounded.LibraryAdd
+import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -46,172 +58,288 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulse.player.data.scan.PartialReason
+import com.pulse.player.data.scan.ScanState
+import com.pulse.player.data.scan.audioPermission
 import com.pulse.player.playback.Track
 import com.pulse.player.ui.components.Artwork
+import com.pulse.player.ui.components.ErrorBannerCard
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
 import com.pulse.player.ui.components.PillButton
 import com.pulse.player.ui.components.SectionHeader
 import com.pulse.player.ui.components.SquareCard
 import com.pulse.player.ui.components.WidgetTile
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
-import kotlin.random.Random
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun ForYouScreen(vm: MainViewModel) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
-    val ps by vm.player.state.collectAsStateWithLifecycle()
+    val totalLibraryMs by vm.totalLibraryMs.collectAsStateWithLifecycle()
+    val sleepRemainingMs by remember(vm) {
+        vm.player.state.map { it.sleepRemainingMs }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = 0L)
     val today by vm.todayMinutes.collectAsStateWithLifecycle()
     val streak by vm.streakDays.collectAsStateWithLifecycle()
     val favCount by vm.favoriteCount.collectAsStateWithLifecycle()
     val scanning by vm.scanning.collectAsStateWithLifecycle(initialValue = false)
     val scanProgress by vm.scanProgress.collectAsStateWithLifecycle(initialValue = 0)
-    val recent = remember(tracks) { tracks.sortedByDescending { it.dateAddedMs }.take(12) }
+    val scanState by vm.scanState.collectAsStateWithLifecycle()
+    val audioPermissionDenied by vm.audioPermissionDenied.collectAsStateWithLifecycle()
+    val scanWarningDismissed by vm.scanWarningDismissed.collectAsStateWithLifecycle()
+    val recent by vm.recentTracks.collectAsStateWithLifecycle()
     val top by vm.topPicks.collectAsStateWithLifecycle()
     val resumeTrack by vm.resume.collectAsStateWithLifecycle()
+    val sectionOrder by vm.forYouSectionOrder.collectAsStateWithLifecycle()
+    val hiddenSections by vm.hiddenForYouSections.collectAsStateWithLifecycle()
+    val bottomPad = LocalBottomOverlayPadding.current
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        vm.setAudioPermissionDenied(!isGranted)
+        if (isGranted) vm.scan()
+    }
 
     if (tracks.isEmpty()) {
-        EmptyLibraryCard(vm, scanning = scanning, foundCount = scanProgress)
+        EmptyLibraryCard(
+            vm = vm,
+            scanning = scanning,
+            foundCount = scanProgress,
+            audioPermissionDenied = audioPermissionDenied,
+            onRequestPermission = { permissionLauncher.launch(audioPermission()) },
+            bottomPad = bottomPad
+        )
         return
+    }
+
+    val visibleSections = remember(sectionOrder, hiddenSections) {
+        sectionOrder.filter { it !in hiddenSections }
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        contentPadding = PaddingValues(top = 12.dp, bottom = bottomPad),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        resumeTrack?.let { r ->
-            item {
-                ResumeBanner(r) { vm.playQueue(listOf(r), 0) }
+        if (audioPermissionDenied) {
+            item(key = "perm_banner") {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    ErrorBannerCard(
+                        icon = Icons.Rounded.LockOpen,
+                        title = "Audio access needed",
+                        message = "Grant media audio permission so Pulse Player can keep your library updated.",
+                        primaryLabel = "Grant Access",
+                        onPrimary = { permissionLauncher.launch(audioPermission()) }
+                    )
+                }
+            }
+        } else if (scanState is ScanState.Failed) {
+            val err = scanState as ScanState.Failed
+            item(key = "scan_err_banner") {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    ErrorBannerCard(
+                        icon = Icons.Rounded.ErrorOutline,
+                        title = "Library scan issue",
+                        message = err.message,
+                        primaryLabel = "Retry Scan",
+                        onPrimary = { vm.scan() },
+                        secondaryLabel = "Diagnostics",
+                        onSecondary = { vm.openDiagnostics() }
+                    )
+                }
+            }
+        } else if (scanState is ScanState.Partial && !scanWarningDismissed) {
+            val partial = scanState as ScanState.Partial
+            val partialMessage = when (partial.reason) {
+                PartialReason.PermissionRevoked -> "Audio permission was revoked mid-scan. Grant permission and retry."
+                PartialReason.Cancelled -> "The scan was interrupted before completing."
+                PartialReason.QueryFailed -> "MediaStore returned an incomplete response. Previous index was kept."
+                PartialReason.EmptyResultSuspicious -> "MediaStore returned no tracks unexpectedly; previous library was preserved."
+                PartialReason.StorageUnavailable -> "External or SAF folder storage was temporarily unavailable."
+            }
+            item(key = "scan_partial_banner") {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    ErrorBannerCard(
+                        isError = false,
+                        icon = Icons.Rounded.Warning,
+                        title = "Library scan partially completed",
+                        message = partialMessage,
+                        primaryLabel = "Retry",
+                        onPrimary = { vm.scan() },
+                        secondaryLabel = "Dismiss",
+                        onSecondary = { vm.dismissScanWarning() }
+                    )
+                }
             }
         }
 
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PillButton(
-                    text = "Shuffle",
-                    icon = Icons.Rounded.Shuffle,
-                    onClick = {
-                        if (tracks.isNotEmpty()) {
-                            vm.playQueue(tracks, Random.nextInt(tracks.size), shuffle = true)
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
+        item(key = "library_stats_summary") {
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                LibraryStatsSummaryCard(
+                    trackCount = tracks.size,
+                    totalDurationMs = totalLibraryMs,
+                    favoriteCount = favCount,
+                    todayMinutes = today,
+                    streakDays = streak
                 )
-                PillButton(
-                    text = "Play",
-                    icon = Icons.Rounded.PlayArrow,
-                    onClick = {
-                        if (tracks.isNotEmpty()) {
-                            vm.playQueue(tracks, 0)
-                        }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
 
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WidgetTile(
-                        title = "Today",
-                        value = "$today min",
-                        subtitle = if (streak > 0) "$streak day streak" else null,
-                        icon = Icons.Rounded.Headphones,
-                        colors = listOf(Pulse.Violet, Pulse.Magenta),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        vm.go(Screen.Recap)
-                    }
-                    WidgetTile(
-                        title = "Favourites",
-                        value = "$favCount songs",
-                        icon = Icons.Rounded.Favorite,
-                        colors = listOf(Pulse.Cyan, Pulse.Violet),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        vm.go(Screen.Detail("system", "favorites"))
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WidgetTile(
-                        title = "Sleep timer",
-                        value = if (ps.sleepRemainingMs > 0) formatTime(ps.sleepRemainingMs) else "Off",
-                        icon = Icons.Rounded.Bedtime,
-                        colors = listOf(Pulse.Coral, Pulse.Pink),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        vm.openSleepSheet()
-                    }
-                    WidgetTile(
-                        title = "Equalizer",
-                        value = "Tune sound",
-                        icon = Icons.Rounded.Equalizer,
-                        colors = listOf(Pulse.Mint, Pulse.Cyan),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        vm.go(Screen.Equalizer)
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WidgetTile(
-                        title = "Transcribe",
-                        value = "gemini-3.5",
-                        subtitle = "Record & lyrics",
-                        icon = Icons.Rounded.Mic,
-                        colors = listOf(Pulse.Coral, Pulse.Magenta),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        vm.go(Screen.Transcribe)
-                    }
-                    WidgetTile(
-                        title = "Music Studio",
-                        value = "Google Lyria",
-                        subtitle = "Generate music",
-                        icon = Icons.Rounded.AutoAwesome,
-                        colors = listOf(Pulse.Cyan, Pulse.Violet),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        vm.go(Screen.GenerateMusic)
-                    }
-                }
-            }
-        }
-
-        if (recent.isNotEmpty()) {
-            item {
-                SectionHeader("Recently added", badge = "New", action = "Play all") {
-                    vm.playQueue(recent, 0)
-                }
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(recent, key = { it.id }) { t ->
-                        SquareCard(t, 132.dp) {
-                            vm.playQueue(recent, recent.indexOf(t))
+        visibleSections.forEach { key ->
+            when (key) {
+                "resume" -> resumeTrack?.let { r ->
+                    item(key = "sec_resume") {
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            ResumeBanner(r) { vm.playQueue(listOf(r), 0) }
                         }
                     }
                 }
-            }
-        }
-
-        if (top.isNotEmpty()) {
-            item {
-                SectionHeader("Top picks for you")
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    items(top, key = { it.id }) { t ->
-                        SquareCard(t, 168.dp) {
-                            vm.playQueue(top, top.indexOf(t))
+                "actions" -> item(key = "sec_actions") {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            PillButton(
+                                text = "Shuffle All",
+                                icon = Icons.Rounded.Shuffle,
+                                onClick = { vm.shuffleAll() },
+                                modifier = Modifier.weight(1f)
+                            )
+                            PillButton(
+                                text = "Play All",
+                                icon = Icons.Rounded.PlayArrow,
+                                onClick = {
+                                    if (tracks.isNotEmpty()) {
+                                        vm.playQueue(tracks, 0)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        QuickShuffleShortcutsRow(vm)
+                    }
+                }
+                "widgets" -> item(key = "sec_widgets") {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            WidgetTile(
+                                title = "Today",
+                                value = "$today min",
+                                subtitle = if (streak > 0) "$streak day streak" else "Listening recap",
+                                icon = Icons.Rounded.Headphones,
+                                colors = listOf(Pulse.Violet, Pulse.Magenta),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                vm.go(Screen.Recap)
+                            }
+                            WidgetTile(
+                                title = "Favourites",
+                                value = "$favCount songs",
+                                subtitle = "Liked tracks",
+                                icon = Icons.Rounded.Favorite,
+                                colors = listOf(Pulse.Cyan, Pulse.Violet),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                vm.go(Screen.Detail("system", "favorites"))
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            WidgetTile(
+                                title = "Sleep timer",
+                                value = if (sleepRemainingMs > 0) formatTime(sleepRemainingMs) else "Off",
+                                subtitle = if (sleepRemainingMs > 0) "Active" else "Set countdown",
+                                icon = Icons.Rounded.Bedtime,
+                                colors = listOf(Pulse.Coral, Pulse.Pink),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                vm.openSleepSheet()
+                            }
+                            WidgetTile(
+                                title = "Equalizer",
+                                value = "Tune sound",
+                                subtitle = "5-band EQ & bass",
+                                icon = Icons.Rounded.Equalizer,
+                                colors = listOf(Pulse.Mint, Pulse.Cyan),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                vm.go(Screen.Equalizer)
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            WidgetTile(
+                                title = "Voice & Lyrics",
+                                value = "Transcribe",
+                                subtitle = "Audio to synced text",
+                                icon = Icons.Rounded.Mic,
+                                colors = listOf(Pulse.Coral, Pulse.Magenta),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                vm.go(Screen.Transcribe)
+                            }
+                            WidgetTile(
+                                title = "Music Studio",
+                                value = "Create Track",
+                                subtitle = "Original audio ideas",
+                                icon = Icons.Rounded.AutoAwesome,
+                                colors = listOf(Pulse.Cyan, Pulse.Violet),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                vm.go(Screen.GenerateMusic)
+                            }
+                        }
+                    }
+                }
+                "recent" -> if (recent.isNotEmpty()) {
+                    item(key = "sec_recent_header") {
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            SectionHeader("Recently added", badge = "New", action = "Play all") {
+                                vm.playQueue(recent, 0)
+                            }
+                        }
+                    }
+                    item(key = "sec_recent_list") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(recent, key = { it.id }) { t ->
+                                SquareCard(t, 132.dp) {
+                                    vm.playQueue(recent, recent.indexOf(t))
+                                }
+                            }
+                        }
+                    }
+                }
+                "top_picks" -> if (top.isNotEmpty()) {
+                    item(key = "sec_top_header") {
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            SectionHeader("Top picks for you")
+                        }
+                    }
+                    item(key = "sec_top_list") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(top, key = { it.id }) { t ->
+                                SquareCard(t, 168.dp) {
+                                    vm.playQueue(top, top.indexOf(t))
+                                }
+                            }
                         }
                     }
                 }
@@ -221,12 +349,120 @@ fun ForYouScreen(vm: MainViewModel) {
 }
 
 @Composable
+private fun LibraryStatsSummaryCard(
+    trackCount: Int,
+    totalDurationMs: Long,
+    favoriteCount: Int,
+    todayMinutes: Int,
+    streakDays: Int
+) {
+    val totalMin = (totalDurationMs / 60_000L).coerceAtLeast(0L)
+    val hrs = totalMin / 60L
+    val mins = totalMin % 60L
+    val durationLabel = if (hrs > 0) "${hrs}h ${mins}m" else "${mins}m"
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StatPill(label = "Library", value = "$trackCount", sub = durationLabel, modifier = Modifier.weight(1f))
+            StatPill(label = "Favourites", value = "$favoriteCount", sub = "saved", modifier = Modifier.weight(1f))
+            StatPill(
+                label = "Today",
+                value = "${todayMinutes}m",
+                sub = if (streakDays > 0) "$streakDays day streak" else "local play",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatPill(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.merge(TabularMono),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = sub,
+            style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickShuffleShortcutsRow(vm: MainViewModel) {
+    val chipColors = AssistChipDefaults.assistChipColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        labelColor = MaterialTheme.colorScheme.onSurface,
+        leadingIconContentColor = MaterialTheme.colorScheme.primary
+    )
+    val chipBorder = AssistChipDefaults.assistChipBorder(
+        enabled = true,
+        borderColor = MaterialTheme.colorScheme.outlineVariant
+    )
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        AssistChip(
+            onClick = { vm.shuffleFavorites() },
+            label = { Text("Shuffle Favourites") },
+            leadingIcon = { Icon(Icons.Rounded.Favorite, null, Modifier.size(16.dp)) },
+            colors = chipColors,
+            border = chipBorder
+        )
+        AssistChip(
+            onClick = { vm.shuffleUnplayed() },
+            label = { Text("Unplayed Mix") },
+            leadingIcon = { Icon(Icons.Rounded.HourglassEmpty, null, Modifier.size(16.dp)) },
+            colors = chipColors,
+            border = chipBorder
+        )
+        AssistChip(
+            onClick = { vm.shuffleRecentlyAdded() },
+            label = { Text("Recently Added") },
+            leadingIcon = { Icon(Icons.Rounded.LibraryAdd, null, Modifier.size(16.dp)) },
+            colors = chipColors,
+            border = chipBorder
+        )
+    }
+}
+
+@Composable
 fun ResumeBanner(track: Track, onPlay: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(
+                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+                RoundedCornerShape(20.dp)
+            )
             .clickable(onClick = onPlay)
             .padding(16.dp)
     ) {
@@ -261,13 +497,13 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                     .background(MaterialTheme.colorScheme.primary),
+                    .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,
                     contentDescription = "Play",
-                     tint = MaterialTheme.colorScheme.onPrimary,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -276,13 +512,19 @@ fun ResumeBanner(track: Track, onPlay: () -> Unit) {
 }
 
 @Composable
-fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: Int = 0) {
+fun EmptyLibraryCard(
+    vm: MainViewModel,
+    scanning: Boolean = false,
+    foundCount: Int = 0,
+    audioPermissionDenied: Boolean = false,
+    onRequestPermission: (() -> Unit)? = null,
+    bottomPad: androidx.compose.ui.unit.Dp = 24.dp
+) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) {
-            vm.scan()
-        }
+        vm.setAudioPermissionDenied(!isGranted)
+        if (isGranted) vm.scan()
     }
     val safLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -295,7 +537,7 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = bottomPad.coerceAtLeast(24.dp)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -317,7 +559,11 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                 Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
             }
             Text(
-                text = if (scanning) "Scanning your music library…" else "Your music library is empty",
+                text = when {
+                    scanning -> "Scanning your music library…"
+                    audioPermissionDenied -> "Audio permission needed"
+                    else -> "Your music library is empty"
+                },
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
@@ -339,7 +585,7 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
                     trackColor = MaterialTheme.colorScheme.outlineVariant
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             Button(
                 onClick = { vm.seedSampleTrack() },
                 modifier = Modifier.fillMaxWidth(),
@@ -356,12 +602,16 @@ fun EmptyLibraryCard(vm: MainViewModel, scanning: Boolean = false, foundCount: I
             }
             Button(
                 onClick = {
-                    val perm = if (Build.VERSION.SDK_INT >= 33) {
-                        android.Manifest.permission.READ_MEDIA_AUDIO
+                    if (onRequestPermission != null) {
+                        onRequestPermission()
                     } else {
-                        android.Manifest.permission.READ_EXTERNAL_STORAGE
+                        val perm = if (Build.VERSION.SDK_INT >= 33) {
+                            android.Manifest.permission.READ_MEDIA_AUDIO
+                        } else {
+                            android.Manifest.permission.READ_EXTERNAL_STORAGE
+                        }
+                        permissionLauncher.launch(perm)
                     }
-                    permissionLauncher.launch(perm)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = CircleShape,

@@ -1,6 +1,8 @@
 package com.pulse.player.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,46 +30,82 @@ import androidx.compose.material.icons.rounded.LibraryAdd
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulse.player.data.db.PlaylistEntity
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.UnifiedFilterBar
+import com.pulse.player.ui.theme.LocalDarkTheme
 import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.viewmodel.EntitySortMode
 import com.pulse.player.ui.viewmodel.MainViewModel
 
 @Composable
 fun PlaylistsScreen(vm: MainViewModel) {
     val playlists by vm.playlists.collectAsStateWithLifecycle()
+    val entitySort by vm.entitySortMode.collectAsStateWithLifecycle()
     val favCount by vm.favoriteCount.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val neverPlayed by vm.neverPlayed.collectAsStateWithLifecycle()
     val forgottenFavs by vm.forgottenFavorites.collectAsStateWithLifecycle()
     val longTracks by vm.longTracks.collectAsStateWithLifecycle()
+    val bottomPad = LocalBottomOverlayPadding.current
+
+    var pendingDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
+
+    val sortedPlaylists = remember(playlists, entitySort) {
+        when (entitySort) {
+            EntitySortMode.NAME_ASC -> playlists.sortedBy { it.name.lowercase() }
+            EntitySortMode.NAME_DESC -> playlists.sortedByDescending { it.name.lowercase() }
+            EntitySortMode.COUNT_DESC -> playlists.sortedByDescending { it.createdAtMs }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(top = 12.dp, bottom = bottomPad + 72.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
-                Text("System Playlists", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Playlists",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    UnifiedFilterBar(vm = vm, isTrackTab = false)
+                }
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("System Playlists", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         SystemPlaylistCard(
                             title = "My favourite",
@@ -112,11 +150,11 @@ fun PlaylistsScreen(vm: MainViewModel) {
             }
 
             item {
-                Text("Smart Playlists & Auto-DJ", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Smart Playlists & Auto-DJ", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         SystemPlaylistCard(
                             title = "Fresh Finds",
@@ -175,35 +213,49 @@ fun PlaylistsScreen(vm: MainViewModel) {
             }
 
             item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("My Playlists (${playlists.size})", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-                }
+                Text(
+                    text = "My Playlists (${sortedPlaylists.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
 
-            if (playlists.isEmpty()) {
+            if (sortedPlaylists.isEmpty()) {
                 item {
-                    Box(
+                    Column(
                         Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 32.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                            .clickable { vm.createPlaylistOpen.value = true }
+                            .padding(vertical = 28.dp, horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text("No custom playlists yet. Tap + to create one.", color = Pulse.TextMid)
+                        Text(
+                            "No custom playlists yet",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "Tap here or press + to organize your favourite mixes.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
-                items(playlists, key = { it.id }) { playlist ->
+                items(sortedPlaylists, key = { it.id }) { playlist ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { vm.go(Screen.Detail("playlist", playlist.id.toString())) }
-                            .padding(16.dp),
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -218,9 +270,9 @@ fun PlaylistsScreen(vm: MainViewModel) {
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f)) {
                             Text(playlist.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                            Text("Playlist", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Tap to open & reorder", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { vm.deletePlaylist(playlist.id) }) {
+                        IconButton(onClick = { pendingDelete = playlist }, modifier = Modifier.size(48.dp)) {
                             Icon(Icons.Rounded.Delete, "Delete playlist", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -232,12 +284,39 @@ fun PlaylistsScreen(vm: MainViewModel) {
             onClick = { vm.createPlaylistOpen.value = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(bottom = 76.dp, end = 20.dp),
+                .padding(bottom = bottomPad, end = 16.dp),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
             Icon(Icons.Rounded.Add, "New playlist")
         }
+    }
+
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = { Text("Delete \"${target.name}\"?") },
+            text = { Text("This removes the playlist entry. Your audio files on storage stay untouched.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.deletePlaylist(target.id)
+                        vm.snackbarMessage.value = "Deleted playlist '${target.name}'"
+                        pendingDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -250,25 +329,58 @@ fun SystemPlaylistCard(
     modifier: Modifier,
     onClick: () -> Unit
 ) {
+    val isDark = LocalDarkTheme.current
+    val baseAccent = gradient.lastOrNull() ?: MaterialTheme.colorScheme.primary
+    val accent = if (isDark) baseAccent else lerp(baseAccent, MaterialTheme.colorScheme.onSurface, 0.22f)
+
     Box(
         modifier = modifier
-            .height(110.dp)
+            .height(106.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(gradient))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(
+                BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.7f else 0.85f)
+                ),
+                RoundedCornerShape(20.dp)
+            )
             .clickable(onClick = onClick)
-            .padding(16.dp)
+            .padding(14.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface,
+        Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(28.dp)
-        )
-        Column(Modifier.align(Alignment.BottomStart)) {
-            Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(0.85f))
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(accent.copy(alpha = if (isDark) 0.18f else 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(end = 36.dp)
+        ) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
     }
 }

@@ -1,14 +1,15 @@
 package com.pulse.player.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,34 +20,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Checkroom
 import androidx.compose.material.icons.rounded.DashboardCustomize
-import androidx.compose.material.icons.rounded.Equalizer
-import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.ViewAgenda
-import androidx.compose.material.icons.rounded.ViewColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,7 +47,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Tab
@@ -65,8 +57,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,26 +65,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.settings.ColorSource
+import com.pulse.player.data.settings.FontStylePreset
 import com.pulse.player.data.settings.ThemeMode
-import com.pulse.player.ui.buttons.ButtonLayout
-import com.pulse.player.ui.buttons.ButtonPreset
 import com.pulse.player.ui.buttons.ButtonPresets
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.ui.components.CustomizePreviewTarget
+import com.pulse.player.ui.components.LiveCustomizePreviewCard
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.PulseTopBar
+import com.pulse.player.ui.theme.LocalDarkTheme
+import com.pulse.player.ui.theme.SeedPalettePresets
 import com.pulse.player.ui.theme.Skins
+import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.themes.PlayerThemes
 import com.pulse.player.ui.viewmodel.MainViewModel
+import kotlin.math.roundToInt
 
 @Composable
 fun PlayerCustomizeScreen(vm: MainViewModel) {
-    BackHandler { vm.go(Screen.Home) }
+    BackHandler { vm.back() }
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    var previewExpanded by remember { mutableStateOf(true) }
     var showResetDialog by remember { mutableStateOf(false) }
     var recommendationNotice by remember { mutableStateOf<String?>(null) }
 
@@ -111,112 +110,96 @@ fun PlayerCustomizeScreen(vm: MainViewModel) {
     val currentThemeId by vm.playerThemeId.collectAsStateWithLifecycle()
     val currentButtonPresetId by vm.buttonPresetId.collectAsStateWithLifecycle()
     val currentSkinId by vm.skinId.collectAsStateWithLifecycle()
+    val currentWallpaperPath by vm.wallpaperPath.collectAsStateWithLifecycle()
     val currentThemeMode by vm.themeMode.collectAsStateWithLifecycle()
     val currentColorSource by vm.colorSource.collectAsStateWithLifecycle()
+    val currentSeedColor by vm.seedColor.collectAsStateWithLifecycle()
+    val currentArtworkAccent by vm.artworkAccent.collectAsStateWithLifecycle()
+    val currentCornerRadius by vm.cornerRadiusDp.collectAsStateWithLifecycle()
+    val currentFontStyle by vm.fontStyle.collectAsStateWithLifecycle()
+    val currentSeekStyle by vm.seekStyle.collectAsStateWithLifecycle()
+    val hiddenElements by vm.hiddenPlayerElements.collectAsStateWithLifecycle()
+    val customButtonOrder by vm.customButtonOrder.collectAsStateWithLifecycle()
+    val forYouSectionOrder by vm.forYouSectionOrder.collectAsStateWithLifecycle()
+    val hiddenForYouSections by vm.hiddenForYouSections.collectAsStateWithLifecycle()
+    val albumGridColumns by vm.albumGridColumns.collectAsStateWithLifecycle()
+    val listDensity by vm.listDensity.collectAsStateWithLifecycle()
+    val splitUpperRatio by vm.splitPlayerUpperRatio.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
+    val isFavorite by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+
+    val previewTarget = remember(selectedTab) {
+        when (selectedTab) {
+            2 -> CustomizePreviewTarget.BUTTONS
+            3 -> CustomizePreviewTarget.ELEMENTS
+            4 -> CustomizePreviewTarget.COLORS_AND_SKINS
+            5 -> CustomizePreviewTarget.HOME_AND_LIBRARY
+            else -> CustomizePreviewTarget.PLAYER_STAGE
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { vm.go(Screen.Home) },
-                modifier = Modifier.testTag("customize_back_button")
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "Customize Player",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Live in-player customizer · Audio continues seamlessly",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(
-                onClick = { showResetDialog = true },
-                modifier = Modifier.testTag("customize_reset_button")
-            ) {
-                Icon(
-                    Icons.Rounded.RestartAlt,
-                    contentDescription = "Reset Customization",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-
-        // Live Mini State Header
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
+        PulseTopBar(
+            title = "Customize Player",
+            subtitle = "Live visual editor · Playback continues uninterrupted",
+            onBack = { vm.back() },
+            backTestTag = "customize_back_button",
+            actions = {
+                IconButton(
+                    onClick = { showResetDialog = true },
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(Pulse.Cyan.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
+                        .size(48.dp)
+                        .testTag("customize_reset_button")
                 ) {
                     Icon(
-                        Icons.Rounded.MusicNote,
-                        contentDescription = null,
-                        tint = Pulse.Cyan,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = playerState.title.ifBlank { "Now Playing Preview" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "Layout: ${currentLayout.displayName} · Theme: $currentThemeId · Buttons: $currentButtonPresetId",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Pulse.Cyan,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        Icons.Rounded.RestartAlt,
+                        contentDescription = "Reset Customization",
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
-        }
+        )
+
+        // Sticky Collapsible Auto-Adapting Live Preview
+        LiveCustomizePreviewCard(
+            target = previewTarget,
+            expanded = previewExpanded,
+            onToggleExpanded = { previewExpanded = !previewExpanded },
+            onOpenFullPlayer = { vm.openNowPlaying() },
+            layoutMode = currentLayout,
+            playerThemeId = currentThemeId,
+            buttonPresetId = currentButtonPresetId,
+            customButtonOrder = customButtonOrder,
+            hiddenPlayerElements = hiddenElements,
+            seekStyle = currentSeekStyle,
+            themeMode = currentThemeMode,
+            skinId = currentSkinId,
+            wallpaperPath = currentWallpaperPath,
+            colorSource = currentColorSource,
+            seedColor = currentSeedColor,
+            artworkAccent = currentArtworkAccent,
+            cornerRadiusDp = currentCornerRadius,
+            fontStyle = currentFontStyle,
+            forYouSectionOrder = forYouSectionOrder,
+            hiddenForYouSections = hiddenForYouSections,
+            albumGridColumns = albumGridColumns,
+            listDensity = listDensity,
+            playbackState = playerState,
+            isFavorite = isFavorite,
+            splitUpperRatio = splitUpperRatio,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
 
         // Scrollable Tabs
         ScrollableTabRow(
             selectedTabIndex = selectedTab,
             edgePadding = 16.dp,
             containerColor = MaterialTheme.colorScheme.background,
-            contentColor = Pulse.Cyan
+            contentColor = MaterialTheme.colorScheme.primary
         ) {
             tabs.forEachIndexed { index, (title, icon) ->
                 Tab(
@@ -247,7 +230,9 @@ fun PlayerCustomizeScreen(vm: MainViewModel) {
             when (selectedTab) {
                 0 -> LayoutsTab(
                     current = currentLayout,
-                    onSelect = vm::setPlayerLayout
+                    splitUpperRatio = splitUpperRatio,
+                    onSelect = vm::setPlayerLayout,
+                    onSplitRatioChange = vm::setSplitPlayerUpperRatio
                 )
                 1 -> ThemesTab(
                     currentId = currentThemeId,
@@ -255,21 +240,32 @@ fun PlayerCustomizeScreen(vm: MainViewModel) {
                 )
                 2 -> ButtonsTab(
                     currentId = currentButtonPresetId,
+                    placedButtons = customButtonOrder,
                     onSelect = vm::setButtonPreset,
+                    onUpdateOrder = vm::setCustomButtonOrder,
                     recommendation = recommendationNotice,
                     onRecommend = { goal, presetId ->
                         vm.setButtonPreset(presetId)
-                        recommendationNotice = "Applied '$goal' recommendation: switched button preset to '$presetId'."
+                        recommendationNotice = "Applied '$goal' button preset."
                     }
                 )
-                3 -> ElementsTab()
+                3 -> ElementsTab(
+                    hiddenKeys = hiddenElements,
+                    onToggle = vm::setPlayerElementVisible
+                )
                 4 -> ColorsAndSkinsTab(
                     themeMode = currentThemeMode,
                     skinId = currentSkinId,
                     colorSource = currentColorSource,
+                    seedColor = currentSeedColor,
+                    cornerRadiusDp = currentCornerRadius,
+                    fontStyle = currentFontStyle,
                     onSetThemeMode = vm::setThemeMode,
                     onSetSkin = vm::setSkin,
-                    onSetColorSource = vm::setColorSource
+                    onSetColorSource = vm::setColorSource,
+                    onSetSeedColor = vm::setSeedColor,
+                    onSetCornerRadius = vm::setCornerRadius,
+                    onSetFontStyle = vm::setFontStyle
                 )
                 5 -> HomeAndLibraryTab(vm = vm)
             }
@@ -280,20 +276,31 @@ fun PlayerCustomizeScreen(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
             title = { Text("Reset Customization", fontWeight = FontWeight.Bold) },
-            text = { Text("Would you like to reset only the current tab, or restore all player customizations to their default settings?") },
+            text = { Text("Reset just the active tab or restore every appearance and player customization to defaults?") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         when (selectedTab) {
-                            0 -> vm.setPlayerLayout(PlayerLayoutMode.ATMOSPHERIC_QUEUE)
-                            1 -> vm.applyPlayerTheme("classic")
-                            2 -> vm.setButtonPreset("centered")
+                            0 -> {
+                                vm.setPlayerLayout(PlayerLayoutMode.ATMOSPHERIC_QUEUE)
+                                vm.setSplitPlayerUpperRatio(0.40f)
+                            }
+                            1 -> vm.applyPlayerTheme("atmospheric_queue")
+                            2 -> {
+                                vm.setButtonPreset("centered")
+                                vm.setCustomButtonOrder(listOf("Shuffle", "Previous", "Play/Pause", "Next", "Repeat", "Favorite", "Queue", "More"))
+                            }
+                            3 -> vm.clearHiddenPlayerElements()
                             4 -> {
                                 vm.setThemeMode(ThemeMode.DARK)
-                                vm.setSkin("plum")
+                                vm.setSkin("studio_amber")
                                 vm.setColorSource(ColorSource.PULSE_PALETTE)
+                                vm.setSeedColor(0)
+                                vm.setCornerRadius(16)
+                                vm.setFontStyle(FontStylePreset.MODERN)
                             }
                             5 -> {
+                                vm.resetForYouLayout()
                                 vm.setListDensity(1)
                                 vm.setAlbumGridColumns(2)
                             }
@@ -307,11 +314,18 @@ fun PlayerCustomizeScreen(vm: MainViewModel) {
                     TextButton(
                         onClick = {
                             vm.setPlayerLayout(PlayerLayoutMode.ATMOSPHERIC_QUEUE)
-                            vm.applyPlayerTheme("classic")
+                            vm.setSplitPlayerUpperRatio(0.40f)
+                            vm.applyPlayerTheme("atmospheric_queue")
                             vm.setButtonPreset("centered")
+                            vm.setCustomButtonOrder(listOf("Shuffle", "Previous", "Play/Pause", "Next", "Repeat", "Favorite", "Queue", "More"))
+                            vm.clearHiddenPlayerElements()
                             vm.setThemeMode(ThemeMode.DARK)
-                            vm.setSkin("plum")
+                            vm.setSkin("studio_amber")
                             vm.setColorSource(ColorSource.PULSE_PALETTE)
+                            vm.setSeedColor(0)
+                            vm.setCornerRadius(16)
+                            vm.setFontStyle(FontStylePreset.MODERN)
+                            vm.resetForYouLayout()
                             vm.setListDensity(1)
                             vm.setAlbumGridColumns(2)
                             showResetDialog = false
@@ -327,12 +341,81 @@ fun PlayerCustomizeScreen(vm: MainViewModel) {
 @Composable
 private fun LayoutsTab(
     current: PlayerLayoutMode,
-    onSelect: (PlayerLayoutMode) -> Unit
+    splitUpperRatio: Float,
+    onSelect: (PlayerLayoutMode) -> Unit,
+    onSplitRatioChange: (Float) -> Unit
 ) {
+    val upperPercent = (splitUpperRatio.coerceIn(0.35f, 0.72f) * 100f).roundToInt()
+    val queuePercent = 100 - upperPercent
+
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = LocalBottomOverlayPadding.current + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = "Split-Screen Queue Ratio",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Or drag the bottom sheet handle directly in Now Playing",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "$upperPercent% / $queuePercent%",
+                            style = MaterialTheme.typography.labelLarge.merge(TabularMono),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Slider(
+                        value = splitUpperRatio.coerceIn(0.35f, 0.72f),
+                        onValueChange = onSplitRatioChange,
+                        valueRange = 0.35f..0.72f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.testTag("split_ratio_slider")
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            0.40f to "40 / 60 (Default)",
+                            0.50f to "50 / 50",
+                            0.60f to "60 / 40"
+                        ).forEach { (presetRatio, label) ->
+                            FilterChip(
+                                selected = kotlin.math.abs(splitUpperRatio - presetRatio) < 0.02f,
+                                onClick = { onSplitRatioChange(presetRatio) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
         item {
             Text(
                 text = "Choose Player Structure",
@@ -357,7 +440,7 @@ private fun LayoutsTab(
                     containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
                 ),
                 shape = RoundedCornerShape(16.dp),
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Pulse.Cyan) else null
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
             ) {
                 Row(
                     modifier = Modifier
@@ -394,7 +477,7 @@ private fun LayoutsTab(
                                     text = "ACTIVE",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = Pulse.Cyan
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -416,7 +499,7 @@ private fun ThemesTab(
     onSelect: (String) -> Unit
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = LocalBottomOverlayPadding.current + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -427,7 +510,7 @@ private fun ThemesTab(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "All 9 original themes with ambient visuals and disc/mesh art.",
+                text = "Ambient artwork and disc visual atmospheres for Now Playing.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -443,7 +526,7 @@ private fun ThemesTab(
                     containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
                 ),
                 shape = RoundedCornerShape(16.dp),
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Pulse.Cyan) else null
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
             ) {
                 Row(
                     modifier = Modifier
@@ -456,7 +539,7 @@ private fun ThemesTab(
                             .size(44.dp)
                             .clip(CircleShape)
                             .background(
-                                Brush.linearGradient(theme.colors.ifEmpty { listOf(Pulse.Cyan, Color.Black) })
+                                Brush.linearGradient(theme.colors.ifEmpty { listOf(MaterialTheme.colorScheme.primary, Color.Black) })
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -473,7 +556,7 @@ private fun ThemesTab(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (theme.special) "Special visual effect atmosphere" else "Standard theme rendering",
+                            text = if (theme.special) "Atmospheric visual backdrop" else "Standard theme rendering",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -484,64 +567,63 @@ private fun ThemesTab(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ButtonsTab(
     currentId: String,
+    placedButtons: List<String>,
     onSelect: (String) -> Unit,
+    onUpdateOrder: (List<String>) -> Unit,
     recommendation: String?,
     onRecommend: (goal: String, presetId: String) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
-    val placedButtons = remember {
-        mutableStateListOf(
-            "Shuffle", "Previous", "Play/Pause", "Next", "Repeat", "Favorite", "Queue", "More"
-        )
-    }
 
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = LocalBottomOverlayPadding.current + 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Recommendations Section
+        // Quick Recommendations Section
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Pulse.Violet.copy(alpha = 0.12f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.AutoAwesome, null, tint = Pulse.Violet, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Recommend Layout", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Quick Ergonomic Presets", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Choose your interaction goal to optimize playback controls:",
+                        text = "Pick your listening style to optimize transport button placement:",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilterChip(
-                            selected = false,
+                            selected = currentId == "minimal",
                             onClick = { onRecommend("Minimal", "minimal") },
                             label = { Text("Minimal") }
                         )
                         FilterChip(
-                            selected = false,
+                            selected = currentId == "thumb_zone",
                             onClick = { onRecommend("One-Handed", "thumb_zone") },
                             label = { Text("One-Handed") }
                         )
                         FilterChip(
-                            selected = false,
+                            selected = currentId == "queue_inline",
                             onClick = { onRecommend("Queue", "queue_inline") },
                             label = { Text("Queue") }
                         )
                         FilterChip(
-                            selected = false,
+                            selected = currentId == "expanded",
                             onClick = { onRecommend("Accessible", "expanded") },
                             label = { Text("Accessible") }
                         )
@@ -551,7 +633,7 @@ private fun ButtonsTab(
                         Text(
                             text = recommendation,
                             style = MaterialTheme.typography.labelSmall,
-                            color = Pulse.Mint,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -559,16 +641,16 @@ private fun ButtonsTab(
             }
         }
 
-        // 15 Presets Header
+        // Button Presets Header
         item {
             Text(
-                text = "15 Button Presets",
+                text = "Button Presets",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Select any of the 15 verified button presets without interrupting audio.",
+                text = "Switch transport & action button arrangements cleanly.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -585,7 +667,7 @@ private fun ButtonsTab(
                     containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
                 ),
                 shape = RoundedCornerShape(14.dp),
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Pulse.Cyan) else null
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
             ) {
                 Row(
                     modifier = Modifier
@@ -621,7 +703,7 @@ private fun ButtonsTab(
                                 Text(
                                     text = "SELECTED",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Pulse.Cyan,
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -644,15 +726,15 @@ private fun ButtonsTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Custom Button Order & Add Button",
+                        text = "Custom Button Order",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Rearrange, hide, or restore action buttons.",
+                        text = "Persisted order for customizable player action buttons.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -663,12 +745,13 @@ private fun ButtonsTab(
                 ) {
                     Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Add Button")
+                    Text("Add")
                 }
             }
         }
 
-        items(placedButtons) { btn ->
+        items(placedButtons, key = { it }) { btn ->
+            val idx = placedButtons.indexOf(btn)
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(12.dp)
@@ -676,37 +759,53 @@ private fun ButtonsTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.GraphicEq, null, tint = Pulse.Cyan, modifier = Modifier.size(18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Rounded.GraphicEq, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(btn, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                     }
-                    Row {
-                        TextButton(
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
                             onClick = {
-                                val idx = placedButtons.indexOf(btn)
                                 if (idx > 0) {
-                                    placedButtons.removeAt(idx)
-                                    placedButtons.add(idx - 1, btn)
+                                    val next = placedButtons.toMutableList()
+                                    next.removeAt(idx)
+                                    next.add(idx - 1, btn)
+                                    onUpdateOrder(next)
                                 }
-                            }
-                        ) { Text("Up", style = MaterialTheme.typography.labelSmall) }
+                            },
+                            enabled = idx > 0,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Rounded.KeyboardArrowUp, "Move $btn up")
+                        }
+                        IconButton(
+                            onClick = {
+                                if (idx in 0 until placedButtons.lastIndex) {
+                                    val next = placedButtons.toMutableList()
+                                    next.removeAt(idx)
+                                    next.add(idx + 1, btn)
+                                    onUpdateOrder(next)
+                                }
+                            },
+                            enabled = idx in 0 until placedButtons.lastIndex,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Rounded.KeyboardArrowDown, "Move $btn down")
+                        }
                         TextButton(
                             onClick = {
-                                val idx = placedButtons.indexOf(btn)
-                                if (idx < placedButtons.size - 1) {
-                                    placedButtons.removeAt(idx)
-                                    placedButtons.add(idx + 1, btn)
-                                }
+                                val next = placedButtons.toMutableList()
+                                next.remove(btn)
+                                onUpdateOrder(next)
                             }
-                        ) { Text("Down", style = MaterialTheme.typography.labelSmall) }
-                        TextButton(
-                            onClick = { placedButtons.remove(btn) }
-                        ) { Text("Hide", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall) }
+                        ) {
+                            Text("Hide", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
@@ -714,9 +813,11 @@ private fun ButtonsTab(
     }
 
     if (showAddDialog) {
-        val availableToAdd = listOf(
+        val catalog = listOf(
+            "Shuffle", "Previous", "Play/Pause", "Next", "Repeat", "Favorite", "Queue", "More",
             "Sleep Timer", "Equalizer", "Add to Playlist", "Lyrics", "Speed / Pitch", "Track Info"
-        ).filter { it !in placedButtons }
+        )
+        val availableToAdd = catalog.filter { it !in placedButtons }
 
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
@@ -728,7 +829,7 @@ private fun ButtonsTab(
                     availableToAdd.forEach { action ->
                         TextButton(
                             onClick = {
-                                placedButtons.add(action)
+                                onUpdateOrder(placedButtons + action)
                                 showAddDialog = false
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -749,22 +850,23 @@ private fun ButtonsTab(
 }
 
 @Composable
-private fun ElementsTab() {
-    val elements = remember {
-        mutableStateMapOf(
-            "artwork" to (true to ("Artwork / Album Cover" to "Shows local album cover with contrast styling")),
-            "title_artist" to (true to ("Title & Artist Info" to "Track title with marquee scroll and artist label")),
-            "waveform_seek" to (true to ("Waveform Seekbar" to "Real audio waveform progress bar with seek controls")),
-            "lyrics_preview" to (true to ("Synced Lyrics Preview" to "Displays active synchronized lyric line")),
-            "queue_preview" to (true to ("Up Next Queue Preview" to "Compact preview strip of next songs in queue")),
-            "signal_path" to (true to ("Audio Signal Path Badge" to "Format, sample rate (44.1/48kHz), and bit depth")),
-            "sleep_timer" to (true to ("Sleep Timer Chip" to "Countdown chip when sleep timer is active")),
-            "favorite_heart" to (true to ("Favorite Heart Button" to "Direct one-tap toggle for song favorites"))
+private fun ElementsTab(
+    hiddenKeys: Set<String>,
+    onToggle: (key: String, visible: Boolean) -> Unit
+) {
+    val elementDefs = remember {
+        listOf(
+            Triple("signal_path", "Audio Signal Path Badge", "Format, sample rate (44.1/48 kHz), and bit depth"),
+            Triple("sleep_timer", "Sleep Timer Chip", "Countdown pill when sleep timer is active"),
+            Triple("favorite_heart", "Favorite Heart Button", "Direct one-tap toggle for song favorites"),
+            Triple("waveform_seek", "Waveform / Scrubber Labels", "Audio progress bar and elapsed/total timestamps"),
+            Triple("lyrics_preview", "Lyrics Pill / Segmented Tab", "Quick switch between artwork and lyrics in player"),
+            Triple("queue_preview", "Up Next Queue Preview", "Compact strip of upcoming tracks inside Now Playing")
         )
     }
 
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = LocalBottomOverlayPadding.current + 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
@@ -775,15 +877,14 @@ private fun ElementsTab() {
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Show or hide specific content blocks within the active layout.",
+                text = "Show or hide individual badges and strips inside Now Playing.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        items(elements.keys.toList()) { key ->
-            val (enabled, info) = elements[key] ?: (true to ("" to ""))
-            val (title, description) = info
+        items(elementDefs, key = { it.first }) { (key, title, description) ->
+            val enabled = key !in hiddenKeys
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(14.dp)
@@ -795,19 +896,14 @@ private fun ElementsTab() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = enabled,
-                        onCheckedChange = { checked ->
-                            elements[key] = (checked to info)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Pulse.Cyan,
-                            checkedTrackColor = Pulse.Cyan.copy(alpha = 0.3f)
-                        )
+                        onCheckedChange = { checked -> onToggle(key, checked) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                     )
                 }
             }
@@ -815,18 +911,27 @@ private fun ElementsTab() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ColorsAndSkinsTab(
     themeMode: ThemeMode,
     skinId: String,
     colorSource: ColorSource,
+    seedColor: Int,
+    cornerRadiusDp: Int,
+    fontStyle: FontStylePreset,
     onSetThemeMode: (ThemeMode) -> Unit,
     onSetSkin: (String) -> Unit,
-    onSetColorSource: (ColorSource) -> Unit
+    onSetColorSource: (ColorSource) -> Unit,
+    onSetSeedColor: (Int) -> Unit,
+    onSetCornerRadius: (Int) -> Unit,
+    onSetFontStyle: (FontStylePreset) -> Unit
 ) {
+    val isDark = LocalDarkTheme.current
+
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = LocalBottomOverlayPadding.current + 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
             Text(
@@ -835,20 +940,194 @@ private fun ColorsAndSkinsTab(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            Spacer(Modifier.height(6.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(ThemeMode.SYSTEM to "System", ThemeMode.DARK to "Dark", ThemeMode.AMOLED to "AMOLED", ThemeMode.LIGHT to "Light").forEach { (mode, label) ->
+                listOf(
+                    ThemeMode.SYSTEM to "System",
+                    ThemeMode.LIGHT to "Light",
+                    ThemeMode.DARK to "Dark",
+                    ThemeMode.AMOLED to "AMOLED"
+                ).forEach { (mode, label) ->
                     FilterChip(
                         selected = themeMode == mode,
                         onClick = { onSetThemeMode(mode) },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     )
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Typography Style",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Switch heading and UI voice across the entire app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FontStylePreset.entries.forEach { preset ->
+                    FilterChip(
+                        selected = fontStyle == preset,
+                        onClick = { onSetFontStyle(preset) },
+                        label = { Text(preset.label) }
+                    )
+                }
+            }
+        }
+
+        item {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Shape Corner Radius",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${cornerRadiusDp}dp",
+                    style = MaterialTheme.typography.labelLarge.merge(TabularMono),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Slider(
+                value = cornerRadiusDp.toFloat(),
+                onValueChange = { onSetCornerRadius(it.roundToInt()) },
+                valueRange = 4f..28f,
+                steps = 5,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant
+                )
+            )
+        }
+
+        item {
+            Text(
+                text = "Dynamic Accent Source",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    ColorSource.PULSE_PALETTE to ("Active Skin Accent" to "Matches the chosen Pulse skin palette"),
+                    ColorSource.ARTWORK_DRIVEN to ("Artwork-Driven Palette" to "Extracts vibrant tones from current album art"),
+                    ColorSource.MATERIAL_YOU to ("Material You / Wallpaper" to "Follows Android dynamic wallpaper colors"),
+                    ColorSource.CUSTOM_SEED to ("Custom Accent Swatch" to "Pick a signature color for both Light and Dark mode")
+                ).forEach { (src, info) ->
+                    val (title, desc) = info
+                    val isSelected = colorSource == src
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSetColorSource(src) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (isSelected) {
+                                Icon(Icons.Rounded.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Custom Accent Swatches",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Tapping a swatch switches accent source to Custom Accent.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SeedPalettePresets.forEach { preset ->
+                    val previewArgb = if (isDark) preset.darkArgb else preset.lightArgb
+                    val previewColor = Color(previewArgb)
+                    val selected = colorSource == ColorSource.CUSTOM_SEED && (seedColor == previewArgb || seedColor == preset.darkArgb || seedColor == preset.lightArgb)
+                    val checkTint = if (previewColor.luminance() > 0.45f) Color(0xFF141122) else Color.White
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .width(64.dp)
+                            .clickable {
+                                onSetSeedColor(previewArgb)
+                                onSetColorSource(ColorSource.CUSTOM_SEED)
+                            }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(previewColor)
+                                .border(
+                                    width = if (selected) 3.dp else 1.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selected) {
+                                Icon(Icons.Rounded.Check, contentDescription = preset.name, tint = checkTint, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = preset.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -861,7 +1140,7 @@ private fun ColorsAndSkinsTab(
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "8 distinct color identities designed for high contrast and vibrance.",
+                text = "Daylight & atmospheric background palettes tuned for both Light and Dark modes.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -869,15 +1148,19 @@ private fun ColorsAndSkinsTab(
 
         items(Skins, key = { it.id }) { skin ->
             val isSelected = skin.id == skinId
+            val previewColors = if (isDark) skin.colors else skin.lightColors
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onSetSkin(skin.id) },
+                    .clickable {
+                        onSetSkin(skin.id)
+                        if (skin.isDaylight && isDark) onSetThemeMode(ThemeMode.LIGHT)
+                    },
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
                 ),
                 shape = RoundedCornerShape(14.dp),
-                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Pulse.Cyan) else null
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
             ) {
                 Row(
                     modifier = Modifier
@@ -889,55 +1172,20 @@ private fun ColorsAndSkinsTab(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(skin.colors.firstOrNull() ?: Pulse.Cyan)
+                            .background(Brush.linearGradient(previewColors))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(skin.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                        Text("Signature accent with custom dark background", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            text = if (skin.isDaylight) "Daylight light-mode palette" else "Adaptive light & dark gradient palette",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     if (isSelected) {
-                        Text("ACTIVE", style = MaterialTheme.typography.labelSmall, color = Pulse.Cyan, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        item {
-            Text(
-                text = "Dynamic Color Source",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            listOf(
-                ColorSource.PULSE_PALETTE to ("Static Skin Palette" to "Uses the active Pulse skin colors"),
-                ColorSource.ARTWORK_DRIVEN to ("Artwork-Driven Dynamic Colors" to "Extracts vibrant tones from the current track's album art"),
-                ColorSource.MATERIAL_YOU to ("Material You / Wallpaper" to "Derives colors from the Android system wallpaper")
-            ).forEach { (src, info) ->
-                val (title, desc) = info
-                val isSelected = colorSource == src
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSetColorSource(src) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, Pulse.Cyan) else null
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (isSelected) {
-                            Icon(Icons.Rounded.Check, null, tint = Pulse.Cyan, modifier = Modifier.size(20.dp))
-                        }
+                        Text("ACTIVE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -947,40 +1195,43 @@ private fun ColorsAndSkinsTab(
 
 @Composable
 private fun HomeAndLibraryTab(vm: MainViewModel) {
-    val sections = remember {
-        mutableStateListOf(
-            "Quick Picks (Jump Back In)" to true,
-            "Recently Played Tracks" to true,
-            "Most Played & Top Artists" to true,
-            "Moods & Vibes Playlists" to true,
-            "Forgotten Favorites" to true,
-            "Library Navigation Shortcuts" to true
-        )
-    }
-
+    val sectionOrder by vm.forYouSectionOrder.collectAsStateWithLifecycle()
+    val hiddenSections by vm.hiddenForYouSections.collectAsStateWithLifecycle()
     val gridCols by vm.albumGridColumns.collectAsStateWithLifecycle()
     val density by vm.listDensity.collectAsStateWithLifecycle()
 
+    val sectionLabels = remember {
+        mapOf(
+            "resume" to "Continue Listening Banner",
+            "actions" to "Shuffle & Play Quick Buttons",
+            "widgets" to "Overview & Tool Tiles",
+            "recent" to "Recently Added Carousel",
+            "top_picks" to "Top Picks For You Carousel"
+        )
+    }
+
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = LocalBottomOverlayPadding.current + 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
-                text = "Home Screen Section Arrangement",
+                text = "For You Section Arrangement",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Reorder or hide sections on the For You / Home screen.",
+                text = "Reorder or hide blocks on the For You screen. Changes save immediately.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        items(sections) { item ->
-            val (name, enabled) = item
+        items(sectionOrder, key = { it }) { key ->
+            val idx = sectionOrder.indexOf(key)
+            val enabled = key !in hiddenSections
+            val label = sectionLabels[key] ?: key
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(12.dp)
@@ -988,39 +1239,44 @@ private fun HomeAndLibraryTab(vm: MainViewModel) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                    Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = {
-                                val idx = sections.indexOf(item)
                                 if (idx > 0) {
-                                    sections.removeAt(idx)
-                                    sections.add(idx - 1, item)
-                                }
-                            }
-                        ) { Text("Up", style = MaterialTheme.typography.labelSmall) }
-                        IconButton(
-                            onClick = {
-                                val idx = sections.indexOf(item)
-                                if (idx < sections.size - 1) {
-                                    sections.removeAt(idx)
-                                    sections.add(idx + 1, item)
-                                }
-                            }
-                        ) { Text("Down", style = MaterialTheme.typography.labelSmall) }
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { chk ->
-                                val idx = sections.indexOf(item)
-                                if (idx >= 0) {
-                                    sections[idx] = name to chk
+                                    val next = sectionOrder.toMutableList()
+                                    next.removeAt(idx)
+                                    next.add(idx - 1, key)
+                                    vm.setForYouSectionOrder(next)
                                 }
                             },
-                            colors = SwitchDefaults.colors(checkedThumbColor = Pulse.Cyan)
+                            enabled = idx > 0,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Rounded.KeyboardArrowUp, "Move $label up")
+                        }
+                        IconButton(
+                            onClick = {
+                                if (idx in 0 until sectionOrder.lastIndex) {
+                                    val next = sectionOrder.toMutableList()
+                                    next.removeAt(idx)
+                                    next.add(idx + 1, key)
+                                    vm.setForYouSectionOrder(next)
+                                }
+                            },
+                            enabled = idx in 0 until sectionOrder.lastIndex,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Rounded.KeyboardArrowDown, "Move $label down")
+                        }
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = { chk -> vm.setForYouSectionVisible(key, chk) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                         )
                     }
                 }
@@ -1030,19 +1286,21 @@ private fun HomeAndLibraryTab(vm: MainViewModel) {
         item {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Library Grid & Density",
+                text = "Library Grid & List Density",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Configure album grid columns and list item spacing.",
+                text = "Controls album art grid density and song row spacing.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(2 to "2 Columns", 3 to "3 Columns", 4 to "4 Columns").forEach { (cols, label) ->
@@ -1055,10 +1313,12 @@ private fun HomeAndLibraryTab(vm: MainViewModel) {
             }
             Spacer(Modifier.height(6.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(0 to "Compact List", 1 to "Normal List", 2 to "Comfortable List").forEach { (d, label) ->
+                listOf(0 to "Compact List", 1 to "Standard List", 2 to "Comfortable List").forEach { (d, label) ->
                     FilterChip(
                         selected = density == d,
                         onClick = { vm.setListDensity(d) },

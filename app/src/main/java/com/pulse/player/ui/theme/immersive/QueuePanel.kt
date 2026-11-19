@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -44,6 +45,7 @@ import com.pulse.player.ui.components.Artwork
 import com.pulse.player.ui.theme.Pulse
 import kotlin.math.sin
 
+@Immutable
 data class QueueItem(
     val mediaId: String,
     val title: String,
@@ -129,7 +131,7 @@ fun QueueTrackRow(
             )
             Text(
                 text = t.artist,
-                color = MaterialTheme.colorScheme.onSurface.copy(0.65f),
+                color = Color.White.copy(0.68f),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -140,16 +142,16 @@ fun QueueTrackRow(
         } else {
             Text(
                 text = fmt(t.durationMs),
-                color = MaterialTheme.colorScheme.onSurface.copy(0.6f),
-                style = MaterialTheme.typography.labelSmall
+                color = Color.White.copy(0.68f),
+                style = MaterialTheme.typography.labelSmall.merge(com.pulse.player.ui.theme.TabularMono)
             )
         }
         if (onRemove != null && !current) {
-            IconButton(onClick = onRemove, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onRemove, modifier = Modifier.size(48.dp)) {
                 Icon(
                     PulseIcons.Close,
                     contentDescription = "Remove ${t.title} from queue",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(0.6f)
+                    tint = Color.White.copy(0.68f)
                 )
             }
         }
@@ -189,25 +191,25 @@ fun QueuePanel(
             ) {
                 Text(
                     text = "Queue · ${queue.size} songs",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
                     imageVector = if (expanded) PulseIcons.ChevronDown else PulseIcons.ChevronUp,
                     contentDescription = if (expanded) "Collapse queue" else "Expand queue",
-                    tint = MaterialTheme.colorScheme.onSurface
+                    tint = Color.White
                 )
             }
             if (queue.isEmpty()) {
                 Text(
                     text = "The queue is empty",
                     modifier = Modifier.padding(24.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(0.6f)
+                    color = Color.White.copy(0.68f)
                 )
             } else {
                 LazyColumn(state = listState) {
-                    itemsIndexed(queue, key = { _, q -> q.mediaId }) { i, q ->
+                    itemsIndexed(queue, key = { _, q -> q.mediaId }, contentType = { _, _ -> "queue_item" }) { i, q ->
                         QueueTrackRow(
                             t = q,
                             current = i == currentIndex,

@@ -4,11 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,8 +24,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -35,9 +31,7 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.RecordVoiceOver
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -62,7 +56,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -71,15 +64,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.pulse.player.playback.Track
-import com.pulse.player.ui.components.formatTime
-import com.pulse.player.ui.theme.Pulse
+import com.pulse.player.data.ErrorCategory
+import com.pulse.player.data.ErrorDispatcher
+import com.pulse.player.ui.components.LocalBottomOverlayPadding
+import com.pulse.player.ui.components.PulseTopBar
 import com.pulse.player.ui.viewmodel.MainViewModel
 import com.pulse.player.ui.viewmodel.TranscriptionState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TranscribeScreen(vm: MainViewModel) {
+    BackHandler { vm.back() }
+
     val ctx = LocalContext.current
     val state by vm.transcriptionState.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
@@ -87,59 +83,44 @@ fun TranscribeScreen(vm: MainViewModel) {
 
     var customPrompt by remember { mutableStateOf("") }
     var showTrackPicker by remember { mutableStateOf(false) }
-    var selectedTrackForLyrics by remember { mutableStateOf<Track?>(null) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var tempApiKey by remember { mutableStateOf("") }
+
+    val bottomInset = LocalBottomOverlayPadding.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Pulse.Bg)
+            .background(Color.Transparent)
     ) {
-        // Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { vm.back() },
-                modifier = Modifier.testTag("transcribe_back_button")
-            ) {
-                Icon(Icons.Rounded.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+        PulseTopBar(
+            title = "Audio & Lyrics Transcribe",
+            subtitle = "Convert local audio tracks into synced lyrics",
+            onBack = { vm.back() },
+            backTestTag = "transcribe_back_button",
+            actions = {
+                IconButton(
+                    onClick = { showApiKeyDialog = true },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("transcribe_api_key_button")
+                ) {
+                    Icon(
+                        Icons.Rounded.Key,
+                        contentDescription = "Configure API Key",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "Audio & Lyrics Transcribe",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Powered by gemini-3.5-transcribe",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Pulse.Cyan
-                )
-            }
-            IconButton(
-                onClick = { showApiKeyDialog = true },
-                modifier = Modifier.testTag("transcribe_api_key_button")
-            ) {
-                Icon(Icons.Rounded.Key, contentDescription = "Configure API Key", tint = Pulse.Cyan)
-            }
-        }
+        )
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomInset + 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Microphone capture is intentionally unavailable. C13 keeps the
-            // The offline player does not request microphone access; local
-            // library transcription remains available through the picker.
-            // remains available through the track picker below.
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -160,9 +141,10 @@ fun TranscribeScreen(vm: MainViewModel) {
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Choose a track from your library. Microphone capture is not included in this build.",
+                            text = "Choose any song from your library to extract lyrics with optional timestamps.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Pulse.TextMid
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
 
                         Spacer(Modifier.height(24.dp))
@@ -170,11 +152,16 @@ fun TranscribeScreen(vm: MainViewModel) {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(96.dp)
+                                .size(88.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            Icon(Icons.Rounded.Mic, contentDescription = "Microphone capture unavailable", tint = Pulse.TextMid, modifier = Modifier.size(40.dp))
+                            Icon(
+                                Icons.Rounded.Mic,
+                                contentDescription = "Audio transcription",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(38.dp)
+                            )
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -212,15 +199,15 @@ fun TranscribeScreen(vm: MainViewModel) {
                             placeholder = {
                                 Text(
                                     "e.g., 'Transcribe as synchronized song lyrics with timestamps', or 'Transcribe in Spanish'",
-                                    color = Pulse.TextMid,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Pulse.Cyan,
-                                unfocusedBorderColor = Pulse.Outline,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -246,7 +233,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                     .padding(32.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                CircularProgressIndicator(color = Pulse.Cyan)
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.height(16.dp))
                                 Text(
                                     s.progressText,
@@ -256,9 +243,9 @@ fun TranscribeScreen(vm: MainViewModel) {
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "Calling gemini-3.5-transcribe...",
+                                    "Processing vocals & timing...",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Pulse.TextMid
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -270,16 +257,16 @@ fun TranscribeScreen(vm: MainViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF3B151E))
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                         ) {
                             Column(Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.Close, null, tint = Pulse.Magenta)
+                                    Icon(Icons.Rounded.Close, null, tint = MaterialTheme.colorScheme.error)
                                     Spacer(Modifier.width(10.dp))
                                     Text(
                                         "Transcription Failed",
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
                                         style = MaterialTheme.typography.titleSmall
                                     )
                                 }
@@ -287,18 +274,21 @@ fun TranscribeScreen(vm: MainViewModel) {
                                 Text(
                                     s.message,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFFFFB4AB)
+                                    color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(
                                         onClick = { showApiKeyDialog = true },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Magenta)
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        )
                                     ) {
-                                        Text("Check API Key", color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Check API Key")
                                     }
                                     TextButton(onClick = { vm.resetTranscriptionState() }) {
-                                        Text("Dismiss", color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
                                     }
                                 }
                             }
@@ -320,7 +310,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Rounded.Check, null, tint = Pulse.Cyan)
+                                        Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.width(8.dp))
                                         Text(
                                             "Transcription Complete",
@@ -331,11 +321,11 @@ fun TranscribeScreen(vm: MainViewModel) {
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
-                                        color = Pulse.Cyan.copy(alpha = 0.15f)
+                                        color = MaterialTheme.colorScheme.primaryContainer
                                     ) {
                                         Text(
-                                            text = s.result.modelUsed,
-                                            color = Pulse.Cyan,
+                                            text = "Studio Transcript",
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             style = MaterialTheme.typography.labelSmall,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
@@ -346,7 +336,7 @@ fun TranscribeScreen(vm: MainViewModel) {
 
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
-                                    color = Pulse.Bg,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
@@ -371,7 +361,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                         onClick = {
                                             val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                             clipboard.setPrimaryClip(ClipData.newPlainText("Transcription", s.result.text))
-                                            Toast.makeText(ctx, "Copied transcript to clipboard", Toast.LENGTH_SHORT).show()
+                                            vm.snackbarMessage.value = "Copied transcript to clipboard"
                                         },
                                         modifier = Modifier
                                             .weight(1f)
@@ -384,11 +374,21 @@ fun TranscribeScreen(vm: MainViewModel) {
 
                                     OutlinedButton(
                                         onClick = {
-                                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(Intent.EXTRA_TEXT, s.result.text)
+                                            runCatching {
+                                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, s.result.text)
+                                                }
+                                                ctx.startActivity(Intent.createChooser(intent, "Share Transcription"))
+                                            }.onFailure { err ->
+                                                ErrorDispatcher.post(
+                                                    ErrorCategory.STORAGE,
+                                                    "Unable to share transcript",
+                                                    err.message ?: "No compatible app found to share text.",
+                                                    err.stackTraceToString()
+                                                )
+                                                vm.snackbarMessage.value = "Unable to share transcript"
                                             }
-                                            ctx.startActivity(Intent.createChooser(intent, "Share Transcription"))
                                         },
                                         modifier = Modifier
                                             .weight(1f)
@@ -404,23 +404,36 @@ fun TranscribeScreen(vm: MainViewModel) {
                                             val targetId = currentTrackState.mediaId ?: tracks.firstOrNull()?.id
                                             if (targetId != null) {
                                                 val saved = vm.saveLyricsForTrack(targetId, s.result.text)
-                                                if (saved) {
-                                                    Toast.makeText(ctx, "Saved as lyrics for current track!", Toast.LENGTH_SHORT).show()
+                                                vm.snackbarMessage.value = if (saved) {
+                                                    "Saved lyrics for current track"
                                                 } else {
-                                                    Toast.makeText(ctx, "Failed to save lyrics.", Toast.LENGTH_SHORT).show()
+                                                    "Couldn't save lyrics"
                                                 }
                                             } else {
-                                                Toast.makeText(ctx, "Play or select a track first to attach lyrics.", Toast.LENGTH_SHORT).show()
+                                                vm.snackbarMessage.value = "Play or select a track first"
                                             }
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        ),
                                         modifier = Modifier
                                             .weight(1.3f)
                                             .testTag("save_lyrics_button")
                                     ) {
-                                        Icon(Icons.Rounded.RecordVoiceOver, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                        Icon(
+                                            Icons.Rounded.RecordVoiceOver,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                         Spacer(Modifier.width(4.dp))
-                                        Text("Save Lyrics", color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1)
+                                        Text(
+                                            "Save Lyrics",
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
                                     }
                                 }
                             }
@@ -443,9 +456,9 @@ fun TranscribeScreen(vm: MainViewModel) {
             text = {
                 Column(Modifier.height(320.dp)) {
                     Text(
-                        "Choose a track from your library to generate lyrics with gemini-3.5-transcribe:",
+                        "Choose a track from your library to transcribe lyrics:",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(12.dp))
                     LazyColumn(
@@ -465,11 +478,27 @@ fun TranscribeScreen(vm: MainViewModel) {
                                     modifier = Modifier.padding(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Rounded.LibraryMusic, null, tint = Pulse.Cyan, modifier = Modifier.size(20.dp))
+                                    Icon(
+                                        Icons.Rounded.LibraryMusic,
+                                        null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                     Spacer(Modifier.width(10.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(t.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(t.artist, color = Pulse.TextMid, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                        Text(
+                                            t.title,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            t.artist,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1
+                                        )
                                     }
                                 }
                             }
@@ -479,7 +508,7 @@ fun TranscribeScreen(vm: MainViewModel) {
             },
             confirmButton = {
                 TextButton(onClick = { showTrackPicker = false }) {
-                    Text("Close", color = Pulse.Cyan)
+                    Text("Close", color = MaterialTheme.colorScheme.primary)
                 }
             },
             containerColor = MaterialTheme.colorScheme.surface
@@ -491,26 +520,26 @@ fun TranscribeScreen(vm: MainViewModel) {
         AlertDialog(
             onDismissRequest = { showApiKeyDialog = false },
             title = {
-                Text("Gemini API Key", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                Text("Transcription API Key", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column {
                     Text(
-                        "Set your Gemini API key in Pulse Settings to use online transcription.",
+                        "Set your personal API key in Pulse Settings to enable cloud lyrics transcription.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Pulse.TextMid
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
                         value = tempApiKey,
                         onValueChange = { tempApiKey = it },
-                        placeholder = { Text("AIzaSy...", color = Pulse.TextMid) },
+                        placeholder = { Text("AIzaSy...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Pulse.Cyan,
-                            unfocusedBorderColor = Pulse.Outline,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -521,13 +550,16 @@ fun TranscribeScreen(vm: MainViewModel) {
                     onClick = {
                         if (tempApiKey.isNotBlank()) {
                             vm.setGeminiApiKey(tempApiKey)
-                            Toast.makeText(ctx, "API Key saved!", Toast.LENGTH_SHORT).show()
+                            vm.snackbarMessage.value = "API key saved"
                         }
                         showApiKeyDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Cyan)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
-                    Text("Save Key", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Save Key", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

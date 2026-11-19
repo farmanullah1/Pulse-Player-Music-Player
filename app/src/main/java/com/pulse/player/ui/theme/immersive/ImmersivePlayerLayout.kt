@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -57,6 +58,7 @@ import com.pulse.player.data.db.LyricsEntity
 import com.pulse.player.data.lyrics.LrcParser
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.Artwork
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.themes.PlayerThemes
@@ -78,7 +80,7 @@ fun LyricsContent(
             ) {
                 Text(
                     text = "No lyrics for this song",
-                    color = MaterialTheme.colorScheme.onSurface.copy(0.8f),
+                    color = Color.White.copy(0.84f),
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(Modifier.height(16.dp))
@@ -112,7 +114,7 @@ fun LyricsContent(
                             .fillMaxWidth()
                             .padding(horizontal = 28.dp, vertical = 8.dp),
                         textAlign = TextAlign.Center,
-                        color = if (i == active) Color.White else MaterialTheme.colorScheme.onSurface.copy(0.45f),
+                        color = if (i == active) Color.White else Color.White.copy(0.5f),
                         fontSize = if (i == active) 22.sp else 18.sp,
                         fontWeight = if (i == active) FontWeight.Bold else FontWeight.Normal
                     )
@@ -124,7 +126,7 @@ fun LyricsContent(
                 item {
                     Text(
                         text = lyrics.text,
-                        color = MaterialTheme.colorScheme.onSurface.copy(0.9f),
+                        color = Color.White.copy(0.92f),
                         lineHeight = 26.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -153,7 +155,7 @@ fun ErrorCard(
         ) {
             Text(
                 text = error,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
@@ -161,7 +163,7 @@ fun ErrorCard(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = onRetry,
-                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Orange)
+                    colors = ButtonDefaults.buttonColors(containerColor = Pulse.Orange, contentColor = Color.White)
                 ) {
                     Text("Retry")
                 }
@@ -202,8 +204,8 @@ fun Foreground(
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Pulse.Orange,
                     selectedLabelColor = Color.White,
-                    containerColor = MaterialTheme.colorScheme.onSurface.copy(0.12f),
-                    labelColor = MaterialTheme.colorScheme.onSurface.copy(0.8f)
+                    containerColor = Color.White.copy(0.14f),
+                    labelColor = Color.White.copy(0.84f)
                 )
             )
             FilterChip(
@@ -213,8 +215,8 @@ fun Foreground(
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Pulse.Orange,
                     selectedLabelColor = Color.White,
-                    containerColor = MaterialTheme.colorScheme.onSurface.copy(0.12f),
-                    labelColor = MaterialTheme.colorScheme.onSurface.copy(0.8f)
+                    containerColor = Color.White.copy(0.14f),
+                    labelColor = Color.White.copy(0.84f)
                 )
             )
         }
@@ -294,13 +296,16 @@ fun Controls(
             onNext = vm.player::next
         )
         Spacer(Modifier.height(12.dp))
+        val audioEffectsActive = s.speed != 1f || s.pitchSemitones != 0f || s.abLoopStartMs != null || s.abLoopEndMs != null
         SecondaryPlayerActions(
             isFav = fav,
-            sleepActive = vm.sleepOpen.value,
+            sleepActive = s.sleepRemainingMs > 0 || s.sleepEndOfTrack || vm.sleepOpen.value,
+            audioEffectsActive = audioEffectsActive,
             onFav = { s.mediaId?.let { vm.toggleFavorite(it) } },
             onSleep = vm::openSleepSheet,
             onAddToPlaylist = { vm.openAddToPlaylist() },
             onQueue = onOpenQueue,
+            onAudioControls = vm::openAudioControls,
             onTune = { vm.go(Screen.Equalizer) }
         )
         Spacer(Modifier.height(8.dp))
@@ -354,6 +359,7 @@ fun ImmersivePlayerLayout(
                         Modifier
                             .weight(0.55f)
                             .fillMaxHeight()
+                            .navigationBarsPadding()
                     ) {
                         PlayerTopBar(onBack = onBack, onMore = vm::openTrackOptions)
                         Foreground(
@@ -388,12 +394,15 @@ fun ImmersivePlayerLayout(
                         modifier = Modifier
                             .weight(0.45f)
                             .fillMaxHeight()
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
                     )
                 }
             } else {
                 Column(
                     Modifier
                         .fillMaxSize()
+                        .navigationBarsPadding()
                         .padding(bottom = if (queueOpen) 0.dp else 160.dp)
                 ) {
                     PlayerTopBar(onBack = onBack, onMore = vm::openTrackOptions)
@@ -447,13 +456,22 @@ fun ImmersivePlayerLayout(
                 )
             }
 
-            s.error?.let { err ->
-                ErrorCard(
-                    error = err,
+            if (s.trackError != null) {
+                PlaybackErrorBanner(
+                    error = s.trackError!!,
                     onRetry = vm::retry,
                     onSkip = vm::skip,
                     modifier = Modifier.align(Alignment.Center)
                 )
+            } else {
+                s.error?.let { err ->
+                    ErrorCard(
+                        error = err,
+                        onRetry = vm::retry,
+                        onSkip = vm::skip,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
             }
         }
     }

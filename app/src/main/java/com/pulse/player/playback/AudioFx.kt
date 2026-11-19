@@ -189,6 +189,17 @@ object AudioFx {
         }
     }
 
+    private var masterEnabled = true
+    val isMasterEnabled: Boolean get() = masterEnabled
+
+    fun setEnabled(enabled: Boolean) {
+        masterEnabled = enabled
+        runCatching { eq?.enabled = enabled }
+        runCatching { bass?.enabled = enabled && (bass?.roundedStrength ?: 0) > 0 }
+        runCatching { virt?.enabled = enabled && (virt?.roundedStrength ?: 0) > 0 }
+        runCatching { reverb?.enabled = enabled && (reverb?.preset ?: PresetReverb.PRESET_NONE) != PresetReverb.PRESET_NONE }
+    }
+
     val reverbSupported: Boolean get() = !reverbDisabled && (reverb != null || isTypeAvailable(AudioEffect.EFFECT_TYPE_PRESET_REVERB))
     fun setReverb(index: Int) {
         if (index in reverbPresets.indices) {
@@ -198,7 +209,7 @@ object AudioFx {
             runCatching {
                 reverb?.let {
                     it.preset = reverbPresets[index]
-                    it.enabled = index > 0
+                    it.enabled = masterEnabled && index > 0
                 }
             }
         }

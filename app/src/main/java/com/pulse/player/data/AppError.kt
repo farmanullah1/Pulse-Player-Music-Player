@@ -11,7 +11,8 @@ enum class ErrorCategory {
     SCAN,
     BACKUP,
     AUDIO_FX,
-    STORAGE
+    STORAGE,
+    NETWORK
 }
 
 data class AppError(

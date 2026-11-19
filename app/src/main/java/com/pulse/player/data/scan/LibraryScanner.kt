@@ -146,6 +146,8 @@ class LibraryScanner(
             val cursor = ctx.contentResolver.query(uri, p, sel, null, null)
                 ?: return@withContext partial(PartialReason.QueryFailed)
 
+            val existingMeta = db.tracks().mediaStoreScanMeta().associateBy { it.id }
+
             var found = 0
             val rows = ArrayList<TrackEntity>(500)
             val seen = ArrayList<ScanSeenEntity>(500)
@@ -177,84 +179,91 @@ class LibraryScanner(
                     val folder = if (iR >= 0) c.getString(iR).orEmpty().trimEnd('/') else "Music"
                     if (excluded.any { folder.startsWith(it, ignoreCase = true) }) continue
 
-                    val displayName = c.getString(iN).orEmpty()
-                    val title = c.getString(iT).orEmpty().ifBlank {
-                        displayName.substringBeforeLast('.')
-                    }
-                    val artist = c.getString(iAr).orEmpty().let {
-                        if (it == "<unknown>" || it.isBlank()) "Unknown artist" else it
-                    }
-                    val album = c.getString(iAl).orEmpty().ifBlank { "Unknown album" }
-
-                    val rawData = if (iData >= 0) c.getString(iData) else null
-                    val dataPath = if (!rawData.isNullOrBlank()) {
-                        rawData
-                    } else {
-                        val rel = if (iR >= 0) c.getString(iR).orEmpty().trim('/') else ""
-                        if (rel.isNotBlank()) "/storage/emulated/0/$rel/$displayName" else "/storage/emulated/0/$displayName"
-                    }
-
-                    val volumeName = if (iVol >= 0) c.getString(iVol).orEmpty().ifBlank { "external_primary" } else "external_primary"
                     val trackId = IdentityModel.mediaStoreId(id)
-
-                    val track = TrackEntity(
-                        id = trackId,
-                        uri = ContentUris.withAppendedId(uri, id).toString(),
-                        displayName = displayName,
-                        title = title,
-                        artist = artist,
-                        album = album,
-                        albumArtist = null,
-                        durationMs = duration,
-                        sizeBytes = size,
-                        mimeType = c.getString(iM),
-                        folderPath = folder,
-                        dateAddedMs = c.getLong(iDa) * 1000,
-                        dateModifiedMs = c.getLong(iDm) * 1000,
-                        trackNumber = c.getInt(iTr) % 1000,
-                        year = c.getInt(iY),
-                        normTitle = norm(title),
-                        normArtist = norm(artist),
-                        normAlbum = norm(album),
-                        available = true,
-                        dataPath = dataPath,
-                        scanGen = 0,
-                        sourceType = "MEDIASTORE",
-                        stableId = id.toString(),
-                        volumeId = volumeName,
-                        folderUri = null,
-                        // Schema v4 fields populated from MediaStore where available
-                        genre = "",              // MediaStore genre requires separate query; populated post-scan
-                        genresRaw = "",
-                        albumArtistNorm = norm(null), // albumArtist not directly in Audio.Media projection; populated post-scan
-                        bitrate = 0,             // Not available from MediaStore without opening the file
-                        sampleRate = 0,
-                        bitDepth = 0,
-                        codec = c.getString(iM)?.let { guessCodecFromMime(it) } ?: "",
-                        replayGainTrackDb = 0f,
-                        replayGainAlbumDb = 0f,
-                        bpm = 0f,
-                        language = "",
-                        hasEmbeddedLyrics = false
-                    )
-
-                    rows += track
+                    val dateModifiedMs = c.getLong(iDm) * 1000
                     seen += ScanSeenEntity(trackId)
                     found++
 
-                    if (rows.size >= 500) {
-                        db.tracks().upsertAll(rows.toList())
-                        db.scan().seen(seen.toList())
-                        rows.clear()
-                        seen.clear()
+                    val existing = existingMeta[trackId]
+                    if (existing == null || existing.sizeBytes != size || existing.dateModifiedMs != dateModifiedMs) {
+                        val displayName = c.getString(iN).orEmpty()
+                        val title = c.getString(iT).orEmpty().ifBlank {
+                            displayName.substringBeforeLast('.')
+                        }
+                        val artist = c.getString(iAr).orEmpty().let {
+                            if (it == "<unknown>" || it.isBlank()) "Unknown artist" else it
+                        }
+                        val album = c.getString(iAl).orEmpty().ifBlank { "Unknown album" }
+
+                        val rawData = if (iData >= 0) c.getString(iData) else null
+                        val dataPath = if (!rawData.isNullOrBlank()) {
+                            rawData
+                        } else {
+                            val rel = if (iR >= 0) c.getString(iR).orEmpty().trim('/') else ""
+                            if (rel.isNotBlank()) "/storage/emulated/0/$rel/$displayName" else "/storage/emulated/0/$displayName"
+                        }
+
+                        val volumeName = if (iVol >= 0) c.getString(iVol).orEmpty().ifBlank { "external_primary" } else "external_primary"
+
+                        rows += TrackEntity(
+                            id = trackId,
+                            uri = ContentUris.withAppendedId(uri, id).toString(),
+                            displayName = displayName,
+                            title = title,
+                            artist = artist,
+                            album = album,
+                            albumArtist = null,
+                            durationMs = duration,
+                            sizeBytes = size,
+                            mimeType = c.getString(iM),
+                            folderPath = folder,
+                            dateAddedMs = c.getLong(iDa) * 1000,
+                            dateModifiedMs = dateModifiedMs,
+                            trackNumber = c.getInt(iTr) % 1000,
+                            year = c.getInt(iY),
+                            normTitle = norm(title),
+                            normArtist = norm(artist),
+                            normAlbum = norm(album),
+                            available = true,
+                            dataPath = dataPath,
+                            scanGen = 0,
+                            sourceType = "MEDIASTORE",
+                            stableId = id.toString(),
+                            volumeId = volumeName,
+                            folderUri = null,
+                            // Schema v4 fields populated from MediaStore where available
+                            genre = "",              // MediaStore genre requires separate query; populated post-scan
+                            genresRaw = "",
+                            albumArtistNorm = "",    // albumArtist not directly in Audio.Media projection; populated post-scan
+                            bitrate = 0,             // Not available from MediaStore without opening the file
+                            sampleRate = 0,
+                            bitDepth = 0,
+                            codec = c.getString(iM)?.let { guessCodecFromMime(it) } ?: "",
+                            replayGainTrackDb = 0f,
+                            replayGainAlbumDb = 0f,
+                            bpm = 0f,
+                            language = "",
+                            hasEmbeddedLyrics = false
+                        )
+                    }
+
+                    if (rows.size >= 500 || seen.size >= 500) {
+                        val rowsBatch = if (rows.isNotEmpty()) rows.toList().also { rows.clear() } else emptyList()
+                        val seenBatch = if (seen.isNotEmpty()) seen.toList().also { seen.clear() } else emptyList()
+                        db.withTransaction {
+                            if (rowsBatch.isNotEmpty()) db.tracks().upsertAll(rowsBatch)
+                            if (seenBatch.isNotEmpty()) db.scan().seen(seenBatch)
+                        }
                         _state.value = ScanState.Scanning(found)
                     }
                 }
             }
 
-            if (rows.isNotEmpty()) {
-                db.tracks().upsertAll(rows.toList())
-                db.scan().seen(seen.toList())
+            if (rows.isNotEmpty() || seen.isNotEmpty()) {
+                db.withTransaction {
+                    if (rows.isNotEmpty()) db.tracks().upsertAll(rows)
+                    if (seen.isNotEmpty()) db.scan().seen(seen)
+                }
             }
 
             _state.value = ScanState.Reconciling
@@ -301,11 +310,13 @@ class LibraryScanner(
             )
             return@withContext 0
         }
+        val existingMeta = db.tracks().safScanMeta(treeUri.toString()).associateBy { it.id }
         var count = 0
-        val batch = ArrayList<TrackEntity>()
+        val batch = ArrayList<TrackEntity>(500)
 
         suspend fun scanDir(dir: DocumentFile, path: String) {
             dir.listFiles().forEach { file ->
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 if (file.isDirectory) {
                     scanDir(file, "$path/${file.name.orEmpty()}")
                 } else if (file.type?.startsWith("audio/") == true ||
@@ -318,10 +329,18 @@ class LibraryScanner(
                     val size = file.length()
                     if (size < 1024) return@forEach
 
-                    val name = file.name.orEmpty()
-                    val title = name.substringBeforeLast('.')
                     val docId = DocumentsContract.getDocumentId(file.uri)
                     val id = IdentityModel.safId(treeUri.toString(), docId)
+                    val lastModified = file.lastModified()
+                    count++
+
+                    val existing = existingMeta[id]
+                    if (existing != null && existing.sizeBytes == size && existing.dateModifiedMs == lastModified) {
+                        return@forEach
+                    }
+
+                    val name = file.name.orEmpty()
+                    val title = name.substringBeforeLast('.')
                     val cleanPath = path.ifBlank { "Music" }.trim('/')
                     val dataPath = "/storage/emulated/0/$cleanPath/$name"
 
@@ -337,8 +356,8 @@ class LibraryScanner(
                         sizeBytes = size,
                         mimeType = file.type,
                         folderPath = cleanPath,
-                        dateAddedMs = file.lastModified(),
-                        dateModifiedMs = file.lastModified(),
+                        dateAddedMs = lastModified,
+                        dateModifiedMs = lastModified,
                         trackNumber = 0,
                         year = 0,
                         normTitle = norm(title),
@@ -358,10 +377,10 @@ class LibraryScanner(
                         replayGainTrackDb = 0f, replayGainAlbumDb = 0f,
                         bpm = 0f, language = "", hasEmbeddedLyrics = false
                     )
-                    count++
                     if (batch.size >= 500) {
-                        db.tracks().upsertAll(batch.toList())
+                        val toWrite = batch.toList()
                         batch.clear()
+                        db.withTransaction { db.tracks().upsertAll(toWrite) }
                     }
                 }
             }
@@ -369,7 +388,7 @@ class LibraryScanner(
 
         scanDir(root, root.name.orEmpty().ifBlank { "Music" })
         if (batch.isNotEmpty()) {
-            db.tracks().upsertAll(batch)
+            db.withTransaction { db.tracks().upsertAll(batch) }
         }
         count
     }

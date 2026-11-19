@@ -55,5 +55,34 @@ class RoomMigrationTest {
             executedSql[5].contains("ON play_events(trackId, playedAtMs)")
         )
     }
+
+    @Test
+    fun testMigration4To5IndexCreation() {
+        val executedSql = mutableListOf<String>()
+
+        val dbProxy = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java),
+            object : InvocationHandler {
+                override fun invoke(proxy: Any?, method: Method?, args: Array<out Any>?): Any? {
+                    if (method?.name == "execSQL" && args != null && args.isNotEmpty()) {
+                        executedSql.add(args[0] as String)
+                    }
+                    return null
+                }
+            }
+        ) as SupportSQLiteDatabase
+
+        PulseDb.MIGRATION_4_5.migrate(dbProxy)
+
+        assertEquals(1, executedSql.size)
+        assertTrue(
+            executedSql[0].contains("CREATE INDEX IF NOT EXISTS index_tracks_sourceType_available_sizeBytes_normTitle")
+        )
+        assertTrue(
+            executedSql[0].contains("ON tracks(sourceType, available, sizeBytes, normTitle)")
+        )
+        assertTrue(executedSql.none { it.contains("DROP", ignoreCase = true) })
+    }
 }
 

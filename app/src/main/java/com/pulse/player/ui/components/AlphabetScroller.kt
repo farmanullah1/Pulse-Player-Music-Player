@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,13 +25,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.pulse.player.ui.theme.Pulse
 import kotlinx.coroutines.launch
 
 fun firstLetter(title: String): Char =
@@ -95,7 +94,7 @@ fun AlphaScroller(
                 Text(
                     text = c.toString(),
                     fontSize = 10.sp,
-                    color = if (c == active) Pulse.Cyan else Pulse.TextMid,
+                    color = if (c == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = if (c == active) FontWeight.Bold else FontWeight.Normal
                 )
             }
@@ -108,14 +107,21 @@ fun AlphaScroller(
                     .offset(x = (-64).dp)
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(Pulse.GradPrimary)),
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = letter.toString(),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }

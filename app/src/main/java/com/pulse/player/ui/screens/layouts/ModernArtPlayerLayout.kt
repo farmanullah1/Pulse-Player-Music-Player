@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Equalizer
@@ -30,11 +31,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.playback.PlaybackUiState
 import com.pulse.player.ui.components.HeartButton
+import com.pulse.player.ui.components.PlaybackErrorBanner
 import com.pulse.player.ui.screens.PlayerThemeHost
 import com.pulse.player.ui.screens.Screen
 import com.pulse.player.ui.screens.SeekBar
 import com.pulse.player.ui.screens.TransportRow
-import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.viewmodel.MainViewModel
 
 @Composable
@@ -46,6 +47,9 @@ fun ModernArtPlayerLayout(
     modifier: Modifier = Modifier
 ) {
     val fav by vm.isCurrentFavorite.collectAsStateWithLifecycle()
+    val seekStyle by vm.seekStyle.collectAsStateWithLifecycle()
+    val abStartFrac = s.abLoopStartMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
+    val abEndFrac = s.abLoopEndMs?.takeIf { s.durationMs > 0L }?.let { (it.toFloat() / s.durationMs).coerceIn(0f, 1f) }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -66,12 +70,21 @@ fun ModernArtPlayerLayout(
             PlayerThemeHost(vm, s, dominantColor)
         }
 
+        s.trackError?.let { err ->
+            PlaybackErrorBanner(
+                error = err,
+                onRetry = vm.player::retry,
+                onSkip = vm.player::skip,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
         Spacer(Modifier.height(16.dp))
 
         Text(
             text = s.title.ifBlank { "No track selected" },
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -79,7 +92,7 @@ fun ModernArtPlayerLayout(
         Text(
             text = s.artist.ifBlank { "Unknown artist" },
             style = MaterialTheme.typography.bodyMedium,
-            color = Pulse.TextMid,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -89,6 +102,12 @@ fun ModernArtPlayerLayout(
         SeekBar(
             position = vm.player.position,
             duration = s.durationMs,
+            isPlaying = s.isPlaying,
+            trackKey = s.mediaId ?: "default",
+            seekStyle = seekStyle,
+            onSelectStyle = vm::setSeekStyle,
+            abStartFraction = abStartFrac,
+            abEndFraction = abEndFrac,
             onSeek = vm.player::seekTo
         )
 
@@ -107,17 +126,17 @@ fun ModernArtPlayerLayout(
                 on = fav,
                 onToggle = { vm.toggleFavoriteCurrent() }
             )
-            IconButton(onClick = { vm.openSleepSheet() }) {
-                Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = Color.White)
+            IconButton(onClick = { vm.openSleepSheet() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Bedtime, "Sleep timer", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.openAddToPlaylist() }) {
-                Icon(Icons.Rounded.PlaylistAdd, "Add to playlist", tint = Color.White)
+            IconButton(onClick = { vm.openAddToPlaylist() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.PlaylistAdd, "Add to playlist", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.openQueue() }) {
-                Icon(Icons.Rounded.QueueMusic, "Queue", tint = Color.White)
+            IconButton(onClick = { vm.openQueue() }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.QueueMusic, "Queue", tint = MaterialTheme.colorScheme.onSurface)
             }
-            IconButton(onClick = { vm.go(Screen.Equalizer) }) {
-                Icon(Icons.Rounded.Equalizer, "Equalizer", tint = Color.White)
+            IconButton(onClick = { vm.go(Screen.Equalizer) }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.Equalizer, "Equalizer", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
     }
