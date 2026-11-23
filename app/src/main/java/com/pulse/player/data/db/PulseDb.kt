@@ -29,9 +29,10 @@ import java.io.File
         ArtistImageEntity::class,
         SourceEntity::class,
         CacheEntryEntity::class,
-        WaveformEntity::class
+        WaveformEntity::class,
+        TrackFtsEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class PulseDb : RoomDatabase() {
@@ -257,6 +258,39 @@ abstract class PulseDb : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS index_tracks_sourceType_available_sizeBytes_normTitle " +
                     "ON tracks(sourceType, available, sizeBytes, normTitle)"
                 )
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS `tracks_fts` USING FTS4(" +
+                        "`title` TEXT NOT NULL, " +
+                        "`artist` TEXT NOT NULL, " +
+                        "`album` TEXT NOT NULL, " +
+                        "`genre` TEXT NOT NULL, " +
+                        "`folderPath` TEXT NOT NULL, " +
+                        "content=`tracks`)"
+                )
+                db.execSQL(
+                    "CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_tracks_fts_BEFORE_UPDATE` " +
+                        "BEFORE UPDATE ON `tracks` BEGIN DELETE FROM `tracks_fts` WHERE `docid`=OLD.`rowid`; END"
+                )
+                db.execSQL(
+                    "CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_tracks_fts_BEFORE_DELETE` " +
+                        "BEFORE DELETE ON `tracks` BEGIN DELETE FROM `tracks_fts` WHERE `docid`=OLD.`rowid`; END"
+                )
+                db.execSQL(
+                    "CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_tracks_fts_AFTER_UPDATE` " +
+                        "AFTER UPDATE ON `tracks` BEGIN INSERT INTO `tracks_fts`(`docid`, `title`, `artist`, `album`, `genre`, `folderPath`) " +
+                        "VALUES (NEW.`rowid`, NEW.`title`, NEW.`artist`, NEW.`album`, NEW.`genre`, NEW.`folderPath`); END"
+                )
+                db.execSQL(
+                    "CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_tracks_fts_AFTER_INSERT` " +
+                        "AFTER INSERT ON `tracks` BEGIN INSERT INTO `tracks_fts`(`docid`, `title`, `artist`, `album`, `genre`, `folderPath`) " +
+                        "VALUES (NEW.`rowid`, NEW.`title`, NEW.`artist`, NEW.`album`, NEW.`genre`, NEW.`folderPath`); END"
+                )
+                db.execSQL("INSERT INTO `tracks_fts`(`tracks_fts`) VALUES('rebuild')")
             }
         }
 

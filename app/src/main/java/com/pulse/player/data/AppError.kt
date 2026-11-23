@@ -12,7 +12,9 @@ enum class ErrorCategory {
     BACKUP,
     AUDIO_FX,
     STORAGE,
-    NETWORK
+    NETWORK,
+    CRASH,
+    GENERAL
 }
 
 data class AppError(
@@ -26,7 +28,7 @@ data class AppError(
 )
 
 object ErrorDispatcher {
-    private const val MAX_LOG_SIZE = 50
+    private const val MAX_LOG_SIZE = 80
 
     private val _recentErrors = MutableStateFlow<List<AppError>>(emptyList())
     val recentErrors = _recentErrors.asStateFlow()
@@ -42,6 +44,7 @@ object ErrorDispatcher {
         }
         _recentErrors.value = current
         _events.tryEmit(error)
+        CrashLogStore.persistErrors(current)
     }
 
     fun post(
@@ -60,9 +63,16 @@ object ErrorDispatcher {
         )
     }
 
+    internal fun hydratePersisted(errors: List<AppError>) {
+        if (_recentErrors.value.isEmpty() && errors.isNotEmpty()) {
+            _recentErrors.value = errors.take(MAX_LOG_SIZE)
+        }
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun clearLog() {
         _recentErrors.value = emptyList()
         _events.resetReplayCache()
+        CrashLogStore.clearPersistedErrors()
     }
 }

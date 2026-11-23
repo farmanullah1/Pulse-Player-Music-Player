@@ -15,13 +15,19 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
 
 data class ArtRef(val stableKey: String, val uri: String, val modifiedMs: Long)
 
 object ArtworkLoader {
     val sizes = intArrayOf(96, 192, 384, 768)
+    const val DISK_CACHE_MAX_BYTES = 80L * 1024L * 1024L
+    private const val DISK_CACHE_DIR = "art_cache"
     private val SAFE_KEY_REGEX = Regex("[^a-zA-Z0-9._-]")
     private val decodeSemaphore = Semaphore(4)
+    private val diskWriteCounter = AtomicInteger(0)
 
     fun bucket(px: Int): Int = sizes.firstOrNull { it >= px } ?: sizes.last()
 
@@ -36,6 +42,79 @@ object ArtworkLoader {
     fun key(r: ArtRef, px: Int): String = "${r.stableKey}|${r.modifiedMs}|${bucket(px)}"
 
     private fun noArtKey(r: ArtRef): String = "${r.stableKey}|${r.modifiedMs}"
+
+    internal fun diskCacheFileName(cacheKey: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(cacheKey.toByteArray(Charsets.UTF_8))
+        val hex = StringBuilder(digest.size * 2)
+        for (b in digest) {
+            val v = b.toInt() and 0xFF
+            hex.append(Character.forDigit(v ushr 4, 16))
+            hex.append(Character.forDigit(v and 0x0F, 16))
+        }
+        return "$hex.jpg"
+    }
+
+    private fun diskCacheDir(ctx: Context): File = File(ctx.cacheDir, DISK_CACHE_DIR).apply {
+        if (!exists()) mkdirs()
+    }
+
+    internal fun trimDiskCacheDir(dir: File, maxBytes: Long = DISK_CACHE_MAX_BYTES) {
+        val files = dir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= maxBytes) return
+        val target = (maxBytes * 85L) / 100L
+        val sortedOldestFirst = files.sortedBy { it.lastModified() }
+        for (f in sortedOldestFirst) {
+            if (total <= target) break
+            val len = f.length()
+            if (f.delete()) {
+                total -= len
+            }
+        }
+    }
+
+    fun trimDiskCacheOnStartup(ctx: Context) {
+        val dir = File(ctx.cacheDir, DISK_CACHE_DIR)
+        if (dir.exists()) {
+            trimDiskCacheDir(dir)
+        }
+    }
+
+    private fun readFromDiskCache(
+        ctx: Context,
+        cacheKey: String,
+        preferredConfig: Bitmap.Config
+    ): Bitmap? {
+        val dir = File(ctx.cacheDir, DISK_CACHE_DIR)
+        if (!dir.exists()) return null
+        val file = File(dir, diskCacheFileName(cacheKey))
+        if (!file.exists() || file.length() <= 0L) return null
+        val opts = BitmapFactory.Options().apply { inPreferredConfig = preferredConfig }
+        val bmp = runCatching { BitmapFactory.decodeFile(file.absolutePath, opts) }.getOrNull()
+        if (bmp != null) {
+            runCatching { file.setLastModified(System.currentTimeMillis()) }
+        } else {
+            runCatching { file.delete() }
+        }
+        return bmp
+    }
+
+    private fun writeToDiskCache(ctx: Context, cacheKey: String, bmp: Bitmap) {
+        runCatching {
+            val dir = diskCacheDir(ctx)
+            val target = File(dir, diskCacheFileName(cacheKey))
+            val tmp = File(dir, "${target.name}.tmp")
+            FileOutputStream(tmp).use { out ->
+                bmp.compress(Bitmap.CompressFormat.JPEG, 88, out)
+            }
+            if (!tmp.renameTo(target)) {
+                tmp.delete()
+            } else if (diskWriteCounter.incrementAndGet() % 24 == 0) {
+                trimDiskCacheDir(dir)
+            }
+        }
+    }
 
     fun getCached(r: ArtRef, px: Int): Bitmap? = cache.get(key(r, px))
 
@@ -61,7 +140,7 @@ object ArtworkLoader {
 
         val preferredConfig = if (b <= 384) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
 
-        // Check user-attached custom cover art in app filesDir
+        // Check user-attached custom cover art in app filesDir first so custom overrides are instant
         val safeKey = r.stableKey.replace(SAFE_KEY_REGEX, "_")
         val customArtFile = File(File(ctx.filesDir, "custom_art"), "$safeKey.jpg")
         if (customArtFile.exists() && customArtFile.length() > 0) {
@@ -72,6 +151,12 @@ object ArtworkLoader {
                 cache.put(k, customBmp)
                 return@withContext customBmp
             }
+        }
+
+        // Fast disk LRU cache hit avoids expensive ContentResolver / MediaMetadataRetriever I/O
+        readFromDiskCache(ctx, k, preferredConfig)?.let { diskBmp ->
+            cache.put(k, diskBmp)
+            return@withContext diskBmp
         }
 
         val filePath = when {
@@ -103,6 +188,7 @@ object ArtworkLoader {
                     }.getOrNull()
                     if (decoded != null) {
                         cache.put(k, decoded)
+                        writeToDiskCache(ctx, k, decoded)
                         return@withContext decoded
                     }
                 }
@@ -132,6 +218,7 @@ object ArtworkLoader {
 
             if (contentBmp != null) {
                 cache.put(k, contentBmp)
+                writeToDiskCache(ctx, k, contentBmp)
                 return@withPermit contentBmp
             }
 
@@ -164,6 +251,7 @@ object ArtworkLoader {
 
             if (retrievedBmp != null) {
                 cache.put(k, retrievedBmp)
+                writeToDiskCache(ctx, k, retrievedBmp)
                 retrievedBmp
             } else {
                 noArtworkCache.put(nk, true)
@@ -175,6 +263,13 @@ object ArtworkLoader {
     fun clearCache() {
         cache.evictAll()
         noArtworkCache.evictAll()
+    }
+
+    fun clearDiskCache(ctx: Context) {
+        clearCache()
+        runCatching {
+            File(ctx.cacheDir, DISK_CACHE_DIR).deleteRecursively()
+        }
     }
 
     // Compatibility method
@@ -240,3 +335,4 @@ object ArtworkLoader {
         return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 }
+

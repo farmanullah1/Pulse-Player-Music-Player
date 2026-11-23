@@ -455,7 +455,7 @@ fun buildSnapshot(
 
                 db.execSQL(
                     "INSERT INTO statistics_playback VALUES (?, ?, ?, ?, 0, '', '', ?, 1, ?, ?, 0, 0, 0, null, null, null)",
-                    arrayOf(rowId++, songId, r.playedAtMs, dayStr, r.listenedMs, model, skip)
+                    arrayOf<Any?>(rowId++, songId, r.playedAtMs, dayStr, r.listenedMs, model, skip)
                 )
             }
             db.setTransactionSuccessful()

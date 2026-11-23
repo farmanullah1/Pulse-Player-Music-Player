@@ -21,7 +21,10 @@ data class Track(
     val normAlbum: String = "",
     val genre: String = "",
     val year: Int = 0,
-    val codec: String = ""
+    val codec: String = "",
+    val dataPath: String = "",
+    val replayGainTrackDb: Float = 0f,
+    val replayGainAlbumDb: Float = 0f
 )
 
 fun TrackWithFav.toTrack() = Track(
@@ -40,7 +43,10 @@ fun TrackWithFav.toTrack() = Track(
     normAlbum = track.normAlbum.ifEmpty { track.album.lowercase() },
     genre = track.genre,
     year = track.year,
-    codec = track.codec
+    codec = track.codec,
+    dataPath = track.dataPath.orEmpty(),
+    replayGainTrackDb = track.replayGainTrackDb,
+    replayGainAlbumDb = track.replayGainAlbumDb
 )
 
 fun com.pulse.player.data.db.TrackEntity.toTrack(isFavorite: Boolean = false) = Track(
@@ -59,7 +65,10 @@ fun com.pulse.player.data.db.TrackEntity.toTrack(isFavorite: Boolean = false) = 
     normAlbum = normAlbum.ifEmpty { album.lowercase() },
     genre = genre,
     year = year,
-    codec = codec
+    codec = codec,
+    dataPath = dataPath.orEmpty(),
+    replayGainTrackDb = replayGainTrackDb,
+    replayGainAlbumDb = replayGainAlbumDb
 )
 
 @Immutable
@@ -89,7 +98,8 @@ data class PlaybackUiState(
     val canSeek: Boolean = false,
     val error: String? = null,
     val trackError: ErrorPolicy.TrackError? = null,
-    val queueNotice: String? = null
+    val queueNotice: String? = null,
+    val appliedReplayGainDb: Float = 0f
 ) {
     val artRef: com.pulse.player.data.scan.ArtRef?
         get() = artworkUri?.let { com.pulse.player.data.scan.ArtRef(mediaId ?: it, it, 0L) }

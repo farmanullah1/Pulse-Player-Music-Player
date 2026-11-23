@@ -31,6 +31,9 @@ interface TrackDao {
     @Query("SELECT COUNT(*) FROM tracks WHERE available = 1")
     fun observeCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM tracks WHERE available = 1")
+    suspend fun availableCountOnce(): Int
+
     @Query(
         "SELECT t.*, (f.trackId IS NOT NULL) AS isFavorite FROM tracks t " +
         "LEFT JOIN favorites f ON f.trackId = t.id WHERE t.available = 0 " +
@@ -227,6 +230,33 @@ interface TrackDao {
             if (year != null) updateYearBatch(chunk, year)
         }
     }
+
+    @Query(
+        "SELECT t.id FROM tracks t " +
+        "JOIN tracks_fts ON t.rowid = tracks_fts.rowid " +
+        "WHERE tracks_fts MATCH :ftsQuery AND t.available = 1 " +
+        "LIMIT 300"
+    )
+    suspend fun searchFtsIds(ftsQuery: String): List<String>
+
+    @Query("DELETE FROM tracks WHERE id IN (:ids)")
+    suspend fun deleteByIdsRaw(ids: List<String>): Int
+
+    @Transaction
+    suspend fun deleteByIds(ids: List<String>): Int {
+        if (ids.isEmpty()) return 0
+        var total = 0
+        ids.chunked(400).forEach { chunk ->
+            total += deleteByIdsRaw(chunk)
+        }
+        return total
+    }
+
+    @Query("SELECT * FROM tracks WHERE available = 1 AND replayGainTrackDb = 0 ORDER BY album COLLATE NOCASE, trackNumber ASC")
+    suspend fun tracksMissingReplayGainOnce(): List<TrackEntity>
+
+    @Query("UPDATE tracks SET replayGainTrackDb = :trackDb, replayGainAlbumDb = :albumDb WHERE id = :id")
+    suspend fun updateReplayGain(id: String, trackDb: Float, albumDb: Float)
 }
 
 @Dao
@@ -471,6 +501,9 @@ interface StatsDao {
 
     @Query("SELECT DISTINCT date(playedAtMs / 1000, 'unixepoch', 'localtime') AS d FROM play_events ORDER BY d DESC LIMIT 400")
     suspend fun playDays(): List<String>
+
+    @Query("SELECT * FROM play_events WHERE playedAtMs BETWEEN :from AND :to AND counted = 1 ORDER BY playedAtMs ASC")
+    suspend fun eventsBetween(from: Long, to: Long): List<PlayEventEntity>
 }
 
 @Dao
@@ -497,6 +530,9 @@ interface TrackMetaDao {
 
     @Query("DELETE FROM track_meta WHERE trackId = :id")
     suspend fun remove(id: String)
+
+    @Query("SELECT * FROM track_meta")
+    suspend fun allOnce(): List<TrackMetaEntity>
 
     /** All tracks with a rating of at least 1. */
     @Query(

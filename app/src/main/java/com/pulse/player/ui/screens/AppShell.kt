@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -14,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,17 +58,23 @@ import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -98,6 +106,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -115,6 +125,8 @@ import com.pulse.player.ui.components.SortFilterBottomSheet
 import com.pulse.player.ui.components.TagEditorSheet
 import com.pulse.player.ui.components.formatTime
 import com.pulse.player.ui.theme.AppBackground
+import com.pulse.player.ui.theme.LocalPulseTokens
+import com.pulse.player.ui.theme.LocalReducedMotion
 import com.pulse.player.ui.theme.TabularMono
 import com.pulse.player.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -139,6 +151,13 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
 
     val snackbarHostState = remember { SnackbarHostState() }
     val diagnosticsOpen by vm.diagnosticsOpen.collectAsStateWithLifecycle()
+    val crashRecords by vm.crashRecords.collectAsStateWithLifecycle()
+    val recentErrors by vm.recentErrors.collectAsStateWithLifecycle()
+    val pendingRecoveryCrash by vm.pendingRecoveryCrash.collectAsStateWithLifecycle()
+    val navForward by vm.navForward.collectAsStateWithLifecycle()
+    val reducedMotion = LocalReducedMotion.current
+    val clipboard = LocalClipboardManager.current
+    val tokens = LocalPulseTokens.current
 
     LaunchedEffect(Unit) {
         ErrorDispatcher.events.collect { err ->
@@ -149,6 +168,19 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
             )
             if (result == SnackbarResult.ActionPerformed) {
                 vm.openDiagnostics()
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        vm.snackbarActions.collect { ev ->
+            val result = snackbarHostState.showSnackbar(
+                message = ev.message,
+                actionLabel = ev.actionLabel,
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                ev.onAction?.invoke()
             }
         }
     }
@@ -168,6 +200,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
     val audioControlsOpen by vm.audioControlsOpen.collectAsStateWithLifecycle()
     val sortFilterSheetOpen by vm.sortFilterSheetOpen.collectAsStateWithLifecycle()
     val addToPlaylistTrack by vm.addToPlaylistOpen.collectAsStateWithLifecycle()
+    val batchAddToPlaylistIds by vm.batchAddToPlaylistOpen.collectAsStateWithLifecycle()
     val trackMenuTrack by vm.trackMenuTrack.collectAsStateWithLifecycle()
     val createPlaylistOpen by vm.createPlaylistOpen.collectAsStateWithLifecycle()
     val importPreview by vm.importPreview.collectAsStateWithLifecycle()
@@ -175,150 +208,195 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
     val tagEditorTrack by vm.tagEditorTrack.collectAsStateWithLifecycle()
     val batchTagTracks by vm.batchTagTracksOpen.collectAsStateWithLifecycle()
     val playerLayoutPickerOpen by vm.playerLayoutPickerOpen.collectAsStateWithLifecycle()
+    val drivingModeOpen by vm.drivingModeOpen.collectAsStateWithLifecycle()
+    val smartPlaylistBuilderTarget by vm.smartPlaylistBuilderTarget.collectAsStateWithLifecycle()
 
-    BackHandler(expandedPlayer) { vm.closeNowPlaying() }
-    BackHandler(!expandedPlayer && screen !is Screen.Home) { vm.back() }
+    BackHandler(drivingModeOpen) { vm.closeDrivingMode() }
+    BackHandler(!drivingModeOpen && expandedPlayer) { vm.closeNowPlaying() }
+    BackHandler(!drivingModeOpen && !expandedPlayer && screen !is Screen.Home) { vm.back() }
 
     val showBottomBar = !wide && screen is Screen.Home
-    val hasMiniPlayer = ps.mediaId != null && !dock
     val navBarBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomOverlayPadding = 16.dp + (if (showBottomBar || hasMiniPlayer) 0.dp else navBarBottomPadding)
 
     AppBackground(themeMode, wallpaperPath = wallpaperPath) {
-        Row(Modifier.fillMaxSize()) {
-            if (wide) {
-                PulseRail(screen, vm::go)
-            }
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val dockNowPlaying = dock && ps.mediaId != null && (screen !is Screen.Detail || maxWidth >= 1120.dp)
+            val hasMiniPlayer = ps.mediaId != null && !dockNowPlaying
+            val bottomOverlayPadding = 16.dp + (if (showBottomBar || hasMiniPlayer) 0.dp else navBarBottomPadding)
 
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    CompositionLocalProvider(LocalBottomOverlayPadding provides bottomOverlayPadding) {
-                        ModalNavigationDrawer(
-                            drawerContent = {
-                                PulseDrawer(
-                                    currentScreen = screen,
-                                    activeHomeTab = activeHomeTab,
-                                    themeMode = themeMode,
-                                    sleepRemainingMs = ps.sleepRemainingMs,
-                                    excludedFolderCount = excludedFolders.size,
-                                    hiddenFavoriteCount = hiddenFavorites.size,
-                                    onThemeMode = vm::setThemeMode,
-                                    onSelectHomeTab = { tab ->
-                                        vm.selectHomeTab(tab)
-                                        vm.go(Screen.Home)
-                                    },
-                                    onNavigate = vm::go,
-                                    onSleepTimer = vm::openSleepSheet,
-                                    onAudioControls = vm::openAudioControls,
-                                    onDiagnostics = vm::openDiagnostics
-                                ) { scope.launch { drawer.close() } }
-                            },
-                            drawerState = drawer,
-                            gesturesEnabled = !wide
-                        ) {
-                            AnimatedContent(
-                                targetState = screen,
-                                transitionSpec = {
-                                    (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 10 })
-                                        .togetherWith(fadeOut(tween(150)))
+            Row(Modifier.fillMaxSize()) {
+                if (wide) {
+                    PulseRail(screen, vm::go)
+                }
+
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        CompositionLocalProvider(LocalBottomOverlayPadding provides bottomOverlayPadding) {
+                            ModalNavigationDrawer(
+                                drawerContent = {
+                                    PulseDrawer(
+                                        currentScreen = screen,
+                                        activeHomeTab = activeHomeTab,
+                                        themeMode = themeMode,
+                                        sleepRemainingMs = ps.sleepRemainingMs,
+                                        excludedFolderCount = excludedFolders.size,
+                                        hiddenFavoriteCount = hiddenFavorites.size,
+                                        crashCount = crashRecords.size,
+                                        errorCount = recentErrors.size,
+                                        onThemeMode = vm::setThemeMode,
+                                        onSelectHomeTab = { tab ->
+                                            vm.selectHomeTab(tab)
+                                            vm.go(Screen.Home)
+                                        },
+                                        onNavigate = vm::go,
+                                        onSleepTimer = vm::openSleepSheet,
+                                        onAudioControls = vm::openAudioControls,
+                                        onDiagnostics = vm::openDiagnostics
+                                    ) { scope.launch { drawer.close() } }
                                 },
-                                label = "screen"
-                            ) { s ->
-                                when (s) {
-                                    Screen.Home -> HomeTabsScreen(
-                                        vm = vm,
-                                        onMenu = { scope.launch { drawer.open() } },
-                                        showMenu = !wide
-                                    )
-                                    Screen.Settings -> SettingsScreen(vm)
-                                    Screen.Equalizer -> EqualizerScreen(vm)
-                                    Screen.Recap -> RecapScreen(vm)
-                                    Screen.SkinTheme -> SkinThemeScreen(vm)
-                                    Screen.PlayerTheme -> PlayerThemeScreen(vm)
-                                    Screen.Backup -> BackupScreen(vm)
-                                    Screen.Search -> SearchScreen(vm)
-                                    Screen.Duplicates -> DuplicatesScreen(vm)
-                                    Screen.ExcludedFolders -> ExcludedFoldersScreen(vm)
-                                    Screen.Transcribe -> TranscribeScreen(vm)
-                                    Screen.GenerateMusic -> GenerateMusicScreen(vm)
-                                    Screen.Customize -> PlayerCustomizeScreen(vm)
-                                    is Screen.Detail -> DetailScreen(vm, s)
+                                drawerState = drawer,
+                                gesturesEnabled = !wide
+                            ) {
+                                AnimatedContent(
+                                    targetState = screen,
+                                    transitionSpec = {
+                                        if (reducedMotion) {
+                                            fadeIn(tween(120)) togetherWith fadeOut(tween(100))
+                                        } else if (navForward) {
+                                            (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 6 })
+                                                .togetherWith(fadeOut(tween(180)) + slideOutHorizontally(tween(180)) { -it / 12 })
+                                        } else {
+                                            (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { -it / 6 })
+                                                .togetherWith(fadeOut(tween(180)) + slideOutHorizontally(tween(180)) { it / 12 })
+                                        }
+                                    },
+                                    label = "screen"
+                                ) { s ->
+                                    when (s) {
+                                        Screen.Home -> HomeTabsScreen(
+                                            vm = vm,
+                                            onMenu = { scope.launch { drawer.open() } },
+                                            showMenu = !wide
+                                        )
+                                        Screen.Settings -> SettingsScreen(vm)
+                                        Screen.Equalizer -> EqualizerScreen(vm)
+                                        Screen.Recap -> RecapScreen(vm)
+                                        Screen.SkinTheme -> SkinThemeScreen(vm)
+                                        Screen.PlayerTheme -> PlayerCustomizeScreen(vm)
+                                        Screen.Backup -> BackupScreen(vm)
+                                        Screen.Search -> SearchScreen(vm)
+                                        Screen.Duplicates -> DuplicatesScreen(vm)
+                                        Screen.ExcludedFolders -> ExcludedFoldersScreen(vm)
+                                        Screen.Transcribe -> TranscribeScreen(vm)
+                                        Screen.GenerateMusic -> GenerateMusicScreen(vm)
+                                        Screen.Customize -> PlayerCustomizeScreen(vm)
+                                        is Screen.Detail -> {
+                                            if (dock) {
+                                                Row(Modifier.fillMaxSize()) {
+                                                    Box(Modifier.weight(0.92f).fillMaxHeight()) {
+                                                        HomeTabsScreen(
+                                                            vm = vm,
+                                                            onMenu = { scope.launch { drawer.open() } },
+                                                            showMenu = false
+                                                        )
+                                                    }
+                                                    VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                                    DetailScreen(
+                                                        vm = vm,
+                                                        detail = s,
+                                                        modifier = Modifier
+                                                            .weight(1.08f)
+                                                            .fillMaxHeight()
+                                                    )
+                                                }
+                                            } else {
+                                                DetailScreen(vm, s)
+                                            }
+                                        }
+                                    }
                                 }
+                            }
+                        }
+
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .then(if (showBottomBar || hasMiniPlayer) Modifier else Modifier.navigationBarsPadding())
+                                .padding(bottom = 12.dp)
+                        ) { data ->
+                            Snackbar(
+                                snackbarData = data,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                actionColor = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                        }
+                    }
+
+                    if (hasMiniPlayer) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(if (showBottomBar) Modifier else Modifier.navigationBarsPadding())
+                            ) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                MiniPlayer(
+                                    s = ps,
+                                    pos = vm.player.position,
+                                    onToggle = vm.player::togglePlay,
+                                    onNext = vm.player::next,
+                                    onPrevious = vm.player::previous,
+                                    onQueue = { vm.openQueue() },
+                                    onExpand = { vm.openNowPlaying() },
+                                    artworkAccent = artworkAccent,
+                                    isFavorite = isCurrentFavorite,
+                                    onToggleFavorite = vm::toggleFavoriteCurrent,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
                             }
                         }
                     }
 
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .then(if (showBottomBar || hasMiniPlayer) Modifier else Modifier.navigationBarsPadding())
-                            .padding(bottom = 12.dp)
-                    ) { data ->
-                        Snackbar(
-                            snackbarData = data,
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            actionColor = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(14.dp)
+                    if (showBottomBar) {
+                        PulseBottomBar(
+                            activeTab = activeHomeTab,
+                            showTopDivider = !hasMiniPlayer,
+                            onSelectTab = vm::selectHomeTab
                         )
                     }
                 }
 
-                if (hasMiniPlayer) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (showBottomBar) Modifier else Modifier.navigationBarsPadding())
-                        ) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            MiniPlayer(
-                                s = ps,
-                                pos = vm.player.position,
-                                onToggle = vm.player::togglePlay,
-                                onNext = vm.player::next,
-                                onPrevious = vm.player::previous,
-                                onQueue = { vm.openQueue() },
-                                onExpand = { vm.openNowPlaying() },
-                                artworkAccent = artworkAccent,
-                                isFavorite = isCurrentFavorite,
-                                onToggleFavorite = vm::toggleFavoriteCurrent,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                    }
-                }
-
-                if (showBottomBar) {
-                    PulseBottomBar(
-                        activeTab = activeHomeTab,
-                        showTopDivider = !hasMiniPlayer,
-                        onSelectTab = vm::selectHomeTab,
-                        onOpenMore = { scope.launch { drawer.open() } }
+                if (dockNowPlaying) {
+                    NowPlayingPanel(
+                        vm = vm,
+                        modifier = Modifier
+                            .widthIn(min = 320.dp, max = 420.dp)
+                            .fillMaxHeight()
                     )
                 }
-            }
-
-            if (dock && ps.mediaId != null) {
-                NowPlayingPanel(
-                    vm = vm,
-                    modifier = Modifier
-                        .widthIn(min = 320.dp, max = 420.dp)
-                        .fillMaxHeight()
-                )
             }
         }
 
         AnimatedVisibility(
-            visible = expandedPlayer && !dock,
+            visible = expandedPlayer && !drivingModeOpen && (!dock || screen is Screen.Detail),
             enter = slideInVertically(tween(300)) { it } + fadeIn(),
             exit = slideOutVertically(tween(260)) { it } + fadeOut()
         ) {
             NowPlayingScreen(vm)
+        }
+
+        AnimatedVisibility(
+            visible = drivingModeOpen,
+            enter = slideInVertically(tween(260)) { it / 6 } + fadeIn(tween(200)),
+            exit = slideOutVertically(tween(220)) { it / 6 } + fadeOut(tween(180))
+        ) {
+            DrivingModeOverlay(vm)
         }
 
         // Active Bottom Sheets and Dialogs
@@ -336,6 +414,9 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
         }
         addToPlaylistTrack?.let { track ->
             AddToPlaylistSheet(vm, track)
+        }
+        batchAddToPlaylistIds?.let { ids ->
+            BatchAddToPlaylistSheet(vm, ids)
         }
         trackMenuTrack?.let { track ->
             TrackMenuSheet(vm, track)
@@ -366,8 +447,73 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
         if (playerLayoutPickerOpen) {
             PlayerLayoutBottomSheet(vm)
         }
+        smartPlaylistBuilderTarget?.let { target ->
+            SmartPlaylistBuilderSheet(vm = vm, target = target)
+        }
         if (diagnosticsOpen) {
             DiagnosticsDialog(vm = vm, onDismiss = vm::closeDiagnostics)
+        }
+        pendingRecoveryCrash?.let { crash ->
+            AlertDialog(
+                onDismissRequest = vm::dismissCrashRecovery,
+                icon = {
+                    Icon(
+                        Icons.Rounded.Warning,
+                        contentDescription = null,
+                        tint = tokens.error
+                    )
+                },
+                title = { Text("Pulse Recovered from an Error", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "A crash was captured and saved so you can inspect or copy the details:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    crash.exceptionClass,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = tokens.error
+                                )
+                                Text(
+                                    crash.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = vm::openCrashLogs) {
+                        Text("View Crash Log")
+                    }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(onClick = {
+                            clipboard.setText(AnnotatedString(vm.formatCrashReport(crash)))
+                            vm.snackbarMessage.value = "Crash report copied"
+                            vm.dismissCrashRecovery()
+                        }) {
+                            Text("Copy Report")
+                        }
+                        TextButton(onClick = vm::dismissCrashRecovery) {
+                            Text("Dismiss")
+                        }
+                    }
+                }
+            )
         }
     }
 }
@@ -376,8 +522,7 @@ fun AppShell(vm: MainViewModel, windowSize: WindowSizeClass) {
 private fun PulseBottomBar(
     activeTab: String,
     showTopDivider: Boolean = true,
-    onSelectTab: (String) -> Unit,
-    onOpenMore: () -> Unit
+    onSelectTab: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         if (showTopDivider) {
@@ -391,7 +536,7 @@ private fun PulseBottomBar(
             val navItems = listOf(
                 Triple("For you", "For you", Icons.Rounded.Home),
                 Triple("Songs", "Songs", Icons.Rounded.LibraryMusic),
-                Triple("Playlists", "Playlists", Icons.Rounded.QueueMusic),
+                Triple("Playlists", "Playlists", Icons.AutoMirrored.Rounded.QueueMusic),
                 Triple("Albums", "Albums", Icons.Rounded.Album)
             )
             navItems.forEach { (tabKey, label, icon) ->
@@ -410,20 +555,6 @@ private fun PulseBottomBar(
                     )
                 )
             }
-            val isSecondaryHomeTab = navItems.none { (tabKey, _, _) -> activeTab.equals(tabKey, ignoreCase = true) }
-            NavigationBarItem(
-                selected = isSecondaryHomeTab,
-                onClick = onOpenMore,
-                icon = { Icon(Icons.Rounded.Menu, contentDescription = "More options") },
-                label = { Text("More", maxLines = 1) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
         }
     }
 }
@@ -436,6 +567,8 @@ fun PulseDrawer(
     sleepRemainingMs: Long = 0L,
     excludedFolderCount: Int = 0,
     hiddenFavoriteCount: Int = 0,
+    crashCount: Int = 0,
+    errorCount: Int = 0,
     onThemeMode: (ThemeMode) -> Unit,
     onSelectHomeTab: (String) -> Unit = {},
     onNavigate: (Screen) -> Unit,
@@ -482,10 +615,12 @@ fun PulseDrawer(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "Pulse Player",
-                        style = MaterialTheme.typography.titleLarge,
+                        "Pulse Music Player",
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         "Local Hi-Fi Audio",
@@ -601,8 +736,7 @@ fun PulseDrawer(
                     )
                 )
                 val appearanceItems = buildList {
-                    add(DrawerItemData("Customize Player", Icons.Rounded.DashboardCustomize, Screen.Customize))
-                    add(DrawerItemData("Player Theme", Icons.Rounded.AutoAwesome, Screen.PlayerTheme))
+                    add(DrawerItemData("Custom Player Studio", Icons.Rounded.DashboardCustomize, Screen.Customize))
                     add(DrawerItemData("Skin Theme", Icons.Rounded.Palette, Screen.SkinTheme))
                     add(DrawerItemData("Monthly Recap", Icons.Rounded.History, Screen.Recap))
                     add(DrawerItemData("Backup & Transfer", Icons.Rounded.Backup, Screen.Backup))
@@ -612,9 +746,14 @@ fun PulseDrawer(
                     }
                 }
                 add("PERSONALIZE & TOOLS" to appearanceItems)
+                val diagnosticsBadge = when {
+                    crashCount > 0 -> "${crashCount}!"
+                    errorCount > 0 -> "$errorCount"
+                    else -> null
+                }
                 add(
                     "SYSTEM" to listOf(
-                        DrawerItemData("Diagnostics & Log", Icons.Rounded.Build, null) { onDiagnostics() },
+                        DrawerItemData("Diagnostics & Log", Icons.Rounded.Build, null, badge = diagnosticsBadge) { onDiagnostics() },
                         DrawerItemData("Settings", Icons.Rounded.Settings, Screen.Settings)
                     )
                 )
@@ -726,10 +865,10 @@ fun PulseRail(
             )
         )
         NavigationRailItem(
-            selected = currentScreen is Screen.PlayerTheme,
-            onClick = { onNavigate(Screen.PlayerTheme) },
-            icon = { Icon(Icons.Rounded.AutoAwesome, "Themes") },
-            label = { Text("Themes") },
+            selected = currentScreen is Screen.Customize || currentScreen is Screen.PlayerTheme,
+            onClick = { onNavigate(Screen.Customize) },
+            icon = { Icon(Icons.Rounded.DashboardCustomize, "Studio") },
+            label = { Text("Studio") },
             colors = NavigationRailItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.primary,
                 selectedTextColor = MaterialTheme.colorScheme.primary

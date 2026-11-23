@@ -56,12 +56,12 @@ class ErrorDispatcherTest {
 
     @Test
     fun maxLogSize_isEnforced() = runTest {
-        repeat(60) { i ->
+        repeat(90) { i ->
             ErrorDispatcher.post(ErrorCategory.AUDIO_FX, "Error $i", "Details $i")
         }
 
         val errors = ErrorDispatcher.recentErrors.value
-        assertEquals(50, errors.size)
-        assertEquals("Error 59", errors[0].title)
+        assertEquals(80, errors.size)
+        assertEquals("Error 89", errors[0].title)
     }
 }

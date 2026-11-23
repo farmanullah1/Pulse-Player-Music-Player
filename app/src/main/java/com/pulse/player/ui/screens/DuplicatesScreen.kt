@@ -1,13 +1,21 @@
 package com.pulse.player.ui.screens
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,20 +36,34 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.UnfoldLess
+import androidx.compose.material.icons.rounded.UnfoldMore
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -136,6 +159,28 @@ fun DuplicatesScreen(vm: MainViewModel) {
     var groups by remember { mutableStateOf<List<DupGroupWithMembers>>(emptyList()) }
     var sortMode by remember { mutableStateOf(DuplicateSortMode.RECLAIMABLE_DESC) }
     var refreshNonce by remember { mutableIntStateOf(0) }
+    var expandedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedForDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingDeleteIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var legacyConfirmOpen by remember { mutableStateOf(false) }
+
+    val deleteRequestLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val targetIds = pendingDeleteIds
+        pendingDeleteIds = emptyList()
+        if (result.resultCode == Activity.RESULT_OK && targetIds.isNotEmpty()) {
+            vm.removeDeletedDuplicates(targetIds) {
+                selectedForDelete = selectedForDelete - targetIds.toSet()
+                refreshNonce++
+            }
+        } else {
+            vm.snackbarMessage.value = "Deletion cancelled"
+        }
+    }
+
+    fun groupKey(g: DupGroupWithMembers): String =
+        "${g.title}|${g.artist}|${g.members.firstOrNull()?.id.orEmpty()}"
 
     LaunchedEffect(refreshNonce) {
         loading = true
@@ -153,8 +198,13 @@ fun DuplicatesScreen(vm: MainViewModel) {
                     members = members
                 )
             }.filter { it.members.size > 1 }
+            val defaultExpanded = sortDuplicateGroups(list, sortMode)
+                .take(2)
+                .map(::groupKey)
+                .toSet()
             withContext(Dispatchers.Main) {
                 groups = list
+                expandedKeys = defaultExpanded
                 loading = false
             }
         }
@@ -162,7 +212,35 @@ fun DuplicatesScreen(vm: MainViewModel) {
 
     val sortedGroups = remember(groups, sortMode) { sortDuplicateGroups(groups, sortMode) }
     val (totalCopies, totalReclaimableBytes) = remember(groups) { computeDuplicateStats(groups) }
+    val allExpanded = sortedGroups.isNotEmpty() && expandedKeys.size >= sortedGroups.size
     val bottomInset = LocalBottomOverlayPadding.current
+    val allMembersById = remember(groups) { groups.flatMap { it.members }.associateBy { it.id } }
+    val selectedBytes = remember(selectedForDelete, allMembersById) {
+        selectedForDelete.sumOf { id -> (allMembersById[id]?.sizeBytes ?: 0L).coerceAtLeast(0L) }
+    }
+
+    fun triggerDeleteSelected() {
+        val targets = selectedForDelete.mapNotNull { allMembersById[it] }
+        val mediaStoreTargets = targets.filter { it.uri.startsWith("content://") }
+        if (mediaStoreTargets.isEmpty()) {
+            vm.snackbarMessage.value = "No removable MediaStore files selected"
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val uris = mediaStoreTargets.map { Uri.parse(it.uri) }
+            runCatching {
+                pendingDeleteIds = mediaStoreTargets.map { it.id }
+                val pi = MediaStore.createDeleteRequest(ctx.contentResolver, uris)
+                deleteRequestLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            }.onFailure { err ->
+                pendingDeleteIds = emptyList()
+                vm.snackbarMessage.value = err.message ?: "Unable to request OS file deletion"
+            }
+        } else {
+            pendingDeleteIds = mediaStoreTargets.map { it.id }
+            legacyConfirmOpen = true
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         PulseTopBar(
@@ -256,10 +334,58 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                 }
                             }
                             Text(
-                                "Pulse Player never deletes files on your device. Inspect paths, exclude duplicate folders, or remove unwanted copies in your file manager and rescan.",
+                                "Review paths, auto-select lower-quality copies, or delete chosen files via system permission.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val lowerQualityIds = groups.flatMap { g ->
+                                            val best = selectBestMemberId(g.members)
+                                            g.members.filter { it.id != best && it.uri.startsWith("content://") }.map { it.id }
+                                        }.toSet()
+                                        selectedForDelete = lowerQualityIds
+                                        expandedKeys = sortedGroups.map(::groupKey).toSet()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp)
+                                        .testTag("dup_auto_select_lower_quality")
+                                ) {
+                                    Icon(Icons.Rounded.AutoFixHigh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Select Lower-Quality", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (selectedForDelete.isNotEmpty()) {
+                                    Button(
+                                        onClick = { triggerDeleteSelected() },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        ),
+                                        modifier = Modifier
+                                            .heightIn(min = 48.dp)
+                                            .testTag("dup_delete_selected_button")
+                                    ) {
+                                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Delete (${selectedForDelete.size} · ${formatBytesMb(selectedBytes)})")
+                                    }
+                                }
+                            }
+                            if (selectedForDelete.isNotEmpty()) {
+                                TextButton(
+                                    onClick = { selectedForDelete = emptySet() },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text("Clear selection")
+                                }
+                            }
                         }
                     }
                 }
@@ -269,7 +395,8 @@ fun DuplicatesScreen(vm: MainViewModel) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         DuplicateSortMode.entries.forEach { mode ->
                             val selected = sortMode == mode
@@ -284,11 +411,41 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                 )
                             )
                         }
+                        AssistChip(
+                            onClick = {
+                                expandedKeys = if (allExpanded) {
+                                    emptySet()
+                                } else {
+                                    sortedGroups.map(::groupKey).toSet()
+                                }
+                            },
+                            label = { Text(if (allExpanded) "Collapse All" else "Expand All") },
+                            leadingIcon = {
+                                Icon(
+                                    if (allExpanded) Icons.Rounded.UnfoldLess else Icons.Rounded.UnfoldMore,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                leadingIconContentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(
+                                enabled = true,
+                                borderColor = MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier.testTag("dup_expand_all_chip")
+                        )
                     }
                 }
 
-                items(sortedGroups, key = { "${it.title}|${it.artist}" }) { group ->
+                items(sortedGroups, key = { groupKey(it) }) { group ->
+                    val gKey = groupKey(group)
+                    val isExpanded = gKey in expandedKeys
                     val bestId = remember(group.members) { selectBestMemberId(group.members) }
+                    val bestTrack = remember(group.members, bestId) { group.members.firstOrNull { it.id == bestId } }
                     val extraBytes = remember(group.members) { groupReclaimableBytes(group.members) }
 
                     Surface(
@@ -299,11 +456,19 @@ fun DuplicatesScreen(vm: MainViewModel) {
                         Column(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
+                                .padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(
-                                Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        expandedKeys = if (isExpanded) expandedKeys - gKey else expandedKeys + gKey
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                                    .testTag("dup_group_header"),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -316,8 +481,14 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    val bestCodec = bestTrack?.codec?.takeIf { it.isNotBlank() }?.uppercase(Locale.US)
+                                    val subLine = if (bestCodec != null) {
+                                        "${group.artist} · Best: $bestCodec"
+                                    } else {
+                                        group.artist
+                                    }
                                     Text(
-                                        text = group.artist,
+                                        text = subLine,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -330,16 +501,25 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                     color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        "${group.count} copies · +${formatBytesMb(extraBytes)}",
+                                        "${group.count} · +${formatBytesMb(extraBytes)}",
                                         style = MaterialTheme.typography.labelSmall.merge(TabularMono),
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                     )
                                 }
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                    contentDescription = if (isExpanded) "Collapse duplicate group" else "Expand duplicate group",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
 
-                            group.members.forEach { track ->
+                            AnimatedVisibility(visible = isExpanded) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    group.members.forEach { track ->
                                 val isBest = track.id == bestId
                                 val qualityBits = buildList {
                                     add(formatTime(track.durationMs))
@@ -365,8 +545,19 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
+                                            Checkbox(
+                                                checked = track.id in selectedForDelete,
+                                                onCheckedChange = { checked ->
+                                                    selectedForDelete = if (checked) {
+                                                        selectedForDelete + track.id
+                                                    } else {
+                                                        selectedForDelete - track.id
+                                                    }
+                                                },
+                                                modifier = Modifier.testTag("dup_checkbox_${track.id}")
+                                            )
                                             Text(
                                                 text = track.displayName,
                                                 style = MaterialTheme.typography.bodyMedium,
@@ -433,7 +624,9 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                             }
 
                                             IconButton(
-                                                modifier = Modifier.size(48.dp),
+                                                modifier = Modifier
+                                                    .size(48.dp)
+                                                    .testTag("dup_copy_button"),
                                                 onClick = {
                                                     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                                     val clip = ClipData.newPlainText("track_path", track.dataPath ?: track.folderPath)
@@ -446,7 +639,9 @@ fun DuplicatesScreen(vm: MainViewModel) {
 
                                             if (track.folderPath.isNotBlank()) {
                                                 IconButton(
-                                                    modifier = Modifier.size(48.dp),
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .testTag("dup_exclude_button"),
                                                     onClick = {
                                                         vm.excludeFolder(track.folderPath)
                                                         groups = groups.mapNotNull { g ->
@@ -462,7 +657,9 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                             }
 
                                             IconButton(
-                                                modifier = Modifier.size(48.dp),
+                                                modifier = Modifier
+                                                    .size(48.dp)
+                                                    .testTag("dup_share_button"),
                                                 onClick = {
                                                     runCatching {
                                                         val share = Intent(Intent.ACTION_SEND).apply {
@@ -487,11 +684,58 @@ fun DuplicatesScreen(vm: MainViewModel) {
                                         }
                                     }
                                 }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (legacyConfirmOpen) {
+        AlertDialog(
+            onDismissRequest = {
+                legacyConfirmOpen = false
+                pendingDeleteIds = emptyList()
+            },
+            title = { Text("Delete ${pendingDeleteIds.size} duplicate file(s)?") },
+            text = { Text("This permanently deletes the selected audio files from device storage.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val targets = pendingDeleteIds.mapNotNull { allMembersById[it] }
+                        val deletedIds = mutableListOf<String>()
+                        targets.forEach { t ->
+                            val rows = runCatching { ctx.contentResolver.delete(Uri.parse(t.uri), null, null) }.getOrDefault(0)
+                            if (rows > 0) deletedIds += t.id
+                        }
+                        legacyConfirmOpen = false
+                        pendingDeleteIds = emptyList()
+                        if (deletedIds.isNotEmpty()) {
+                            vm.removeDeletedDuplicates(deletedIds) {
+                                selectedForDelete = selectedForDelete - deletedIds.toSet()
+                                refreshNonce++
+                            }
+                        } else {
+                            vm.snackbarMessage.value = "Could not delete selected files on this OS version"
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        legacyConfirmOpen = false
+                        pendingDeleteIds = emptyList()
+                    }
+                ) { Text("Cancel") }
+            }
+        )
     }
 }

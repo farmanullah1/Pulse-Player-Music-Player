@@ -22,13 +22,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -109,6 +110,10 @@ fun MiniPlayer(
             .padding(horizontal = 12.dp)
             .fillMaxWidth()
             .height(68.dp)
+            .graphicsLayer {
+                translationX = (dragDx * 0.35f).coerceIn(-44f, 44f)
+                translationY = (dragDy * 0.25f).coerceIn(-24f, 0f)
+            }
             .testTag("mini_player_bar")
             .pointerInput(s.mediaId, onNext, onPrevious, onExpand) {
                 detectDragGestures(
@@ -153,6 +158,17 @@ fun MiniPlayer(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val showInlineQueue = maxWidth >= 372.dp
             Box(modifier = Modifier.fillMaxSize()) {
+                if (abs(dragDx) > 22f && abs(dragDx) > abs(dragDy)) {
+                    Icon(
+                        imageVector = if (dragDx < 0f) Icons.Rounded.SkipNext else Icons.Rounded.SkipPrevious,
+                        contentDescription = null,
+                        tint = effectiveTint.copy(alpha = (abs(dragDx) / 90f).coerceIn(0.25f, 0.9f)),
+                        modifier = Modifier
+                            .align(if (dragDx < 0f) Alignment.CenterEnd else Alignment.CenterStart)
+                            .padding(horizontal = 10.dp)
+                            .size(20.dp)
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -260,7 +276,7 @@ fun MiniPlayer(
                                 .testTag("mini_player_queue_button")
                         ) {
                             Icon(
-                                imageVector = Icons.Rounded.QueueMusic,
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
                                 contentDescription = "Open queue",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(22.dp)

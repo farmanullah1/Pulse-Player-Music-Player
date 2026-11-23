@@ -23,8 +23,8 @@ import com.pulse.player.data.scan.ArtworkLoader
 fun ArtworkBackground(
     art: ArtRef?,
     fallback: List<Color>,
-    dim: Float = 0.45f,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dim: Float = 0.45f
 ) {
     val ctx = LocalContext.current
     val reduced = rememberReducedMotion()

@@ -14,7 +14,7 @@ enum class TransitionReason(val defaultMs: Long) {
     TrackChange(200)
 }
 
-/** The ONLY writer of player volume. effective = userVolume * fadeMultiplier. */
+/** The ONLY writer of player volume. effective = userVolume * fadeMultiplier * replayGainScale. */
 class AudioTransitionController(
     private val scope: CoroutineScope,
     private val clock: () -> Long = { System.currentTimeMillis() },
@@ -24,10 +24,12 @@ class AudioTransitionController(
         private set
     var fadeMultiplier = 1f
         private set
+    var replayGainScale = 1f
+        private set
     var activeReason: TransitionReason? = null
         private set
     val effectiveVolume: Float
-        get() = (userVolume * fadeMultiplier).coerceIn(0f, 1f)
+        get() = (userVolume * fadeMultiplier * replayGainScale).coerceIn(0f, 1f)
 
     private var job: Job? = null
 
@@ -35,6 +37,11 @@ class AudioTransitionController(
 
     fun setUserVolume(v: Float) {
         userVolume = v.coerceIn(0f, 1f)
+        publish()
+    }
+
+    fun setReplayGainScale(scale: Float) {
+        replayGainScale = scale.coerceIn(0.05f, 1f)
         publish()
     }
 

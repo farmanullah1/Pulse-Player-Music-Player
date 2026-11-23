@@ -1,5 +1,5 @@
 {
-  "name": "Pulse Player",
+  "name": "Pulse Music Player",
   "description": "Fast, beautiful, offline music player with Material 3 design, custom player skins, equalizer, and sleep timer.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

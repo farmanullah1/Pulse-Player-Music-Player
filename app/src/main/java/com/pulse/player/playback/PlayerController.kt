@@ -43,11 +43,14 @@ class PlayerController(
     private var reconnectJob: Job? = null
     private var snapshotDebounceJob: Job? = null
     private var queueLoadJob: Job? = null
+    private var queueRebuildJob: Job? = null
     private var isChunkingQueue = false
     private var attempts = 0
+    private var lastSnapshotSaveAtMs = 0L
 
     private var queueModel = QueueModel(emptyList(), null)
     private val itemCache = mutableMapOf<String, MediaItem>()
+    private val trackLookup = mutableMapOf<String, Track>()
 
     var onSnapshotChanged: ((QueueSnapshot) -> Unit)? = null
 
@@ -64,6 +67,11 @@ class PlayerController(
         scope.launch {
             PlaybackEngine.errorEvents.collect { err ->
                 _state.update { it.copy(trackError = err) }
+            }
+        }
+        scope.launch {
+            PlaybackEngine.appliedReplayGainDb.collect { gainDb ->
+                _state.update { it.copy(appliedReplayGainDb = gainDb) }
             }
         }
         attach()
@@ -85,7 +93,7 @@ class PlayerController(
                     attempts = 0
                     c.addListener(listener)
                     sync(c, rebuildQueue = true)
-                    updateTicker(c.isPlaying)
+                    updateTicker(shouldTick(c))
                 } else {
                     c.release()
                 }
@@ -100,6 +108,7 @@ class PlayerController(
         tickJob?.cancel()
         snapshotDebounceJob?.cancel()
         queueLoadJob?.cancel()
+        queueRebuildJob?.cancel()
         mc?.removeListener(listener)
         future?.let { MediaController.releaseFuture(it) }
         future = null
@@ -126,37 +135,60 @@ class PlayerController(
     private fun scheduleSnapshotSave() {
         snapshotDebounceJob?.cancel()
         snapshotDebounceJob = scope.launch {
-            delay(500)
-            takeQueueSnapshot()?.let { onSnapshotChanged?.invoke(it) }
+            delay(800)
+            saveSnapshotNow()
         }
     }
 
     private fun saveSnapshotNow() {
         snapshotDebounceJob?.cancel()
+        lastSnapshotSaveAtMs = System.currentTimeMillis()
         takeQueueSnapshot()?.let { onSnapshotChanged?.invoke(it) }
     }
 
-    private fun updateTicker(playing: Boolean) {
-        tickJob?.cancel()
-        if (!playing) return
+    private fun shouldTick(c: Player): Boolean =
+        c.isPlaying || (c.playWhenReady && c.playbackState != Player.STATE_ENDED && c.playbackState != Player.STATE_IDLE)
+
+    private fun updateTicker(active: Boolean) {
+        if (!active) {
+            tickJob?.cancel()
+            tickJob = null
+            return
+        }
+        if (tickJob?.isActive == true) return
         tickJob = scope.launch {
-            var counter = 0
             while (isActive) {
-                delay(250)
-                mc?.let { c ->
-                    val pos = c.currentPosition
-                    _pos.value = pos
-                    val st = _state.value
-                    val loopStart = st.abLoopStartMs
-                    val loopEnd = st.abLoopEndMs
-                    if (loopStart != null && loopEnd != null && loopEnd > loopStart && pos >= loopEnd) {
-                        c.seekTo(loopStart)
-                        _pos.value = loopStart
-                    }
+                delay(200)
+                val c = mc ?: break
+                val pos = c.currentPosition.coerceAtLeast(0L)
+                _pos.value = pos
+
+                val st = _state.value
+                val curItem = c.currentMediaItem
+                val curId = curItem?.mediaId
+                val curTitle = c.mediaMetadata.title?.toString().orEmpty()
+                val rawDur = if (c.duration == C.TIME_UNSET || c.duration < 0) 0L else c.duration
+                val fallbackDur = curId?.let { trackLookup[it]?.durationMs } ?: 0L
+                val curDur = if (rawDur > 0L) rawDur else fallbackDur
+
+                if (curId != st.mediaId ||
+                    (curTitle.isNotBlank() && curTitle != st.title) ||
+                    (curDur > 0L && curDur != st.durationMs) ||
+                    c.isPlaying != st.isPlaying ||
+                    c.currentMediaItemIndex != st.index
+                ) {
+                    sync(c, rebuildQueue = false)
                 }
-                counter++
-                if (counter >= 60) { // 60 * 250ms = 15s periodic save while playing
-                    counter = 0
+
+                val loopStart = st.abLoopStartMs
+                val loopEnd = st.abLoopEndMs
+                if (loopStart != null && loopEnd != null && loopEnd > loopStart && pos >= loopEnd) {
+                    c.seekTo(loopStart)
+                    _pos.value = loopStart
+                }
+
+                val now = System.currentTimeMillis()
+                if (c.isPlaying && now - lastSnapshotSaveAtMs >= 15_000L) {
                     saveSnapshotNow()
                 }
             }
@@ -165,14 +197,16 @@ class PlayerController(
 
     private val listener = object : Player.Listener {
         override fun onEvents(p: Player, e: Player.Events) {
-            val rebuildQueue = e.containsAny(
-                Player.EVENT_TIMELINE_CHANGED,
-                Player.EVENT_MEDIA_METADATA_CHANGED
-            )
+            val rebuildQueue = e.contains(Player.EVENT_TIMELINE_CHANGED)
             sync(p, rebuildQueue = rebuildQueue)
-            if (e.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
-                updateTicker(p.isPlaying)
-                if (!p.isPlaying) {
+            if (e.containsAny(
+                    Player.EVENT_IS_PLAYING_CHANGED,
+                    Player.EVENT_PLAYBACK_STATE_CHANGED,
+                    Player.EVENT_PLAY_WHEN_READY_CHANGED
+                )
+            ) {
+                updateTicker(shouldTick(p))
+                if (!p.isPlaying && !p.playWhenReady) {
                     saveSnapshotNow()
                 }
             }
@@ -181,8 +215,6 @@ class PlayerController(
                 if (newId != null && newId != queueModel.currentId) {
                     val active = queueModel.active
                     if (newId in active) {
-                        // Current track advanced naturally or via seek
-                        // Update current in model
                         if (queueModel.shuffleEnabled) {
                             queueModel.enableShuffleFrom(queueModel.shuffled, queueModel.seed, newId)
                         } else {
@@ -190,8 +222,8 @@ class PlayerController(
                         }
                     }
                 }
-                _state.update { it }
-                saveSnapshotNow()
+                updateTicker(shouldTick(p))
+                scheduleSnapshotSave()
             }
             if (e.contains(Player.EVENT_REPEAT_MODE_CHANGED)) {
                 scheduleSnapshotSave()
@@ -201,19 +233,28 @@ class PlayerController(
 
     private fun sync(c: Player, rebuildQueue: Boolean = false) {
         val md = c.mediaMetadata
-        val isSeekable = c.isCurrentMediaItemSeekable && c.duration != C.TIME_UNSET && c.duration > 0
-        val curId = c.currentMediaItem?.mediaId
+        val curItem = c.currentMediaItem
+        val curId = curItem?.mediaId
+        val rawDur = if (c.duration == C.TIME_UNSET || c.duration < 0) 0L else c.duration
+        val cachedTrack = curId?.let { trackLookup[it] }
+        val effectiveDur = if (rawDur > 0L) rawDur else (cachedTrack?.durationMs ?: 0L)
+        val isSeekable = c.isCurrentMediaItemSeekable && effectiveDur > 0
+        val title = md.title?.toString()?.takeIf { it.isNotBlank() } ?: cachedTrack?.title.orEmpty()
+        val artist = md.artist?.toString()?.takeIf { it.isNotBlank() } ?: cachedTrack?.artist.orEmpty()
+        val album = md.albumTitle?.toString()?.takeIf { it.isNotBlank() } ?: cachedTrack?.album.orEmpty()
+        val artUri = curItem?.localConfiguration?.uri?.toString() ?: cachedTrack?.uri
+
         _state.update {
             it.copy(
                 mediaId = curId,
-                title = md.title?.toString().orEmpty(),
-                artist = md.artist?.toString().orEmpty(),
-                album = md.albumTitle?.toString().orEmpty(),
-                artworkUri = c.currentMediaItem?.localConfiguration?.uri?.toString(),
+                title = title,
+                artist = artist,
+                album = album,
+                artworkUri = artUri,
                 isPlaying = c.isPlaying,
                 playWhenReady = c.playWhenReady,
                 buffering = c.playbackState == Player.STATE_BUFFERING,
-                durationMs = if (c.duration == C.TIME_UNSET || c.duration < 0) 0L else c.duration,
+                durationMs = effectiveDur,
                 index = c.currentMediaItemIndex,
                 queueSize = c.mediaItemCount,
                 shuffle = queueModel.shuffleEnabled, // Media3 shuffle stays disabled
@@ -226,20 +267,36 @@ class PlayerController(
         }
         if (rebuildQueue && !isChunkingQueue) {
             val count = c.mediaItemCount
-            _queue.value = List(count) { i ->
-                val m = c.getMediaItemAt(i)
-                Track(
-                    id = m.mediaId,
-                    uri = m.localConfiguration?.uri?.toString().orEmpty(),
-                    title = m.mediaMetadata.title?.toString().orEmpty(),
-                    artist = m.mediaMetadata.artist?.toString().orEmpty(),
-                    album = m.mediaMetadata.albumTitle?.toString().orEmpty(),
-                    durationMs = 0L,
-                    isFavorite = false
-                )
+            if (count == 0) {
+                queueRebuildJob?.cancel()
+                _queue.value = emptyList()
+            } else {
+                val items = ArrayList<MediaItem>(count)
+                for (i in 0 until count) {
+                    items += c.getMediaItemAt(i)
+                }
+                val lookupSnapshot = trackLookup.toMap()
+                queueRebuildJob?.cancel()
+                queueRebuildJob = scope.launch {
+                    val rebuilt = withContext(Dispatchers.Default) {
+                        items.map { m ->
+                            val cached = lookupSnapshot[m.mediaId]
+                            cached ?: Track(
+                                id = m.mediaId,
+                                uri = m.localConfiguration?.uri?.toString().orEmpty(),
+                                title = m.mediaMetadata.title?.toString().orEmpty(),
+                                artist = m.mediaMetadata.artist?.toString().orEmpty(),
+                                album = m.mediaMetadata.albumTitle?.toString().orEmpty(),
+                                durationMs = 0L,
+                                isFavorite = false
+                            )
+                        }
+                    }
+                    _queue.value = rebuilt
+                }
             }
         }
-        _pos.value = c.currentPosition
+        _pos.value = c.currentPosition.coerceAtLeast(0L)
     }
 
     private fun Track.toItem(): MediaItem = MediaItem.Builder()
@@ -265,18 +322,21 @@ class PlayerController(
 
     fun playTrack(t: Track) {
         itemCache[t.id] = t.toItem()
+        trackLookup[t.id] = t
         queueModel = QueueModel(listOf(t.id), t.id)
+        _queue.value = listOf(t)
         mc?.let {
             it.setMediaItem(t.toItem())
             it.prepare()
             it.play()
         }
-        saveSnapshotNow()
+        scheduleSnapshotSave()
     }
 
     fun playQueue(tracks: List<Track>, startIdx: Int = 0, shuffle: Boolean = false) {
         if (tracks.isEmpty()) return
         queueLoadJob?.cancel()
+        queueRebuildJob?.cancel()
         val snapshot = tracks.toList()
         queueLoadJob = scope.launch {
             val prepared = withContext(Dispatchers.Default) {
@@ -300,35 +360,51 @@ class PlayerController(
                 val items = activeIds.mapNotNull { builtMap[it] }
                 val activeTracks = activeIds.mapNotNull { trackMap[it] }
                 val activeIndex = activeIds.indexOf(startId).coerceAtLeast(0)
-                Triple(model, builtMap, Triple(items, activeTracks, activeIndex))
+                Triple(model, Pair(builtMap, trackMap), Triple(items, activeTracks, activeIndex))
             }
-            val (model, builtMap, payload) = prepared
+            val (model, maps, payload) = prepared
+            val (builtMap, trackMap) = maps
             val (items, activeTracks, activeIndex) = payload
             itemCache.putAll(builtMap)
+            trackLookup.putAll(trackMap)
             queueModel = model
             _queue.value = activeTracks
-            _state.update { it.copy(shuffle = model.shuffleEnabled) }
+            val safeIndex = if (activeTracks.isEmpty()) 0 else activeIndex.coerceIn(0, activeTracks.lastIndex)
+            val initialTrack = activeTracks.getOrNull(safeIndex)
+            _state.update {
+                it.copy(
+                    mediaId = initialTrack?.id ?: it.mediaId,
+                    title = initialTrack?.title ?: it.title,
+                    artist = initialTrack?.artist ?: it.artist,
+                    album = initialTrack?.album ?: it.album,
+                    artworkUri = initialTrack?.uri ?: it.artworkUri,
+                    durationMs = initialTrack?.durationMs ?: it.durationMs,
+                    index = safeIndex,
+                    queueSize = activeTracks.size,
+                    shuffle = model.shuffleEnabled
+                )
+            }
             val c = mc
             if (c != null && items.isNotEmpty()) {
-                val safeIndex = activeIndex.coerceIn(0, items.lastIndex)
+                val itemSafeIndex = activeIndex.coerceIn(0, items.lastIndex)
                 if (items.size <= 400) {
-                    c.setMediaItems(items, safeIndex, 0L)
+                    c.setMediaItems(items, itemSafeIndex, 0L)
                     c.prepare()
                     c.play()
                 } else {
                     isChunkingQueue = true
                     try {
-                        c.setMediaItems(listOf(items[safeIndex]), 0, 0L)
+                        c.setMediaItems(listOf(items[itemSafeIndex]), 0, 0L)
                         c.prepare()
                         c.play()
                         var insertPos = 0
-                        for (chunk in items.subList(0, safeIndex).chunked(250)) {
+                        for (chunk in items.subList(0, itemSafeIndex).chunked(250)) {
                             ensureActive()
                             c.addMediaItems(insertPos, chunk)
                             insertPos += chunk.size
                             yield()
                         }
-                        for (chunk in items.subList(safeIndex + 1, items.size).chunked(250)) {
+                        for (chunk in items.subList(itemSafeIndex + 1, items.size).chunked(250)) {
                             ensureActive()
                             c.addMediaItems(chunk)
                             yield()
@@ -337,26 +413,39 @@ class PlayerController(
                         isChunkingQueue = false
                     }
                 }
+                updateTicker(true)
             }
-            saveSnapshotNow()
+            scheduleSnapshotSave()
         }
     }
 
     fun playExternal(uri: android.net.Uri) {
+        val extId = "ext:${uri.hashCode()}"
+        val extTitle = uri.lastPathSegment ?: "External Audio"
         val item = MediaItem.Builder()
-            .setMediaId("ext:${uri.hashCode()}")
+            .setMediaId(extId)
             .setUri(uri)
             .setMediaMetadata(
                 MediaMetadata.Builder()
-                    .setTitle(uri.lastPathSegment ?: "External Audio")
+                    .setTitle(extTitle)
                     .setArtist("External")
                     .build()
             )
             .build()
+        _state.update {
+            it.copy(
+                mediaId = extId,
+                title = extTitle,
+                artist = "External",
+                album = "",
+                artworkUri = null
+            )
+        }
         mc?.let {
             it.setMediaItem(item)
             it.prepare()
             it.play()
+            updateTicker(true)
         }
     }
 
@@ -499,6 +588,7 @@ class PlayerController(
 
     fun playNext(t: Track) {
         itemCache[t.id] = t.toItem()
+        trackLookup[t.id] = t
         queueModel.playNext(t.id)
         val c = mc ?: return
         val curId = queueModel.currentId ?: c.currentMediaItem?.mediaId
@@ -521,28 +611,95 @@ class PlayerController(
             return false
         }
         itemCache[t.id] = t.toItem()
+        trackLookup[t.id] = t
         mc?.addMediaItem(t.toItem())
         scheduleSnapshotSave()
         return true
     }
 
     fun removeFromQueue(i: Int) {
+        removeFromQueueWithUndo(i)
+    }
+
+    fun removeFromQueueWithUndo(i: Int): Track? {
         val active = queueModel.active
-        val id = active.getOrNull(i) ?: return
+        val id = active.getOrNull(i) ?: return null
+        val removedTrack = _queue.value.getOrNull(i) ?: trackLookup[id]
         queueModel.remove(id)
-        mc?.removeMediaItem(i)
+        mc?.let { c ->
+            if (i in 0 until c.mediaItemCount) {
+                c.removeMediaItem(i)
+            }
+        }
+        _queue.update { cur ->
+            if (i in cur.indices) cur.toMutableList().apply { removeAt(i) } else cur
+        }
+        scheduleSnapshotSave()
+        return removedTrack
+    }
+
+    fun insertTrackAt(index: Int, track: Track) {
+        itemCache[track.id] = track.toItem()
+        trackLookup[track.id] = track
+        val currentQueue = _queue.value
+        val clamped = index.coerceIn(0, currentQueue.size)
+        val newList = currentQueue.toMutableList().apply {
+            if (none { it.id == track.id }) add(clamped, track)
+        }
+        val curId = queueModel.currentId ?: _state.value.mediaId
+        queueModel = QueueModel(newList.map { it.id }, curId)
+        _queue.value = newList
+        mc?.let { c ->
+            val safeIdx = clamped.coerceIn(0, c.mediaItemCount)
+            c.addMediaItem(safeIdx, track.toItem())
+        }
         scheduleSnapshotSave()
     }
 
     fun moveInQueue(from: Int, to: Int) {
+        val current = _queue.value
+        if (from == to || from !in current.indices || to !in current.indices) return
         queueModel.move(from, to)
-        mc?.moveMediaItem(from, to)
+        _queue.update { list ->
+            if (from in list.indices && to in list.indices) {
+                list.toMutableList().apply {
+                    val moved = removeAt(from)
+                    add(to, moved)
+                }
+            } else list
+        }
+        mc?.let { c ->
+            if (from in 0 until c.mediaItemCount && to in 0 until c.mediaItemCount) {
+                c.moveMediaItem(from, to)
+            }
+        }
         scheduleSnapshotSave()
+    }
+
+    fun shuffleUpcoming(): Int {
+        val current = _queue.value
+        val curIdx = _state.value.index.coerceIn(0, (current.lastIndex).coerceAtLeast(0))
+        if (current.size - curIdx <= 2) return 0
+        val head = current.subList(0, curIdx + 1)
+        val tail = current.subList(curIdx + 1, current.size).shuffled(Random(System.currentTimeMillis()))
+        val reordered = head + tail
+        val curId = queueModel.currentId ?: reordered.getOrNull(curIdx)?.id
+        queueModel = QueueModel(reordered.map { it.id }, curId)
+        _queue.value = reordered
+        mc?.let { c ->
+            val tailItems = tail.map { it.toItem() }
+            if (curIdx + 1 < c.mediaItemCount) {
+                c.replaceMediaItems(curIdx + 1, c.mediaItemCount, tailItems)
+            }
+        }
+        scheduleSnapshotSave()
+        return tail.size
     }
 
     fun clearQueue() {
         queueModel = QueueModel(emptyList(), null)
         itemCache.clear()
+        _queue.value = emptyList()
         mc?.clearMediaItems()
         scheduleSnapshotSave()
     }
@@ -627,9 +784,13 @@ class PlayerController(
     fun restore(ids: List<String>, index: Int, pos: Long, tracks: List<Track>) {
         val c = mc ?: return
         if (tracks.isEmpty()) return
-        tracks.forEach { itemCache[it.id] = it.toItem() }
+        tracks.forEach {
+            itemCache[it.id] = it.toItem()
+            trackLookup[it.id] = it
+        }
         val startId = ids.getOrNull(index) ?: ids.firstOrNull()
         queueModel = QueueModel(ids, startId)
+        _queue.value = tracks
         c.setMediaItemsChunked(tracks.map { it.toItem() }, index.coerceIn(0, tracks.lastIndex), pos)
         c.prepare()
     }
@@ -640,9 +801,13 @@ class PlayerController(
         val activeIds = queueModel.active
         val activeTracks = activeIds.mapNotNull { tracksMap[it] }
         if (activeTracks.isEmpty()) return
-        activeTracks.forEach { itemCache[it.id] = it.toItem() }
+        activeTracks.forEach {
+            itemCache[it.id] = it.toItem()
+            trackLookup[it.id] = it
+        }
         val curIndex = activeIds.indexOf(queueModel.currentId).coerceAtLeast(0)
         val items = activeTracks.map { it.toItem() }
+        _queue.value = activeTracks
         c.setMediaItemsChunked(items, curIndex, restored.positionMs)
         c.prepare()
         if (restored.startPaused) {

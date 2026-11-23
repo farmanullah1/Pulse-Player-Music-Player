@@ -6,7 +6,6 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.EnvironmentalReverb
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
-import android.media.audiofx.Virtualizer
 import android.os.Build
 import com.pulse.player.BuildConfig
 
@@ -87,10 +86,9 @@ class Capabilities(ctx: Context) {
     /** Reverb availability. */
     val reverbAvailable: CapabilityState = checkAudioFx(AudioEffect.EFFECT_TYPE_ENV_REVERB)
 
-    /** Loudness enhancer (API 19+). */
+    /** Loudness enhancer (API 19+, always available since minSdk is 26). */
     val loudnessEnhancerAvailable: CapabilityState =
-        if (Build.VERSION.SDK_INT >= 19) checkAudioFx(AudioEffect.EFFECT_TYPE_LOUDNESS_ENHANCER)
-        else CapabilityState.Unsupported("Requires Android 4.4+")
+        checkAudioFx(AudioEffect.EFFECT_TYPE_LOUDNESS_ENHANCER)
 
     /** Material You dynamic colors (API 31+). */
     val materialYouAvailable: CapabilityState =

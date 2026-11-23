@@ -73,7 +73,7 @@ object FavoritesCodec {
         return JSONObject().apply {
             put("schema", SCHEMA)
             put("schemaVersion", VERSION)
-            put("app", "Pulse Player")
+            put("app", "Pulse Music Player")
             put("exportedAt", Instant.now().toString())
             put("count", tracks.size)
             put("items", arr)
@@ -90,7 +90,7 @@ object FavoritesCodec {
             return Decoded.Fail("This file is not valid JSON.")
         }
         if (root.optString("schema") != SCHEMA) {
-            return Decoded.Fail("This is not a Pulse Player favorites file.")
+            return Decoded.Fail("This is not a Pulse Music Player favorites file.")
         }
         if (root.optInt("schemaVersion", -1) != VERSION) {
             return Decoded.Fail("Unsupported file version. Update the app and try again.")
@@ -189,9 +189,22 @@ class FavoritesMatcher(
 
 class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
     companion object {
-        const val PORTABLE_FOLDER_NAME = "Pulse Player"
+        const val PORTABLE_FOLDER_NAME = "Pulse"
+        const val LEGACY_PORTABLE_FOLDER_NAME = "Pulse Player"
         const val PORTABLE_JSON_NAME = "pulseplayer.favorites.json"
         private const val PORTABLE_RELATIVE_PATH = "Download/$PORTABLE_FOLDER_NAME/"
+        private const val LEGACY_PORTABLE_RELATIVE_PATH = "Download/$LEGACY_PORTABLE_FOLDER_NAME/"
+
+        /** Best-effort creation/readiness of the default Download/Pulse directory. */
+        fun ensureDefaultPulseFolder(ctx: Context): Boolean = runCatching {
+            val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val pulseDir = File(downloads, PORTABLE_FOLDER_NAME)
+            if (pulseDir.exists() && pulseDir.isDirectory) return@runCatching true
+            if (pulseDir.mkdirs()) return@runCatching true
+            // On Android 10+ MediaStore creates Download/Pulse automatically on first write;
+            // also probe if an app-specific or public directory is writable.
+            pulseDir.exists()
+        }.getOrDefault(false)
     }
 
     data class PortableExportResult(
@@ -216,7 +229,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
-    /** Creates the portable Download/Pulse Player backup without changing v1 JSON. */
+    /** Creates the portable Download/Pulse backup without changing v1 JSON. */
     suspend fun exportToPortableFolder(
         customTreeUri: Uri? = null,
         onProgress: ((current: Int, total: Int, title: String, fraction: Float) -> Unit)? = null
@@ -411,14 +424,18 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         }
     }
 
-    private fun findMediaStoreFile(resolver: android.content.ContentResolver, name: String): Uri? {
+    private fun findMediaStoreFile(
+        resolver: android.content.ContentResolver,
+        name: String,
+        relativePath: String = PORTABLE_RELATIVE_PATH
+    ): Uri? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         resolver.query(
             collection,
             arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=?",
-            arrayOf(PORTABLE_RELATIVE_PATH, name),
+            arrayOf(relativePath, name),
             null
         )?.use { cursor ->
             if (cursor.moveToFirst()) return ContentUris.withAppendedId(collection, cursor.getLong(0))
@@ -428,7 +445,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
             files,
             arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND ${MediaStore.MediaColumns.DISPLAY_NAME}=?",
-            arrayOf(PORTABLE_RELATIVE_PATH, name),
+            arrayOf(relativePath, name),
             null
         )?.use { cursor ->
             if (cursor.moveToFirst()) return ContentUris.withAppendedId(files, cursor.getLong(0))
@@ -459,18 +476,23 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
         .trim()
         .ifBlank { "PulsePlayer_Track.mp3" }
 
-    /** Auto-detects and previews a classic backup in Download/Pulse Player. */
+    /** Auto-detects and previews a classic backup in Download/Pulse (with legacy Download/Pulse Player fallback). */
     suspend fun previewDownloadFolder(): Result<Preview> = withContext(Dispatchers.IO) {
         runCatching {
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), PORTABLE_FOLDER_NAME)
+            val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val primaryDir = File(downloads, PORTABLE_FOLDER_NAME)
+            val legacyDir = File(downloads, LEGACY_PORTABLE_FOLDER_NAME)
+            val activeDir = if (primaryDir.exists()) primaryDir else legacyDir
             var jsonBytes: ByteArray? = null
             var jsonFileName = PORTABLE_JSON_NAME
 
-            // 1. Try reading directly from File if accessible
-            if (dir.exists()) {
+            // 1. Try reading directly from File if accessible (Download/Pulse first, then legacy Download/Pulse Player)
+            for (dir in listOf(primaryDir, legacyDir)) {
+                if (!dir.exists()) continue
                 val directFile = File(dir, PORTABLE_JSON_NAME)
                 if (directFile.exists() && directFile.canRead()) {
                     jsonBytes = directFile.readBytes()
+                    break
                 } else {
                     val candidate = dir.listFiles()?.firstOrNull { f ->
                         val lower = f.name.lowercase()
@@ -479,13 +501,15 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                     if (candidate != null && candidate.canRead()) {
                         jsonBytes = candidate.readBytes()
                         jsonFileName = candidate.name
+                        break
                     }
                 }
             }
 
-            // 2. Try MediaStore if not found on filesystem
+            // 2. Try MediaStore if not found on filesystem (Download/Pulse first, then legacy Download/Pulse Player)
             if (jsonBytes == null) {
-                val jsonUri = findMediaStoreFile(ctx.contentResolver, PORTABLE_JSON_NAME)
+                val jsonUri = findMediaStoreFile(ctx.contentResolver, PORTABLE_JSON_NAME, PORTABLE_RELATIVE_PATH)
+                    ?: findMediaStoreFile(ctx.contentResolver, PORTABLE_JSON_NAME, LEGACY_PORTABLE_RELATIVE_PATH)
                 if (jsonUri != null) {
                     ctx.contentResolver.openInputStream(jsonUri)?.use { stream ->
                         jsonBytes = readLimited(stream, FavoritesCodec.MAX_BYTES)
@@ -497,9 +521,9 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                 error("No $PORTABLE_JSON_NAME found in Download/$PORTABLE_FOLDER_NAME. Please ensure your backup files are placed in Download/$PORTABLE_FOLDER_NAME, or use the Folder Picker.")
             }
 
-            // Index any audio files present in Download/Pulse Player
-            if (dir.exists() && dir.isDirectory) {
-                scanDirectoryAudioFiles(dir)
+            // Index any audio files present in Download/Pulse (or legacy fallback)
+            if (activeDir.exists() && activeDir.isDirectory) {
+                scanDirectoryAudioFiles(activeDir)
             }
 
             val sniffed = BackupSniffer.sniff(jsonBytes!!)
@@ -507,7 +531,7 @@ class FavoritesRepository(private val ctx: Context, private val db: PulseDb) {
                 error("This looks like a Full backup — open the Full backup importer?")
             }
             if (sniffed == BackupKind.RealWav) {
-                error("This is an audio WAV file, not a Pulse Player favorites backup.")
+                error("This is an audio WAV file, not a Pulse Music Player favorites backup.")
             }
             when (val d = FavoritesCodec.decode(jsonBytes!!.toString(Charsets.UTF_8))) {
                 is FavoritesCodec.Decoded.Fail -> error(d.reason)

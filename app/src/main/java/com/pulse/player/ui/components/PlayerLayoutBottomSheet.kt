@@ -70,6 +70,11 @@ fun PlayerLayoutBottomSheet(
     val seekStyle by vm.seekStyle.collectAsStateWithLifecycle()
     val cornerRadiusDp by vm.cornerRadiusDp.collectAsStateWithLifecycle()
     val splitUpperRatio by vm.splitPlayerUpperRatio.collectAsStateWithLifecycle()
+    val coverShape by vm.playerCoverShape.collectAsStateWithLifecycle()
+    val backdropBlur by vm.playerBackdropBlur.collectAsStateWithLifecycle()
+    val backdropDim by vm.playerBackdropDim.collectAsStateWithLifecycle()
+    val artworkGlow by vm.playerArtworkGlow.collectAsStateWithLifecycle()
+    val seekbarHeight by vm.playerSeekbarHeight.collectAsStateWithLifecycle()
     val playerState by vm.player.state.collectAsStateWithLifecycle()
     val isFavorite by vm.isCurrentFavorite.collectAsStateWithLifecycle()
     val activeTheme = remember(playerThemeId) {
@@ -167,6 +172,11 @@ fun PlayerLayoutBottomSheet(
                         isPlaying = playerState.isPlaying,
                         isFavorite = isFavorite,
                         splitUpperRatio = splitUpperRatio,
+                        coverShape = coverShape,
+                        backdropBlur = backdropBlur,
+                        backdropDim = backdropDim,
+                        artworkGlow = artworkGlow,
+                        seekbarHeight = seekbarHeight,
                         modifier = Modifier.padding(10.dp)
                     )
                 }
@@ -314,7 +324,7 @@ fun PlayerLayoutBottomSheet(
                 ) {
                     Icon(Icons.Rounded.DashboardCustomize, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Customize", maxLines = 1)
+                    Text("Studio", maxLines = 1)
                 }
             }
 

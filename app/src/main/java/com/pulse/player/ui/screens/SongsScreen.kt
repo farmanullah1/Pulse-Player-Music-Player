@@ -13,17 +13,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -38,10 +32,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.ui.components.AlphaScroller
+import com.pulse.player.ui.components.BulkSelectionBar
 import com.pulse.player.ui.components.LocalBottomOverlayPadding
 import com.pulse.player.ui.components.PillButton
 import com.pulse.player.ui.components.TrackRow
@@ -67,7 +62,7 @@ fun SongsScreen(vm: MainViewModel) {
     val scanProgress by vm.scanProgress.collectAsStateWithLifecycle(initialValue = 0)
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
+    val listState = vm.lazyListStateFor("songs")
     val bottomPad = LocalBottomOverlayPadding.current
 
     val displayTracks = if (showMissing) missingTracks else tracks
@@ -77,7 +72,7 @@ fun SongsScreen(vm: MainViewModel) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = PaddingValues(bottom = if (selectMode) bottomPad + 76.dp else bottomPad)
+            contentPadding = PaddingValues(bottom = if (selectMode) bottomPad + 80.dp else bottomPad)
         ) {
             item(contentType = "header") {
                 Column(
@@ -104,7 +99,12 @@ fun SongsScreen(vm: MainViewModel) {
                             )
                         }
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { vm.toggleSelectMode() }, modifier = Modifier.size(48.dp)) {
+                        IconButton(
+                            onClick = { vm.toggleSelectMode() },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("songs_select_mode_button")
+                        ) {
                             Icon(
                                 imageVector = Icons.Rounded.Checklist,
                                 contentDescription = "Select songs",
@@ -290,52 +290,18 @@ fun SongsScreen(vm: MainViewModel) {
         )
 
         if (selectMode) {
-            Surface(
+            BulkSelectionBar(
+                selectedCount = selected.size,
+                onSelectAll = { vm.selectAll(displayTracks.map { it.id }) },
+                onAddToPlaylist = { vm.openBatchAddToPlaylist() },
+                onBatchEditTags = { vm.openBatchTagEditor() },
+                onPlayNext = { vm.playSelectedNext() },
+                onFavorite = { vm.favoriteSelected() },
+                onClose = { vm.clearSelect() },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = bottomPad, start = 16.dp, end = 16.dp)
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("${selected.size} selected", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                    Row {
-                        IconButton(onClick = { vm.selectAll(displayTracks.map { it.id }) }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Rounded.SelectAll, "Select all", tint = MaterialTheme.colorScheme.onSurface)
-                        }
-                        IconButton(onClick = { vm.openBatchTagEditor() }, enabled = selected.isNotEmpty(), modifier = Modifier.size(48.dp)) {
-                            Icon(
-                                Icons.Rounded.Edit,
-                                "Batch edit tags",
-                                tint = if (selected.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                        }
-                        IconButton(onClick = { vm.playSelectedNext() }, enabled = selected.isNotEmpty(), modifier = Modifier.size(48.dp)) {
-                            Icon(
-                                Icons.Rounded.QueueMusic,
-                                "Play next",
-                                tint = if (selected.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                        }
-                        IconButton(onClick = { vm.favoriteSelected() }, enabled = selected.isNotEmpty(), modifier = Modifier.size(48.dp)) {
-                            Icon(
-                                Icons.Rounded.Favorite,
-                                "Favorite",
-                                tint = if (selected.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
-                        }
-                        IconButton(onClick = { vm.clearSelect() }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Rounded.Close, "Close select", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
+            )
         }
     }
 }

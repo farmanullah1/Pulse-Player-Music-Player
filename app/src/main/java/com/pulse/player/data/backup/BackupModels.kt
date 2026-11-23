@@ -23,9 +23,9 @@ data class ArchiveCategoryInfo(
 data class ArchiveManifest(
     val formatId: String = FORMAT_ID,
     val formatVersion: Int = CURRENT_VERSION,
-    val appName: String = "Pulse Player",
-    val appVersionName: String? = "1.0.0",
-    val appVersionCode: Long? = 1L,
+    val appName: String = "Pulse Music Player",
+    val appVersionName: String? = "239.983.4",
+    val appVersionCode: Long? = 3L,
     val createdAtUtc: String,
     val backupMode: String = "MANUAL_GLOBAL",
     val backupScope: String = "GLOBAL",

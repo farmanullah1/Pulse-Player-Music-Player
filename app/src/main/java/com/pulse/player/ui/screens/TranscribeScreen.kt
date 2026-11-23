@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -125,7 +127,8 @@ fun TranscribeScreen(vm: MainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                 ) {
                     Column(
                         modifier = Modifier
@@ -154,12 +157,12 @@ fun TranscribeScreen(vm: MainViewModel) {
                             modifier = Modifier
                                 .size(88.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .background(MaterialTheme.colorScheme.primaryContainer)
                         ) {
                             Icon(
                                 Icons.Rounded.Mic,
                                 contentDescription = "Audio transcription",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.size(38.dp)
                             )
                         }
@@ -168,7 +171,9 @@ fun TranscribeScreen(vm: MainViewModel) {
                         OutlinedButton(
                             onClick = { showTrackPicker = true },
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-                            modifier = Modifier.testTag("pick_track_transcribe_button")
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("pick_track_transcribe_button")
                         ) {
                             Icon(Icons.Rounded.LibraryMusic, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -183,7 +188,8 @@ fun TranscribeScreen(vm: MainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
@@ -225,7 +231,8 @@ fun TranscribeScreen(vm: MainViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -301,7 +308,8 @@ fun TranscribeScreen(vm: MainViewModel) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         ) {
                             Column(Modifier.padding(20.dp)) {
                                 Row(
@@ -365,6 +373,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                         },
                                         modifier = Modifier
                                             .weight(1f)
+                                            .heightIn(min = 48.dp)
                                             .testTag("copy_transcription_button")
                                     ) {
                                         Icon(Icons.Rounded.ContentCopy, null, modifier = Modifier.size(16.dp))
@@ -392,6 +401,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                         },
                                         modifier = Modifier
                                             .weight(1f)
+                                            .heightIn(min = 48.dp)
                                             .testTag("share_transcription_button")
                                     ) {
                                         Icon(Icons.Rounded.Share, null, modifier = Modifier.size(16.dp))
@@ -419,6 +429,7 @@ fun TranscribeScreen(vm: MainViewModel) {
                                         ),
                                         modifier = Modifier
                                             .weight(1.3f)
+                                            .heightIn(min = 48.dp)
                                             .testTag("save_lyrics_button")
                                     ) {
                                         Icon(

@@ -1,8 +1,11 @@
 package com.pulse.player.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,12 +23,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Reorder
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -48,13 +53,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulse.player.library.FolderTreeBuilder
 import com.pulse.player.playback.Track
+import androidx.compose.ui.platform.testTag
 import com.pulse.player.ui.components.Artwork
+import com.pulse.player.ui.components.BulkSelectionBar
 import com.pulse.player.ui.components.LocalBottomOverlayPadding
 import com.pulse.player.ui.components.PillButton
 import com.pulse.player.ui.components.PulseTopBar
 import com.pulse.player.ui.components.TrackRow
 import com.pulse.player.ui.components.UnifiedFilterBar
+import com.pulse.player.ui.viewmodel.LibraryBrowserCoordinator
 import com.pulse.player.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
@@ -62,7 +71,7 @@ import kotlinx.coroutines.flow.map
 import kotlin.random.Random
 
 @Composable
-fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
+fun DetailScreen(vm: MainViewModel, detail: Screen.Detail, modifier: Modifier = Modifier) {
     val allTracks by vm.tracks.collectAsStateWithLifecycle()
     val neverPlayed by vm.neverPlayed.collectAsStateWithLifecycle()
     val forgottenFavs by vm.forgottenFavorites.collectAsStateWithLifecycle()
@@ -76,6 +85,15 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
 
     val isPlaylist = detail.kind == "playlist"
     val playlistId = remember(detail) { if (isPlaylist) detail.key.toLongOrNull() else null }
+    val smartPlaylistId = remember(detail) { if (detail.kind == "smart_custom") detail.key.toLongOrNull() else null }
+    val customSmartPlaylists by vm.customSmartPlaylists.collectAsStateWithLifecycle()
+    val smartDef = remember(customSmartPlaylists, smartPlaylistId) {
+        smartPlaylistId?.let { id -> customSmartPlaylists.firstOrNull { it.id == id } }
+    }
+    val smartTracks by remember(smartPlaylistId) {
+        if (smartPlaylistId != null) vm.observeSmartPlaylistTracks(smartPlaylistId) else flowOf(emptyList())
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+
     val playlistName by remember(playlistId) {
         if (playlistId != null) vm.playlistName(playlistId) else flowOf("Playlist")
     }.collectAsStateWithLifecycle(initialValue = "Playlist")
@@ -87,9 +105,23 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
         vm.player.state.map { it.mediaId to it.isPlaying }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = null to false)
     val (currentMediaId, isPlaying) = playbackStatus
+    val selected by vm.selected.collectAsStateWithLifecycle()
+    val selectMode by vm.selectMode.collectAsStateWithLifecycle()
 
     var reorderMode by remember(detail) { mutableStateOf(false) }
     var renameDialogOpen by remember { mutableStateOf(false) }
+
+    val exportM3u8Launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("audio/x-mpegurl")
+    ) { destUri ->
+        if (destUri != null && playlistId != null) {
+            vm.exportPlaylistM3u8(playlistId, playlistName, destUri)
+        }
+    }
+
+    val splitMultiArtists by vm.splitMultiArtists.collectAsStateWithLifecycle()
+    val artistSplitExceptions by vm.artistSplitExceptions.collectAsStateWithLifecycle()
+    val folderTreeMode by vm.folderViewTreeMode.collectAsStateWithLifecycle()
 
     val (title, subtitle, baseList) = remember(
         detail,
@@ -100,20 +132,52 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
         topPlayed,
         recentlyPlayed,
         playlistName,
-        playlistTracks
+        playlistTracks,
+        smartDef,
+        smartTracks,
+        splitMultiArtists,
+        artistSplitExceptions,
+        folderTreeMode
     ) {
         when (detail.kind) {
             "playlist" -> Triple(playlistName, "${playlistTracks.size} songs · Custom playlist", playlistTracks)
+            "smart_custom" -> Triple(
+                smartDef?.name ?: "Smart Playlist",
+                "${smartTracks.size} songs · Smart rule",
+                smartTracks
+            )
+            "genre" -> {
+                val matches = allTracks.filter { it.genre.equals(detail.key, ignoreCase = true) }
+                Triple(detail.key, "${matches.size} songs · Genre", matches)
+            }
+            "decade" -> {
+                val decadeStart = detail.key.toIntOrNull()
+                val matches = if (decadeStart != null) {
+                    allTracks.filter { it.year in decadeStart until (decadeStart + 10) }
+                } else {
+                    emptyList()
+                }
+                Triple("${detail.key}s", "${matches.size} songs · Era", matches)
+            }
             "album" -> {
                 val matches = allTracks.filter { it.album.equals(detail.key, ignoreCase = true) }
                 Triple(detail.key, "${matches.size} songs · ${matches.firstOrNull()?.artist.orEmpty()}", matches)
             }
             "artist" -> {
-                val matches = allTracks.filter { it.artist.equals(detail.key, ignoreCase = true) }
+                val matches = LibraryBrowserCoordinator.tracksForArtist(
+                    allTracks,
+                    detail.key,
+                    splitMultiArtists,
+                    artistSplitExceptions
+                )
                 Triple(detail.key, "${matches.size} songs", matches)
             }
             "folder" -> {
-                val matches = allTracks.filter { it.folder.equals(detail.key, ignoreCase = true) }
+                val matches = FolderTreeBuilder.tracksUnderFolder(
+                    allTracks,
+                    detail.key,
+                    recursive = folderTreeMode
+                )
                 Triple(detail.key.substringAfterLast('/'), "${matches.size} songs in ${detail.key}", matches)
             }
             "system" -> {
@@ -166,36 +230,92 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
     }
 
     BackHandler {
-        if (reorderMode) reorderMode = false else vm.back()
+        when {
+            reorderMode -> reorderMode = false
+            selectMode -> vm.clearSelect()
+            else -> vm.back()
+        }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        PulseTopBar(
-            title = title,
-            subtitle = if (reorderMode) "Reorder tracks" else subtitle,
-            onBack = {
-                if (reorderMode) reorderMode = false else vm.back()
-            },
-            actions = {
-                if (isPlaylist && playlistId != null) {
-                    IconButton(onClick = { renameDialogOpen = true }, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Rounded.Edit, contentDescription = "Rename playlist", tint = MaterialTheme.colorScheme.onSurface)
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            PulseTopBar(
+                title = title,
+                subtitle = if (reorderMode) "Reorder tracks" else subtitle,
+                onBack = {
+                    when {
+                        reorderMode -> reorderMode = false
+                        selectMode -> vm.clearSelect()
+                        else -> vm.back()
                     }
-                    IconButton(onClick = { reorderMode = !reorderMode }, modifier = Modifier.size(48.dp)) {
-                        Icon(
-                            imageVector = if (reorderMode) Icons.Rounded.Check else Icons.Rounded.Reorder,
-                            contentDescription = if (reorderMode) "Finish reordering" else "Reorder tracks",
-                            tint = if (reorderMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
+                },
+                actions = {
+                    if (displayList.isNotEmpty() && !reorderMode) {
+                        IconButton(
+                            onClick = { vm.toggleSelectMode() },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("detail_select_mode_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Checklist,
+                                contentDescription = "Select tracks",
+                                tint = if (selectMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                    if (smartDef != null) {
+                        IconButton(
+                            onClick = { vm.openSmartPlaylistBuilder(smartDef) },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("detail_edit_smart_rules_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Edit,
+                                contentDescription = "Edit smart playlist rules",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    if (isPlaylist && playlistId != null) {
+                        if (!reorderMode) {
+                            IconButton(
+                                onClick = {
+                                    val safeFileName = title.ifBlank { "playlist" }
+                                        .replace(Regex("[^a-zA-Z0-9._ -]"), "_")
+                                    exportM3u8Launcher.launch("$safeFileName.m3u8")
+                                },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("detail_export_m3u8_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Upload,
+                                    contentDescription = "Export playlist as M3U8",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        IconButton(onClick = { renameDialogOpen = true }, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Rounded.Edit, contentDescription = "Rename playlist", tint = MaterialTheme.colorScheme.onSurface)
+                        }
+                        IconButton(onClick = { reorderMode = !reorderMode }, modifier = Modifier.size(48.dp)) {
+                            Icon(
+                                imageVector = if (reorderMode) Icons.Rounded.Check else Icons.Rounded.Reorder,
+                                contentDescription = if (reorderMode) "Finish reordering" else "Reorder tracks",
+                                tint = if (reorderMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
-            }
-        )
+            )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = bottomPad)
-        ) {
+            LazyColumn(
+                state = vm.lazyListStateFor("detail:${detail.kind}:${detail.key}"),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = if (selectMode) bottomPad + 80.dp else bottomPad)
+            ) {
             if (!reorderMode) {
                 item(contentType = "header") {
                     Column(
@@ -307,7 +427,7 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                     }
                 }
             } else if (reorderMode && playlistId != null) {
-                itemsIndexed(displayList, key = { _, it -> it.id }) { index, track ->
+                itemsIndexed(displayList, key = { index, it -> "${it.id}_$index" }) { index, track ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -375,11 +495,17 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                     }
                 }
             } else {
-                itemsIndexed(displayList, key = { _, it -> it.id }, contentType = { _, _ -> "track" }) { index, track ->
+                itemsIndexed(
+                    displayList,
+                    key = { index, it -> if (isPlaylist) "${it.id}_$index" else it.id },
+                    contentType = { _, _ -> "track" }
+                ) { index, track ->
                     TrackRow(
                         t = track,
                         current = track.id == currentMediaId,
                         playing = isPlaying,
+                        selected = track.id in selected,
+                        selectMode = selectMode,
                         onSwipeRightQueue = {
                             vm.playNext(track)
                             vm.snackbarMessage.value = "Queued next: ${track.title}"
@@ -388,12 +514,34 @@ fun DetailScreen(vm: MainViewModel, detail: Screen.Detail) {
                             vm.toggleFavorite(track.id)
                             vm.snackbarMessage.value = if (!track.isFavorite) "Added to favourites" else "Removed from favourites"
                         },
-                        onClick = { vm.playQueue(displayList, index) },
+                        onClick = {
+                            if (selectMode) {
+                                vm.toggleSelect(track.id)
+                            } else {
+                                vm.playQueue(displayList, index)
+                            }
+                        },
                         onLongClick = { vm.toggleSelect(track.id) },
                         onMore = { vm.openTrackMenu(track) }
                     )
                 }
             }
+        }
+        }
+
+        if (selectMode) {
+            BulkSelectionBar(
+                selectedCount = selected.size,
+                onSelectAll = { vm.selectAll(displayList.map { it.id }) },
+                onAddToPlaylist = { vm.openBatchAddToPlaylist() },
+                onBatchEditTags = { vm.openBatchTagEditor() },
+                onPlayNext = { vm.playSelectedNext() },
+                onFavorite = { vm.favoriteSelected() },
+                onClose = { vm.clearSelect() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomPad, start = 16.dp, end = 16.dp)
+            )
         }
     }
 

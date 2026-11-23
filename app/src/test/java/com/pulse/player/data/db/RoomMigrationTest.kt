@@ -84,5 +84,30 @@ class RoomMigrationTest {
         )
         assertTrue(executedSql.none { it.contains("DROP", ignoreCase = true) })
     }
+
+    @Test
+    fun testMigration5To6FtsCreation() {
+        val executedSql = mutableListOf<String>()
+
+        val dbProxy = Proxy.newProxyInstance(
+            SupportSQLiteDatabase::class.java.classLoader,
+            arrayOf(SupportSQLiteDatabase::class.java),
+            object : InvocationHandler {
+                override fun invoke(proxy: Any?, method: Method?, args: Array<out Any>?): Any? {
+                    if (method?.name == "execSQL" && args != null && args.isNotEmpty()) {
+                        executedSql.add(args[0] as String)
+                    }
+                    return null
+                }
+            }
+        ) as SupportSQLiteDatabase
+
+        PulseDb.MIGRATION_5_6.migrate(dbProxy)
+
+        assertEquals(6, executedSql.size)
+        assertTrue(executedSql[0].contains("CREATE VIRTUAL TABLE IF NOT EXISTS `tracks_fts` USING FTS4"))
+        assertTrue(executedSql.drop(1).take(4).all { it.contains("CREATE TRIGGER IF NOT EXISTS") })
+        assertTrue(executedSql[5].contains("INSERT INTO `tracks_fts`(`tracks_fts`) VALUES('rebuild')"))
+    }
 }
 

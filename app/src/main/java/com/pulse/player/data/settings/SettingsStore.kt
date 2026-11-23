@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
@@ -29,12 +30,42 @@ enum class FontStylePreset(val id: String, val label: String, val subtitle: Stri
     TECHNICAL("technical", "Studio Mono", "Monospace accents with high-clarity sans")
 }
 
+enum class ReplayGainMode(val label: String) {
+    OFF("Off"),
+    TRACK("Track"),
+    ALBUM("Album")
+}
+
 /** Controls Now Playing progress seekbar visualization. */
 enum class SeekStylePreset(val id: String, val label: String) {
     WAVEFORM("waveform", "Waveform"),
     WAVY("wavy", "Wavy"),
     LINEAR("classic", "Classic")
 }
+
+data class SoundProfile(
+    val id: String,
+    val name: String,
+    val bandLevels: List<Int>,
+    val bassStrength: Int = 0,
+    val virtualizerStrength: Int = 0,
+    val reverbIndex: Int = 0,
+    val speed: Float = 1f,
+    val pitchSemitones: Float = 0f,
+    val isBuiltIn: Boolean = false,
+    val limiterEnabled: Boolean = true,
+    val channelBalance: Float = 0f,
+    val monoMode: Boolean = false
+)
+
+data class DeviceDspRule(
+    val deviceKey: String,
+    val profileId: String? = null,
+    val crossfadeSecOverride: Int? = null,
+    val replayGainModeOverride: ReplayGainMode? = null,
+    val monoModeOverride: Boolean? = null,
+    val channelBalanceOverride: Float? = null
+)
 
 class SettingsStore(private val ctx: Context) {
     private object K {
@@ -82,6 +113,30 @@ class SettingsStore(private val ctx: Context) {
         val hiddenForYouSections = stringSetPreferencesKey("hidden_for_you_sections")
         val sleepFadeSec = intPreferencesKey("sleep_fade_sec")
         val splitPlayerUpperRatio = floatPreferencesKey("split_player_upper_ratio")
+        val playerCoverShape = stringPreferencesKey("player_cover_shape")
+        val playerBackdropBlur = floatPreferencesKey("player_backdrop_blur")
+        val playerBackdropDim = floatPreferencesKey("player_backdrop_dim")
+        val playerArtworkGlow = booleanPreferencesKey("player_artwork_glow")
+        val playerSwipeSkip = booleanPreferencesKey("player_swipe_skip")
+        val playerSeekbarHeight = stringPreferencesKey("player_seekbar_height")
+        val recentSearchesJson = stringPreferencesKey("recent_searches_json")
+        val customSoundProfilesJson = stringPreferencesKey("custom_sound_profiles_json")
+        val activeSoundProfileId = stringPreferencesKey("active_sound_profile_id")
+        // Audio upgrades & Device Routing
+        val replayGainMode = stringPreferencesKey("replay_gain_mode")
+        val replayGainPreampDb = floatPreferencesKey("replay_gain_preamp_db")
+        val crossfadeEqualPower = booleanPreferencesKey("crossfade_equal_power")
+        val deviceProfilesJson = stringPreferencesKey("device_profiles_json")
+        val autoResumeOnDeviceConnect = booleanPreferencesKey("auto_resume_device_connect")
+        val smartAlbumGapless = booleanPreferencesKey("smart_album_gapless")
+        val eqChannelBalance = floatPreferencesKey("eq_channel_balance")
+        val eqMonoMode = booleanPreferencesKey("eq_mono_mode")
+        val eqLimiterEnabled = booleanPreferencesKey("eq_limiter_enabled")
+        val drivingKeepScreenOn = booleanPreferencesKey("driving_keep_screen_on")
+        val splitMultiArtists = booleanPreferencesKey("split_multi_artists")
+        val artistSplitExceptionsJson = stringPreferencesKey("artist_split_exceptions_json")
+        val folderViewTreeMode = booleanPreferencesKey("folder_view_tree_mode")
+        val deviceDspRulesJson = stringPreferencesKey("device_dsp_rules_json")
     }
 
     val themeMode: Flow<ThemeMode> = ctx.dataStore.data.map {
@@ -143,8 +198,17 @@ class SettingsStore(private val ctx: Context) {
         it[K.safTrees] = (it[K.safTrees] ?: emptySet()) - uri
     }
     suspend fun saveQueue(ids: List<String>, index: Int, pos: Long) = ctx.dataStore.edit {
-        it[K.queueIds] = ids.joinToString("\n")
-        it[K.queueIndex] = index
+        val capped = if (ids.size > 2500) {
+            val start = (index - 500).coerceIn(0, (ids.size - 2500).coerceAtLeast(0))
+            val end = (start + 2500).coerceAtMost(ids.size)
+            val sliced = ids.subList(start, end)
+            it[K.queueIndex] = (index - start).coerceIn(0, (sliced.lastIndex).coerceAtLeast(0))
+            sliced
+        } else {
+            it[K.queueIndex] = index
+            ids
+        }
+        it[K.queueIds] = capped.joinToString("\n")
         it[K.queuePos] = pos
     }
 
@@ -276,6 +340,24 @@ class SettingsStore(private val ctx: Context) {
     val splitPlayerUpperRatio: Flow<Float> = ctx.dataStore.data.map {
         (it[K.splitPlayerUpperRatio] ?: 0.40f).coerceIn(0.35f, 0.72f)
     }
+    val playerCoverShape: Flow<String> = ctx.dataStore.data.map {
+        it[K.playerCoverShape] ?: "ROUNDED"
+    }
+    val playerBackdropBlur: Flow<Float> = ctx.dataStore.data.map {
+        (it[K.playerBackdropBlur] ?: 0.60f).coerceIn(0f, 1f)
+    }
+    val playerBackdropDim: Flow<Float> = ctx.dataStore.data.map {
+        (it[K.playerBackdropDim] ?: 0.55f).coerceIn(0.10f, 0.90f)
+    }
+    val playerArtworkGlow: Flow<Boolean> = ctx.dataStore.data.map {
+        it[K.playerArtworkGlow] ?: true
+    }
+    val playerSwipeSkip: Flow<Boolean> = ctx.dataStore.data.map {
+        it[K.playerSwipeSkip] ?: true
+    }
+    val playerSeekbarHeight: Flow<String> = ctx.dataStore.data.map {
+        it[K.playerSeekbarHeight] ?: "MEDIUM"
+    }
 
     suspend fun setColorSource(s: ColorSource) = ctx.dataStore.edit { it[K.colorSource] = s.name }
     suspend fun setSeedColor(argb: Int) = ctx.dataStore.edit { it[K.seedColor] = argb }
@@ -292,6 +374,12 @@ class SettingsStore(private val ctx: Context) {
     suspend fun setSplitPlayerUpperRatio(ratio: Float) = ctx.dataStore.edit {
         it[K.splitPlayerUpperRatio] = ratio.coerceIn(0.35f, 0.72f)
     }
+    suspend fun setPlayerCoverShape(shape: String) = ctx.dataStore.edit { it[K.playerCoverShape] = shape }
+    suspend fun setPlayerBackdropBlur(blur: Float) = ctx.dataStore.edit { it[K.playerBackdropBlur] = blur.coerceIn(0f, 1f) }
+    suspend fun setPlayerBackdropDim(dim: Float) = ctx.dataStore.edit { it[K.playerBackdropDim] = dim.coerceIn(0.10f, 0.90f) }
+    suspend fun setPlayerArtworkGlow(enabled: Boolean) = ctx.dataStore.edit { it[K.playerArtworkGlow] = enabled }
+    suspend fun setPlayerSwipeSkip(enabled: Boolean) = ctx.dataStore.edit { it[K.playerSwipeSkip] = enabled }
+    suspend fun setPlayerSeekbarHeight(height: String) = ctx.dataStore.edit { it[K.playerSeekbarHeight] = height }
     suspend fun setHomeTabs(tabs: List<String>) = ctx.dataStore.edit { it[K.homeTabs] = tabs.joinToString(",") }
     suspend fun setFontStyle(preset: FontStylePreset) = ctx.dataStore.edit { it[K.fontStyle] = preset.id }
     suspend fun setSeekStyle(preset: SeekStylePreset) = ctx.dataStore.edit { it[K.seekStyle] = preset.id }
@@ -313,6 +401,353 @@ class SettingsStore(private val ctx: Context) {
     suspend fun resetForYouLayout() = ctx.dataStore.edit {
         it.remove(K.forYouOrder)
         it.remove(K.hiddenForYouSections)
+    }
+
+    val recentSearches: Flow<List<String>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.recentSearchesJson] ?: return@map emptyList()
+        runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i).trim()
+                    if (s.isNotBlank()) add(s)
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun addRecentSearch(query: String) {
+        val clean = query.trim()
+        if (clean.length < 2) return
+        ctx.dataStore.edit { prefs ->
+            val current = runCatching {
+                val arr = JSONArray(prefs[K.recentSearchesJson] ?: "[]")
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val s = arr.optString(i).trim()
+                        if (s.isNotBlank()) add(s)
+                    }
+                }
+            }.getOrDefault(emptyList())
+            val next = (listOf(clean) + current.filterNot { it.equals(clean, ignoreCase = true) }).take(8)
+            prefs[K.recentSearchesJson] = JSONArray(next).toString()
+        }
+    }
+
+    suspend fun removeRecentSearch(query: String) {
+        ctx.dataStore.edit { prefs ->
+            val current = runCatching {
+                val arr = JSONArray(prefs[K.recentSearchesJson] ?: "[]")
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val s = arr.optString(i).trim()
+                        if (s.isNotBlank() && !s.equals(query, ignoreCase = true)) add(s)
+                    }
+                }
+            }.getOrDefault(emptyList())
+            prefs[K.recentSearchesJson] = JSONArray(current).toString()
+        }
+    }
+
+    suspend fun clearRecentSearches() = ctx.dataStore.edit { it.remove(K.recentSearchesJson) }
+
+    val customSoundProfiles: Flow<List<SoundProfile>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.customSoundProfilesJson] ?: return@map emptyList()
+        runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    val bandsArr = o.optJSONArray("bands")
+                    val bands = buildList {
+                        if (bandsArr != null) {
+                            for (b in 0 until bandsArr.length()) {
+                                add(bandsArr.optInt(b, 0))
+                            }
+                        }
+                    }
+                    add(
+                        SoundProfile(
+                            id = o.optString("id").ifBlank { UUID.randomUUID().toString() },
+                            name = o.optString("name").ifBlank { "Custom Profile" },
+                            bandLevels = bands,
+                            bassStrength = o.optInt("bass", 0).coerceIn(0, 1000),
+                            virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000),
+                            reverbIndex = o.optInt("reverb", 0).coerceIn(0, 6),
+                            speed = o.optDouble("speed", 1.0).toFloat().coerceIn(0.5f, 2.0f),
+                            pitchSemitones = o.optDouble("pitch", 0.0).toFloat().coerceIn(-6f, 6f),
+                            isBuiltIn = false,
+                            limiterEnabled = o.optBoolean("limiter", true),
+                            channelBalance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
+                            monoMode = o.optBoolean("mono", false)
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    val activeSoundProfileId: Flow<String> = ctx.dataStore.data.map {
+        it[K.activeSoundProfileId] ?: "builtin_flat"
+    }
+
+    suspend fun setActiveSoundProfileId(id: String) = ctx.dataStore.edit {
+        it[K.activeSoundProfileId] = id
+    }
+
+    suspend fun saveCustomSoundProfile(profile: SoundProfile) {
+        ctx.dataStore.edit { prefs ->
+            val current = runCatching {
+                val arr = JSONArray(prefs[K.customSoundProfilesJson] ?: "[]")
+                (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+            }.getOrDefault(emptyList())
+            val obj = JSONObject().apply {
+                put("id", profile.id)
+                put("name", profile.name)
+                put("bands", JSONArray(profile.bandLevels))
+                put("bass", profile.bassStrength)
+                put("virt", profile.virtualizerStrength)
+                put("reverb", profile.reverbIndex)
+                put("speed", profile.speed.toDouble())
+                put("pitch", profile.pitchSemitones.toDouble())
+                put("limiter", profile.limiterEnabled)
+                put("balance", profile.channelBalance.toDouble())
+                put("mono", profile.monoMode)
+            }
+            val next = JSONArray().apply {
+                put(obj)
+                current.filterNot { it.optString("id") == profile.id }.take(11).forEach { put(it) }
+            }
+            prefs[K.customSoundProfilesJson] = next.toString()
+            prefs[K.activeSoundProfileId] = profile.id
+        }
+    }
+
+    suspend fun deleteCustomSoundProfile(id: String) {
+        ctx.dataStore.edit { prefs ->
+            val current = runCatching {
+                val arr = JSONArray(prefs[K.customSoundProfilesJson] ?: "[]")
+                (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
+            }.getOrDefault(emptyList())
+            val next = JSONArray().apply {
+                current.filterNot { it.optString("id") == id }.forEach { put(it) }
+            }
+            prefs[K.customSoundProfilesJson] = next.toString()
+            if (prefs[K.activeSoundProfileId] == id) {
+                prefs[K.activeSoundProfileId] = "builtin_flat"
+            }
+        }
+    }
+
+    val replayGainMode: Flow<ReplayGainMode> = ctx.dataStore.data.map { prefs ->
+        runCatching { ReplayGainMode.valueOf(prefs[K.replayGainMode] ?: "OFF") }
+            .getOrDefault(ReplayGainMode.OFF)
+    }
+    val replayGainPreampDb: Flow<Float> = ctx.dataStore.data.map { prefs ->
+        (prefs[K.replayGainPreampDb] ?: 0f).coerceIn(-6f, 6f)
+    }
+    val crossfadeEqualPower: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.crossfadeEqualPower] ?: true
+    }
+    val autoResumeOnDeviceConnect: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.autoResumeOnDeviceConnect] ?: false
+    }
+    val smartAlbumGapless: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.smartAlbumGapless] ?: true
+    }
+    val eqChannelBalance: Flow<Float> = ctx.dataStore.data.map { prefs ->
+        (prefs[K.eqChannelBalance] ?: 0f).coerceIn(-1f, 1f)
+    }
+    val eqMonoMode: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.eqMonoMode] ?: false
+    }
+    val eqLimiterEnabled: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.eqLimiterEnabled] ?: true
+    }
+    val drivingKeepScreenOn: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.drivingKeepScreenOn] ?: true
+    }
+    val deviceProfileMap: Flow<Map<String, String>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.deviceProfilesJson] ?: return@map emptyMap()
+        runCatching {
+            val obj = JSONObject(raw)
+            buildMap {
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    val v = obj.optString(k)
+                    if (k.isNotBlank() && v.isNotBlank()) put(k, v)
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    suspend fun setReplayGainMode(mode: ReplayGainMode) = ctx.dataStore.edit {
+        it[K.replayGainMode] = mode.name
+    }
+    suspend fun setReplayGainPreampDb(db: Float) = ctx.dataStore.edit {
+        it[K.replayGainPreampDb] = db.coerceIn(-6f, 6f)
+    }
+    suspend fun setCrossfadeEqualPower(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.crossfadeEqualPower] = enabled
+    }
+    suspend fun setAutoResumeOnDeviceConnect(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.autoResumeOnDeviceConnect] = enabled
+    }
+    suspend fun setSmartAlbumGapless(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.smartAlbumGapless] = enabled
+    }
+    suspend fun setEqChannelBalance(balance: Float) = ctx.dataStore.edit {
+        it[K.eqChannelBalance] = balance.coerceIn(-1f, 1f)
+    }
+    suspend fun setEqMonoMode(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.eqMonoMode] = enabled
+    }
+    suspend fun setEqLimiterEnabled(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.eqLimiterEnabled] = enabled
+    }
+    suspend fun setDrivingKeepScreenOn(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.drivingKeepScreenOn] = enabled
+    }
+    suspend fun setDeviceProfile(deviceKey: String, profileId: String?) {
+        val cleanKey = deviceKey.trim()
+        if (cleanKey.isBlank()) return
+        ctx.dataStore.edit { prefs ->
+            val obj = runCatching {
+                JSONObject(prefs[K.deviceProfilesJson] ?: "{}")
+            }.getOrElse { JSONObject() }
+            if (profileId.isNullOrBlank()) {
+                obj.remove(cleanKey)
+            } else {
+                obj.put(cleanKey, profileId)
+            }
+            prefs[K.deviceProfilesJson] = obj.toString()
+
+            val rulesObj = runCatching {
+                JSONObject(prefs[K.deviceDspRulesJson] ?: "{}")
+            }.getOrElse { JSONObject() }
+            val existingRule = rulesObj.optJSONObject(cleanKey) ?: JSONObject()
+            if (profileId.isNullOrBlank()) {
+                existingRule.remove("profileId")
+            } else {
+                existingRule.put("profileId", profileId)
+            }
+            if (existingRule.length() == 0) rulesObj.remove(cleanKey) else rulesObj.put(cleanKey, existingRule)
+            prefs[K.deviceDspRulesJson] = rulesObj.toString()
+        }
+    }
+
+    val splitMultiArtists: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.splitMultiArtists] ?: true
+    }
+
+    suspend fun setSplitMultiArtists(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.splitMultiArtists] = enabled
+    }
+
+    val artistSplitExceptions: Flow<Set<String>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.artistSplitExceptionsJson] ?: return@map emptySet()
+        runCatching {
+            val arr = JSONArray(raw)
+            buildSet {
+                for (i in 0 until arr.length()) {
+                    val v = arr.optString(i).trim().lowercase()
+                    if (v.isNotBlank()) add(v)
+                }
+            }
+        }.getOrDefault(emptySet())
+    }
+
+    suspend fun setArtistSplitExceptions(exceptions: Set<String>) {
+        val normalized = exceptions.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet()
+        ctx.dataStore.edit { prefs ->
+            prefs[K.artistSplitExceptionsJson] = JSONArray(normalized.toList()).toString()
+        }
+    }
+
+    suspend fun addArtistSplitException(name: String) {
+        val clean = name.trim().lowercase()
+        if (clean.isBlank()) return
+        ctx.dataStore.edit { prefs ->
+            val arr = runCatching { JSONArray(prefs[K.artistSplitExceptionsJson] ?: "[]") }.getOrElse { JSONArray() }
+            val current = buildSet {
+                for (i in 0 until arr.length()) add(arr.optString(i).trim().lowercase())
+            }
+            prefs[K.artistSplitExceptionsJson] = JSONArray((current + clean).filter { it.isNotBlank() }).toString()
+        }
+    }
+
+    suspend fun removeArtistSplitException(name: String) {
+        val clean = name.trim().lowercase()
+        ctx.dataStore.edit { prefs ->
+            val arr = runCatching { JSONArray(prefs[K.artistSplitExceptionsJson] ?: "[]") }.getOrElse { JSONArray() }
+            val current = buildSet {
+                for (i in 0 until arr.length()) add(arr.optString(i).trim().lowercase())
+            }
+            prefs[K.artistSplitExceptionsJson] = JSONArray((current - clean).filter { it.isNotBlank() }).toString()
+        }
+    }
+
+    val folderViewTreeMode: Flow<Boolean> = ctx.dataStore.data.map { prefs ->
+        prefs[K.folderViewTreeMode] ?: false
+    }
+
+    suspend fun setFolderViewTreeMode(enabled: Boolean) = ctx.dataStore.edit {
+        it[K.folderViewTreeMode] = enabled
+    }
+
+    val deviceDspRules: Flow<Map<String, DeviceDspRule>> = ctx.dataStore.data.map { prefs ->
+        val raw = prefs[K.deviceDspRulesJson] ?: return@map emptyMap()
+        runCatching {
+            val obj = JSONObject(raw)
+            buildMap {
+                val keys = obj.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    val r = obj.optJSONObject(k) ?: continue
+                    val rgName = r.optString("replayGainMode", "")
+                    val rgMode = if (rgName.isNotBlank()) {
+                        runCatching { ReplayGainMode.valueOf(rgName) }.getOrNull()
+                    } else null
+                    put(
+                        k,
+                        DeviceDspRule(
+                            deviceKey = k,
+                            profileId = r.optString("profileId", "").takeIf { it.isNotBlank() },
+                            crossfadeSecOverride = if (r.has("crossfadeSec")) r.optInt("crossfadeSec").coerceIn(0, 12) else null,
+                            replayGainModeOverride = rgMode,
+                            monoModeOverride = if (r.has("monoMode")) r.optBoolean("monoMode") else null,
+                            channelBalanceOverride = if (r.has("channelBalance")) r.optDouble("channelBalance").toFloat().coerceIn(-1f, 1f) else null
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    suspend fun setDeviceDspRule(rule: DeviceDspRule) {
+        val cleanKey = rule.deviceKey.trim()
+        if (cleanKey.isBlank()) return
+        ctx.dataStore.edit { prefs ->
+            val rulesObj = runCatching {
+                JSONObject(prefs[K.deviceDspRulesJson] ?: "{}")
+            }.getOrElse { JSONObject() }
+            val r = JSONObject().apply {
+                rule.profileId?.takeIf { it.isNotBlank() }?.let { put("profileId", it) }
+                rule.crossfadeSecOverride?.let { put("crossfadeSec", it.coerceIn(0, 12)) }
+                rule.replayGainModeOverride?.let { put("replayGainMode", it.name) }
+                rule.monoModeOverride?.let { put("monoMode", it) }
+                rule.channelBalanceOverride?.let { put("channelBalance", it.coerceIn(-1f, 1f).toDouble()) }
+            }
+            if (r.length() == 0) rulesObj.remove(cleanKey) else rulesObj.put(cleanKey, r)
+            prefs[K.deviceDspRulesJson] = rulesObj.toString()
+
+            val legacyObj = runCatching {
+                JSONObject(prefs[K.deviceProfilesJson] ?: "{}")
+            }.getOrElse { JSONObject() }
+            if (rule.profileId.isNullOrBlank()) legacyObj.remove(cleanKey) else legacyObj.put(cleanKey, rule.profileId)
+            prefs[K.deviceProfilesJson] = legacyObj.toString()
+        }
     }
 
     fun sortFor(screen: String, raw: Map<String, Any?>?): Pair<String, Int> {

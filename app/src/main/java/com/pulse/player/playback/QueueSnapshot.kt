@@ -47,7 +47,7 @@ data class QueueSnapshot(
                         shuf.add(shufArray.getString(i))
                     }
                 }
-                val curId = if (obj.isNull("currentId")) null else obj.optString("currentId", null)
+                val curId = if (obj.isNull("currentId")) null else obj.optString("currentId")
                 QueueSnapshot(
                     original = orig,
                     shuffled = shuf,

@@ -149,7 +149,13 @@ private fun TransportButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
 }
 
 @Composable
-private fun SecondaryButton(icon: androidx.compose.ui.graphics.vector.ImageVector, cd: String, onClick: () -> Unit, active: Boolean = false, modifier: Modifier = Modifier) {
+private fun SecondaryButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    cd: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false
+) {
     val tokens = LocalPulseTokens.current
     IconButton(onClick = onClick, modifier = modifier.size(40.dp).semantics { contentDescription = cd }) {
         Icon(icon, contentDescription = null, tint = if (active) tokens.accent else tokens.textSecondary, modifier = Modifier.size(22.dp))

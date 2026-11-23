@@ -24,8 +24,9 @@ import com.pulse.player.ui.theme.Pulse
 import com.pulse.player.ui.theme.PulseTheme
 import com.pulse.player.ui.theme.Skins
 import com.pulse.player.ui.viewmodel.MainViewModel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.pulse.player.data.scan.audioPermission
 
 class MainActivity : ComponentActivity() {
@@ -37,7 +38,12 @@ class MainActivity : ComponentActivity() {
         val audioGranted = results[audioPerm] == true
         vm.setAudioPermissionDenied(!audioGranted)
         if (audioGranted) {
-            vm.scan()
+            lifecycleScope.launch {
+                val hasCached = withContext(Dispatchers.IO) {
+                    vm.settings.lastGoodScanAt() != null && vm.db.tracks().availableCountOnce() > 0
+                }
+                if (!hasCached) vm.scan()
+            }
         }
         lifecycleScope.launch {
             vm.settings.setAudioPermissionAsked(true)
@@ -50,19 +56,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         handleIntent(intent)
-
-        // Periodic snapshot of queue & position
-        lifecycleScope.launch {
-            while (true) {
-                delay(5000)
-                val ps = vm.player.state.value
-                if (ps.isPlaying) {
-                    vm.player.snapshot()?.let { (ids, idx, pos) ->
-                        vm.settings.saveQueue(ids, idx, pos)
-                    }
-                }
-            }
-        }
 
         setContent {
             val windowSize = calculateWindowSizeClass(this)
@@ -128,14 +121,16 @@ class MainActivity : ComponentActivity() {
             if (hasAudio) {
                 vm.setAudioPermissionDenied(false)
                 vm.settings.setAudioPermissionAsked(true)
-                vm.scan()
+                val hasCachedLibrary = withContext(Dispatchers.IO) {
+                    vm.settings.lastGoodScanAt() != null && vm.db.tracks().availableCountOnce() > 0
+                }
+                if (!hasCachedLibrary) {
+                    vm.scan()
+                }
                 return@launch
             }
 
             // Just-in-time: request only the minimum audio permission needed to build the library.
-            // Microphone capture is not requested at launch; visualizers use
-            // playback-side analysis rather than microphone input.
-            // POST_NOTIFICATIONS is requested when a feature that needs it is first used.
             val permissions = buildList {
                 if (!hasAudio) add(audioPerm)
             }
@@ -144,7 +139,12 @@ class MainActivity : ComponentActivity() {
                 firstRunPermissionLauncher.launch(permissions.toTypedArray())
             } else {
                 vm.settings.setAudioPermissionAsked(true)
-                vm.scan()
+                val hasCachedLibrary = withContext(Dispatchers.IO) {
+                    vm.settings.lastGoodScanAt() != null && vm.db.tracks().availableCountOnce() > 0
+                }
+                if (!hasCachedLibrary) {
+                    vm.scan()
+                }
             }
         }
     }
@@ -172,8 +172,8 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         vm.player.snapshot()?.let { (ids, idx, pos) ->
-            lifecycleScope.launch {
-                vm.settings.saveQueue(ids, idx, pos)
+            lifecycleScope.launch(Dispatchers.IO) {
+                runCatching { vm.settings.saveQueue(ids, idx, pos) }
             }
         }
     }

@@ -1,7 +1,9 @@
 package com.pulse.player.ui.components
 
+import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,12 +38,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SheetState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,9 +54,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.ErrorCategory
 import com.pulse.player.data.ErrorDispatcher
 import com.pulse.player.data.scan.ArtworkLoader
@@ -81,8 +87,33 @@ fun TagEditorSheet(
     var genre by remember { mutableStateOf(track.genre) }
     var yearText by remember { mutableStateOf(track.year.takeIf { it > 0 }?.toString().orEmpty()) }
     var trackNumberText by remember { mutableStateOf("") }
+    var writeToFile by remember { mutableStateOf(false) }
 
     var customArtSelected by remember { mutableStateOf(false) }
+    val pendingWriteReq by vm.pendingAudioWriteRequest.collectAsStateWithLifecycle()
+
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val req = pendingWriteReq ?: return@rememberLauncherForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            vm.retryPendingAudioWrite(req)
+        } else {
+            vm.clearPendingAudioWriteRequest()
+            vm.snackbarMessage.value = "Write permission denied; changes saved to library only"
+            req.onDone?.invoke()
+        }
+    }
+
+    LaunchedEffect(pendingWriteReq) {
+        val req = pendingWriteReq ?: return@LaunchedEffect
+        runCatching {
+            writePermissionLauncher.launch(IntentSenderRequest.Builder(req.intentSender).build())
+        }.onFailure {
+            vm.clearPendingAudioWriteRequest()
+            vm.snackbarMessage.value = "Unable to request storage write permission"
+        }
+    }
 
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -301,7 +332,38 @@ fun TagEditorSheet(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable { writeToFile = !writeToFile }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = "Write tags to audio file",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Patches ID3v2 (MP3) or Vorbis (FLAC) metadata directly on storage",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = writeToFile,
+                    onCheckedChange = { writeToFile = it },
+                    colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.testTag("tag_editor_write_file_switch")
+                )
+            }
+
+            Spacer(Modifier.height(4.dp))
 
             Button(
                 onClick = {
@@ -315,10 +377,14 @@ fun TagEditorSheet(
                         genre = genre,
                         year = year,
                         trackNumber = trackNum,
+                        writeToFile = writeToFile,
                         onDone = onDismiss
                     )
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("tag_editor_save_button"),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,

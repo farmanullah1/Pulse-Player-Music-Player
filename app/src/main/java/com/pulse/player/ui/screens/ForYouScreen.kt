@@ -29,9 +29,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.HourglassEmpty
@@ -48,6 +50,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -58,10 +61,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulse.player.data.scan.PartialReason
 import com.pulse.player.data.scan.ScanState
@@ -101,6 +106,11 @@ fun ForYouScreen(vm: MainViewModel) {
     val resumeTrack by vm.resume.collectAsStateWithLifecycle()
     val sectionOrder by vm.forYouSectionOrder.collectAsStateWithLifecycle()
     val hiddenSections by vm.hiddenForYouSections.collectAsStateWithLifecycle()
+    val missingCount by vm.missingCount.collectAsStateWithLifecycle()
+    val crashRecords by vm.crashRecords.collectAsStateWithLifecycle()
+    val recentErrors by vm.recentErrors.collectAsStateWithLifecycle()
+    val excludedFolders by vm.excludedFolders.collectAsStateWithLifecycle()
+    val hiddenFavorites by vm.hiddenFavorites.collectAsStateWithLifecycle()
     val bottomPad = LocalBottomOverlayPadding.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -127,6 +137,7 @@ fun ForYouScreen(vm: MainViewModel) {
     }
 
     LazyColumn(
+        state = vm.lazyListStateFor("for_you"),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = 12.dp, bottom = bottomPad),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -137,7 +148,7 @@ fun ForYouScreen(vm: MainViewModel) {
                     ErrorBannerCard(
                         icon = Icons.Rounded.LockOpen,
                         title = "Audio access needed",
-                        message = "Grant media audio permission so Pulse Player can keep your library updated.",
+                        message = "Grant media audio permission so Pulse Music Player can keep your library updated.",
                         primaryLabel = "Grant Access",
                         onPrimary = { permissionLauncher.launch(audioPermission()) }
                     )
@@ -190,7 +201,19 @@ fun ForYouScreen(vm: MainViewModel) {
                     totalDurationMs = totalLibraryMs,
                     favoriteCount = favCount,
                     todayMinutes = today,
-                    streakDays = streak
+                    streakDays = streak,
+                    crashCount = crashRecords.size,
+                    errorCount = recentErrors.size,
+                    missingCount = missingCount,
+                    excludedCount = excludedFolders.size,
+                    hiddenFavCount = hiddenFavorites.size,
+                    onOpenCrashLogs = { vm.openCrashLogs() },
+                    onOpenDiagnostics = { vm.openDiagnostics() },
+                    onOpenMissing = {
+                        vm.showMissing.value = true
+                        vm.selectHomeTab("Songs")
+                    },
+                    onOpenExcluded = { vm.go(Screen.ExcludedFolders) }
                 )
             }
         }
@@ -214,7 +237,9 @@ fun ForYouScreen(vm: MainViewModel) {
                                 text = "Shuffle All",
                                 icon = Icons.Rounded.Shuffle,
                                 onClick = { vm.shuffleAll() },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("for_you_shuffle_all_button")
                             )
                             PillButton(
                                 text = "Play All",
@@ -224,7 +249,9 @@ fun ForYouScreen(vm: MainViewModel) {
                                         vm.playQueue(tracks, 0)
                                     }
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("for_you_play_all_button")
                             )
                         }
                         QuickShuffleShortcutsRow(vm)
@@ -348,18 +375,29 @@ fun ForYouScreen(vm: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LibraryStatsSummaryCard(
     trackCount: Int,
     totalDurationMs: Long,
     favoriteCount: Int,
     todayMinutes: Int,
-    streakDays: Int
+    streakDays: Int,
+    crashCount: Int,
+    errorCount: Int,
+    missingCount: Int,
+    excludedCount: Int,
+    hiddenFavCount: Int,
+    onOpenCrashLogs: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onOpenMissing: () -> Unit,
+    onOpenExcluded: () -> Unit
 ) {
     val totalMin = (totalDurationMs / 60_000L).coerceAtLeast(0L)
     val hrs = totalMin / 60L
     val mins = totalMin % 60L
     val durationLabel = if (hrs > 0) "${hrs}h ${mins}m" else "${mins}m"
+    val hasHealthAlerts = crashCount > 0 || errorCount > 0 || missingCount > 0 || excludedCount > 0 || hiddenFavCount > 0
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -367,21 +405,96 @@ private fun LibraryStatsSummaryCard(
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            StatPill(label = "Library", value = "$trackCount", sub = durationLabel, modifier = Modifier.weight(1f))
-            StatPill(label = "Favourites", value = "$favoriteCount", sub = "saved", modifier = Modifier.weight(1f))
-            StatPill(
-                label = "Today",
-                value = "${todayMinutes}m",
-                sub = if (streakDays > 0) "$streakDays day streak" else "local play",
-                modifier = Modifier.weight(1f)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatPill(label = "Library", value = "$trackCount", sub = durationLabel, modifier = Modifier.weight(1f))
+                StatPill(label = "Favourites", value = "$favoriteCount", sub = "saved", modifier = Modifier.weight(1f))
+                StatPill(
+                    label = "Today",
+                    value = "${todayMinutes}m",
+                    sub = if (streakDays > 0) "$streakDays day streak" else "local play",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (hasHealthAlerts) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (crashCount > 0) {
+                        AssistChip(
+                            onClick = onOpenCrashLogs,
+                            label = { Text("$crashCount Crash Log${if (crashCount == 1) "" else "s"}", style = MaterialTheme.typography.labelSmall.merge(TabularMono)) },
+                            leadingIcon = { Icon(Icons.Rounded.BugReport, null, Modifier.size(16.dp)) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                labelColor = MaterialTheme.colorScheme.onErrorContainer,
+                                leadingIconContentColor = MaterialTheme.colorScheme.error
+                            ),
+                            border = null,
+                            modifier = Modifier.testTag("health_crash_chip")
+                        )
+                    }
+                    if (errorCount > 0) {
+                        AssistChip(
+                            onClick = onOpenDiagnostics,
+                            label = { Text("$errorCount Alert${if (errorCount == 1) "" else "s"}", style = MaterialTheme.typography.labelSmall.merge(TabularMono)) },
+                            leadingIcon = { Icon(Icons.Rounded.Warning, null, Modifier.size(16.dp)) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                leadingIconContentColor = Pulse.Coral
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.testTag("health_errors_chip")
+                        )
+                    }
+                    if (missingCount > 0) {
+                        AssistChip(
+                            onClick = onOpenMissing,
+                            label = { Text("$missingCount Missing", style = MaterialTheme.typography.labelSmall.merge(TabularMono)) },
+                            leadingIcon = { Icon(Icons.Rounded.ErrorOutline, null, Modifier.size(16.dp)) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                leadingIconContentColor = MaterialTheme.colorScheme.primary
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.testTag("health_missing_chip")
+                        )
+                    }
+                    if (excludedCount > 0 || hiddenFavCount > 0) {
+                        val exclText = if (hiddenFavCount > 0) {
+                            "$excludedCount Excluded · $hiddenFavCount Fav Hidden"
+                        } else {
+                            "$excludedCount Excluded"
+                        }
+                        AssistChip(
+                            onClick = onOpenExcluded,
+                            label = { Text(exclText, style = MaterialTheme.typography.labelSmall.merge(TabularMono)) },
+                            leadingIcon = { Icon(Icons.Rounded.FolderOff, null, Modifier.size(16.dp)) },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurface,
+                                leadingIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(enabled = true, borderColor = MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.testTag("health_excluded_chip")
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -546,17 +659,21 @@ fun EmptyLibraryCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .border(
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+                    RoundedCornerShape(24.dp)
+                )
                 .padding(24.dp)
         ) {
             Box(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(32.dp))
             }
             Text(
                 text = when {
@@ -570,9 +687,9 @@ fun EmptyLibraryCard(
             )
             Text(
                 text = if (scanning) {
-                    if (foundCount > 0) "Found $foundCount tracks so far. Pulse Player is still checking your storage." else "Pulse Player is checking your storage. This can take a moment on a large library."
+                    if (foundCount > 0) "Found $foundCount tracks so far. Pulse Music Player is still checking your storage." else "Pulse Music Player is checking your storage. This can take a moment on a large library."
                 } else {
-                    "Pulse Player plays local audio stored on your phone or SD card. Grant audio access or choose a Music folder to begin."
+                    "Pulse Music Player plays local audio stored on your phone or SD card. Grant audio access or choose a Music folder to begin."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -588,7 +705,10 @@ fun EmptyLibraryCard(
             Spacer(Modifier.height(4.dp))
             Button(
                 onClick = { vm.seedSampleTrack() },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("empty_sample_button"),
                 shape = CircleShape,
                 enabled = !scanning,
                 colors = ButtonDefaults.buttonColors(
@@ -613,7 +733,10 @@ fun EmptyLibraryCard(
                         permissionLauncher.launch(perm)
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("empty_scan_button"),
                 shape = CircleShape,
                 enabled = !scanning,
                 colors = ButtonDefaults.buttonColors(
@@ -627,7 +750,10 @@ fun EmptyLibraryCard(
             }
             OutlinedButton(
                 onClick = { safLauncher.launch(null) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("empty_folder_button"),
                 shape = CircleShape,
                 enabled = !scanning
             ) {

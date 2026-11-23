@@ -3,6 +3,7 @@ package com.pulse.player.data.db
 import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.Fts4
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.security.MessageDigest
@@ -73,6 +74,26 @@ data class TrackEntity(
     @ColumnInfo(defaultValue = "''") val language: String = "",
     @ColumnInfo(defaultValue = "0")  val hasEmbeddedLyrics: Boolean = false
 )
+
+@Fts4(contentEntity = TrackEntity::class)
+@Entity(tableName = "tracks_fts")
+data class TrackFtsEntity(
+    val title: String,
+    val artist: String,
+    val album: String,
+    val genre: String,
+    val folderPath: String
+)
+
+object FtsQueryBuilder {
+    private val tokenRegex = Regex("[\\p{L}\\p{N}_]+")
+
+    fun buildPrefixQuery(raw: String): String {
+        val tokens = tokenRegex.findAll(raw.trim()).map { it.value }.filter { it.isNotBlank() }.toList()
+        if (tokens.isEmpty()) return ""
+        return tokens.joinToString(" ") { "$it*" }
+    }
+}
 
 @Entity(tableName = "scan_seen")
 data class ScanSeenEntity(

@@ -79,4 +79,29 @@ class DuplicatesAndColorsTest {
         assertEquals("5.0 MB", formatBytesMb(5L * 1024L * 1024L))
         assertEquals("1.50 GB", formatBytesMb((1.5 * 1024 * 1024 * 1024).toLong()))
     }
+
+    @Test
+    fun `sortDuplicateGroups sorts by reclaimable size, copy count, and title`() {
+        val gSmall = DupGroupWithMembers(
+            title = "Alpha",
+            artist = "A",
+            count = 3,
+            members = listOf(track("1", 4_000_000L), track("2", 1_000_000L), track("3", 1_000_000L))
+        )
+        val gBig = DupGroupWithMembers(
+            title = "Zeta",
+            artist = "Z",
+            count = 2,
+            members = listOf(track("4", 20_000_000L), track("5", 8_000_000L))
+        )
+
+        val bySize = sortDuplicateGroups(listOf(gSmall, gBig), DuplicateSortMode.RECLAIMABLE_DESC)
+        assertEquals(listOf("Zeta", "Alpha"), bySize.map { it.title })
+
+        val byCopies = sortDuplicateGroups(listOf(gBig, gSmall), DuplicateSortMode.COPIES_DESC)
+        assertEquals(listOf("Alpha", "Zeta"), byCopies.map { it.title })
+
+        val byTitle = sortDuplicateGroups(listOf(gBig, gSmall), DuplicateSortMode.TITLE_ASC)
+        assertEquals(listOf("Alpha", "Zeta"), byTitle.map { it.title })
+    }
 }

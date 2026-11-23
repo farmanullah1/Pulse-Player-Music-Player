@@ -296,10 +296,11 @@ fun Controls(
             onNext = vm.player::next
         )
         Spacer(Modifier.height(12.dp))
+        val sleepOpen by vm.sleepOpen.collectAsStateWithLifecycle()
         val audioEffectsActive = s.speed != 1f || s.pitchSemitones != 0f || s.abLoopStartMs != null || s.abLoopEndMs != null
         SecondaryPlayerActions(
             isFav = fav,
-            sleepActive = s.sleepRemainingMs > 0 || s.sleepEndOfTrack || vm.sleepOpen.value,
+            sleepActive = s.sleepRemainingMs > 0 || s.sleepEndOfTrack || sleepOpen,
             audioEffectsActive = audioEffectsActive,
             onFav = { s.mediaId?.let { vm.toggleFavorite(it) } },
             onSleep = vm::openSleepSheet,

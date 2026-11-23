@@ -1,9 +1,14 @@
 package com.pulse.player.ui.screens
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ViewSidebar
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.DashboardCustomize
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Splitscreen
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.ViewAgenda
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.pulse.player.ui.themes.PlayerLayout
 
@@ -56,6 +61,41 @@ enum class PlayerLayoutMode(
         subtitle = "Dark mist overlay & light queue card",
         icon = Icons.Rounded.Splitscreen,
         layout = PlayerLayout.ATMOSPHERIC_QUEUE
+    ),
+    VINYL_TURNTABLE(
+        id = "vinyl_turntable",
+        displayName = "Vinyl Turntable",
+        subtitle = "Warm amber deck, grooves & tonearm",
+        icon = Icons.Rounded.Album,
+        layout = PlayerLayout.VINYL_TURNTABLE
+    ),
+    MINIMAL_TYPOGRAPHY(
+        id = "minimal_typography",
+        displayName = "Minimal Typography",
+        subtitle = "Editorial serif titles & uncluttered stage",
+        icon = Icons.Rounded.TextFields,
+        layout = PlayerLayout.MINIMAL_TYPOGRAPHY
+    ),
+    SPLIT_ARTWORK_LEFT(
+        id = "split_artwork_left",
+        displayName = "Split Artwork-Left",
+        subtitle = "Side-by-side artwork card & compact metadata",
+        icon = Icons.AutoMirrored.Rounded.ViewSidebar,
+        layout = PlayerLayout.SPLIT_ARTWORK_LEFT
+    ),
+    COMPACT_CARD(
+        id = "compact_card",
+        displayName = "Compact Card",
+        subtitle = "Elevated framed card with crisp accents",
+        icon = Icons.Rounded.ViewAgenda,
+        layout = PlayerLayout.COMPACT_CARD
+    ),
+    WAVEFORM_STUDIO(
+        id = "waveform_studio",
+        displayName = "Waveform Studio",
+        subtitle = "Centered oscilloscope spectrum & glow",
+        icon = Icons.Rounded.GraphicEq,
+        layout = PlayerLayout.WAVEFORM_STUDIO
     );
 
     val title: String get() = displayName

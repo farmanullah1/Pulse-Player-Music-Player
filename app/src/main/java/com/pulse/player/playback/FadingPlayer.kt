@@ -1,8 +1,11 @@
 package com.pulse.player.playback
 
+import androidx.annotation.OptIn
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 
+@OptIn(UnstableApi::class)
 class FadingPlayer(
     private val raw: Player,
     private val t: AudioTransitionController,

@@ -141,7 +141,7 @@ class ArchiveRestoreService(
                         if (c != null) {
                             catMap[k] = ArchiveCategoryInfo(
                                 included = c.optBoolean("included", false),
-                                path = c.optString("path", null),
+                                path = if (c.has("path") && !c.isNull("path")) c.optString("path") else null,
                                 recordCount = c.optLong("recordCount", 0L),
                                 required = c.optBoolean("required", false)
                             )
@@ -151,7 +151,7 @@ class ArchiveRestoreService(
                     manifest = ArchiveManifest(
                         formatId = root.optString("formatId", ArchiveManifest.FORMAT_ID),
                         formatVersion = root.optInt("formatVersion", ArchiveManifest.CURRENT_VERSION),
-                        appName = root.optString("appName", "Pulse Player"),
+                        appName = root.optString("appName", "Pulse Music Player"),
                         createdAtUtc = root.optString("createdAtUtc", root.optString("backupTime", "Unknown")),
                         backupMode = root.optString("backupMode", "MANUAL_GLOBAL"),
                         backupScope = root.optString("backupScope", "GLOBAL"),
@@ -181,7 +181,7 @@ class ArchiveRestoreService(
                     isValid = warnings.none { it.startsWith("Integrity mismatch") },
                     validationMessage = if (warnings.isEmpty()) "Archive integrity and structure validated successfully."
                     else "Archive contains warnings: ${warnings.joinToString("; ")}",
-                    detectedFormat = "Pulse Player Portable Archive (.musicbackup / ZIP)",
+                    detectedFormat = "Pulse Music Player Portable Archive (.musicbackup / ZIP)",
                     checksumsVerified = checksumsVerified,
                     totalUncompressedBytes = totalUncompressedBytes,
                     entryCount = entryCount,
@@ -247,7 +247,7 @@ class ArchiveRestoreService(
                             for (i in 0 until items.length()) {
                                 val item = items.optJSONObject(i) ?: continue
                                 val ref = BackupTrackRef(
-                                    id = item.optString("id", null),
+                                    id = if (item.has("id") && !item.isNull("id")) item.optString("id") else null,
                                     title = item.optString("title", ""),
                                     artist = item.optString("artist", ""),
                                     album = item.optString("album", ""),
@@ -302,7 +302,7 @@ class ArchiveRestoreService(
                                 for (j in 0 until trackArr.length()) {
                                     val tObj = trackArr.optJSONObject(j) ?: continue
                                     val ref = BackupTrackRef(
-                                        id = tObj.optString("trackId", null),
+                                        id = if (tObj.has("trackId") && !tObj.isNull("trackId")) tObj.optString("trackId") else null,
                                         title = tObj.optString("title", ""),
                                         artist = tObj.optString("artist", ""),
                                         album = tObj.optString("album", ""),

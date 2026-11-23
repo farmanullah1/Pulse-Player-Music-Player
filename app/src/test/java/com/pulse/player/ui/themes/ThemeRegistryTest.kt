@@ -9,7 +9,7 @@ class ThemeRegistryTest {
 
     @Test
     fun playerThemesContainsConceptAndAtmosphericThemes() {
-        assertEquals("PlayerThemes must register all existing and concept themes", 12, PlayerThemes.size)
+        assertEquals("PlayerThemes must register all existing, concept, and studio themes", 17, PlayerThemes.size)
     }
 
     @Test
@@ -31,11 +31,20 @@ class ThemeRegistryTest {
             "starry",
             "immersive"
         )
+        val studioIds = setOf(
+            "vinyl_turntable",
+            "minimal_typography",
+            "split_artwork_left",
+            "compact_card",
+            "waveform_studio"
+        )
         val registeredIds = PlayerThemes.map { it.id }.toSet()
         assertTrue(registeredIds.containsAll(canonicalIds))
         assertTrue(registeredIds.contains("pixel"))
         assertTrue(registeredIds.contains("namida"))
         assertTrue(registeredIds.contains("atmospheric_queue"))
+        assertTrue(registeredIds.containsAll(studioIds))
+        assertEquals("All theme IDs must be unique", PlayerThemes.size, registeredIds.size)
     }
 
     @Test
@@ -44,6 +53,21 @@ class ThemeRegistryTest {
         assertNotNull("Atmospheric Queue theme must be registered", atmospheric)
         assertEquals("Atmospheric Queue", atmospheric!!.name)
         assertEquals(PlayerLayout.ATMOSPHERIC_QUEUE, atmospheric.layout)
+    }
+
+    @Test
+    fun studioLayoutsAreRegisteredWithExpectedLayouts() {
+        val turntable = PlayerThemes.firstOrNull { it.id == "vinyl_turntable" }
+        val minimalTypo = PlayerThemes.firstOrNull { it.id == "minimal_typography" }
+        val splitLeft = PlayerThemes.firstOrNull { it.id == "split_artwork_left" }
+        val compact = PlayerThemes.firstOrNull { it.id == "compact_card" }
+        val waveform = PlayerThemes.firstOrNull { it.id == "waveform_studio" }
+
+        assertEquals(PlayerLayout.VINYL_TURNTABLE, turntable?.layout)
+        assertEquals(PlayerLayout.MINIMAL_TYPOGRAPHY, minimalTypo?.layout)
+        assertEquals(PlayerLayout.SPLIT_ARTWORK_LEFT, splitLeft?.layout)
+        assertEquals(PlayerLayout.COMPACT_CARD, compact?.layout)
+        assertEquals(PlayerLayout.WAVEFORM_STUDIO, waveform?.layout)
     }
 
     @Test

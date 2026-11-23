@@ -45,7 +45,7 @@ class ErrorPolicy(
 
         val userMessage = when (cat) {
             Category.MISSING_FILE -> "This file can't be found. It may have been moved or removed."
-            Category.NO_PERMISSION -> "Pulse Player can't read this file. Check audio permission."
+            Category.NO_PERMISSION -> "Pulse Music Player can't read this file. Check audio permission."
             Category.UNSUPPORTED -> "This format can't be played on this device."
             Category.OTHER -> "This track failed to play (${e.message ?: "Playback error"})."
         }

@@ -132,6 +132,11 @@ fun LiveCustomizePreviewCard(
     playbackState: PlaybackUiState,
     isFavorite: Boolean,
     splitUpperRatio: Float = 0.40f,
+    coverShape: String = "ROUNDED",
+    backdropBlur: Float = 0.60f,
+    backdropDim: Float = 0.55f,
+    artworkGlow: Boolean = true,
+    seekbarHeight: String = "MEDIUM",
     modifier: Modifier = Modifier
 ) {
     val trackTitle = playbackState.title.ifBlank { "Pulse Horizon" }
@@ -259,6 +264,11 @@ fun LiveCustomizePreviewCard(
                                     isPlaying = playbackState.isPlaying,
                                     isFavorite = isFavorite,
                                     splitUpperRatio = splitUpperRatio,
+                                    coverShape = coverShape,
+                                    backdropBlur = backdropBlur,
+                                    backdropDim = backdropDim,
+                                    artworkGlow = artworkGlow,
+                                    seekbarHeight = seekbarHeight,
                                     highlightMode = mode
                                 )
                             }
@@ -316,9 +326,14 @@ fun PlayerStagePreview(
     artworkUri: String?,
     isPlaying: Boolean,
     isFavorite: Boolean,
+    modifier: Modifier = Modifier,
     splitUpperRatio: Float = 0.40f,
-    highlightMode: CustomizePreviewTarget = CustomizePreviewTarget.PLAYER_STAGE,
-    modifier: Modifier = Modifier
+    coverShape: String = "ROUNDED",
+    backdropBlur: Float = 0.60f,
+    backdropDim: Float = 0.55f,
+    artworkGlow: Boolean = true,
+    seekbarHeight: String = "MEDIUM",
+    highlightMode: CustomizePreviewTarget = CustomizePreviewTarget.PLAYER_STAGE
 ) {
     val buttonPreset = remember(buttonPresetId) { ButtonPresetRegistry.fromId(buttonPresetId) }
     val cardRadius = cornerRadiusDp.coerceIn(6, 24).dp
@@ -334,6 +349,12 @@ fun PlayerStagePreview(
     val backdropColors = themeColors.ifEmpty { listOf(Color(0xFF183B38), Color(0xFF071312)) }
     val splitLightSheet = Color.White
     val splitTextPrimary = Color(0xFF18181B)
+    val artRadiusDp = when (coverShape) {
+        "CIRCLE", "VINYL_DISC" -> 50.dp
+        "SQUARE" -> 2.dp
+        "POSTER" -> 6.dp
+        else -> (cornerRadiusDp / 2).coerceIn(4, 14).dp
+    }
 
     Row(
         modifier = modifier
@@ -357,6 +378,18 @@ fun PlayerStagePreview(
                 PlayerLayout.SHEET_QUEUE -> MountainSunset(Modifier.fillMaxSize())
                 else -> Unit
             }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                backdropColors.first().copy(alpha = (backdropBlur.coerceIn(0f, 1f) * 0.25f)),
+                                Color.Black.copy(alpha = (backdropDim.coerceIn(0.15f, 0.85f) * 0.42f))
+                            )
+                        )
+                    )
+            )
 
             Column(modifier = Modifier.fillMaxSize()) {
                 val isSplitLayout = layoutMode.layout == PlayerLayout.ATMOSPHERIC_QUEUE || layoutMode.layout == PlayerLayout.SHEET_QUEUE
@@ -402,23 +435,79 @@ fun PlayerStagePreview(
 
                     // Layout-specific center artwork focal element (hidden in compact <=47% top split)
                     if (!isCompactMiniSplit) {
+                        val glowBorder = if (artworkGlow) PreviewAmber.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.14f)
                         when (layoutMode.layout) {
-                            PlayerLayout.VINYL, PlayerLayout.ACOUSTIC -> {
+                            PlayerLayout.VINYL, PlayerLayout.ACOUSTIC, PlayerLayout.VINYL_TURNTABLE -> {
                                 Box(
                                     modifier = Modifier
-                                        .size(38.dp)
+                                        .size(40.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF141418))
-                                        .border(2.dp, Color.White.copy(alpha = 0.25f), CircleShape),
+                                        .background(if (layoutMode.layout == PlayerLayout.VINYL_TURNTABLE) Color(0xFF26170D) else Color(0xFF141418))
+                                        .border(2.dp, if (layoutMode.layout == PlayerLayout.VINYL_TURNTABLE) PreviewAmber.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.25f), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Artwork(uri = artworkUri, size = 20.dp, radius = 10.dp, px = 64)
                                 }
                             }
 
-                            PlayerLayout.MINIMAL_DARK -> {
-                                if (showSignalPath) {
-                                    MiniPill(text = "FLAC", accent = PreviewAmber)
+                            PlayerLayout.MINIMAL_DARK, PlayerLayout.MINIMAL_TYPOGRAPHY -> {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    if (layoutMode.layout == PlayerLayout.MINIMAL_TYPOGRAPHY) {
+                                        Text("STUDIO", color = Color.White.copy(alpha = 0.65f), fontSize = 6.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    if (showSignalPath) {
+                                        MiniPill(text = "FLAC", accent = PreviewAmber)
+                                    }
+                                }
+                            }
+
+                            PlayerLayout.SPLIT_ARTWORK_LEFT -> {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.White.copy(alpha = 0.10f))
+                                        .padding(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Artwork(uri = artworkUri, size = 28.dp, radius = artRadiusDp, px = 96)
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(trackTitle, color = Color.White, fontSize = 6.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        if (showSignalPath) MiniPill(text = "HI-FI", accent = PreviewAmber)
+                                    }
+                                }
+                            }
+
+                            PlayerLayout.COMPACT_CARD -> {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color.White.copy(alpha = 0.12f),
+                                    border = BorderStroke(1.dp, glowBorder)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Artwork(uri = artworkUri, size = 30.dp, radius = artRadiusDp, px = 96)
+                                        MiniPill(text = "CARD", accent = PreviewAmber)
+                                    }
+                                }
+                            }
+
+                            PlayerLayout.WAVEFORM_STUDIO -> {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .border(1.dp, glowBorder, RoundedCornerShape(10.dp))
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Artwork(uri = artworkUri, size = 32.dp, radius = artRadiusDp, px = 96)
+                                        MiniPill(text = "WAVE", accent = PreviewAmber)
+                                    }
                                 }
                             }
 
@@ -430,8 +519,9 @@ fun PlayerStagePreview(
                                     Artwork(
                                         uri = artworkUri,
                                         size = if (layoutMode.layout == PlayerLayout.ATMOSPHERIC_QUEUE) 28.dp else 36.dp,
-                                        radius = (cornerRadiusDp / 2).coerceIn(4, 12).dp,
-                                        px = 96
+                                        radius = artRadiusDp,
+                                        px = 96,
+                                        modifier = Modifier.border(1.dp, glowBorder, RoundedCornerShape(artRadiusDp))
                                     )
                                     if (showSignalPath || showSleep) {
                                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

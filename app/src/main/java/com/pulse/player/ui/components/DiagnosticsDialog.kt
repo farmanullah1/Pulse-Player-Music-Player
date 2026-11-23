@@ -21,11 +21,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.SdCard
 import androidx.compose.material3.Button
@@ -58,7 +61,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulse.player.BuildConfig
 import com.pulse.player.data.AppError
+import com.pulse.player.data.CrashRecord
 import com.pulse.player.data.ErrorCategory
 import com.pulse.player.data.scan.audioPermission
 import com.pulse.player.ui.theme.LocalPulseTokens
@@ -75,6 +80,7 @@ fun DiagnosticsDialog(
 ) {
     val fxStatus by vm.fxStatus.collectAsStateWithLifecycle()
     val recentErrors by vm.recentErrors.collectAsStateWithLifecycle()
+    val crashRecords by vm.crashRecords.collectAsStateWithLifecycle()
     val missingCount by vm.missingCount.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -156,6 +162,77 @@ fun DiagnosticsDialog(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // 0. Crash Reports (Persistent uncaught crash log)
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Rounded.BugReport,
+                                    contentDescription = null,
+                                    tint = if (crashRecords.isNotEmpty()) tokens.error else tokens.success,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Crash Reports (${crashRecords.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            if (crashRecords.isNotEmpty()) {
+                                TextButton(onClick = vm::clearCrashLogs) {
+                                    Text("Clear Crashes", color = tokens.error, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+
+                    if (crashRecords.isEmpty()) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Rounded.CheckCircle, null, tint = tokens.success, modifier = Modifier.size(22.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            "No crashes recorded",
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Unexpected uncaught exceptions will be captured automatically here.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        items(crashRecords, key = { "crash_${it.signature}" }) { crash ->
+                            CrashRecordCard(
+                                crash = crash,
+                                onCopy = {
+                                    clipboard.setText(AnnotatedString(vm.formatCrashReport(crash)))
+                                    vm.snackbarMessage.value = "Crash report copied"
+                                }
+                            )
+                        }
+                    }
+
                     // 1. Audio Engine & DSP Hardware
                     item {
                         Card(
@@ -289,14 +366,21 @@ fun DiagnosticsDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (recentErrors.isNotEmpty()) {
+                    if (recentErrors.isNotEmpty() || crashRecords.isNotEmpty()) {
                         OutlinedButton(
                             onClick = {
                                 val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
                                 val report = buildString {
-                                    appendLine("Pulse Player Diagnostics Report")
+                                    appendLine("Pulse Music Player v${BuildConfig.VERSION_NAME} Diagnostics Report")
                                     appendLine("Audio Permission: $hasAudioPermission | Missing Tracks: $missingCount | Session: ${fxStatus.sessionId}")
-                                    appendLine("---")
+                                    if (crashRecords.isNotEmpty()) {
+                                        appendLine("--- CRASH REPORTS (${crashRecords.size}) ---")
+                                        crashRecords.forEach { c ->
+                                            appendLine(vm.formatCrashReport(c))
+                                            appendLine()
+                                        }
+                                    }
+                                    appendLine("--- ERROR LOG (${filteredErrors.size}) ---")
                                     filteredErrors.forEach { e ->
                                         appendLine("[${fmt.format(Date(e.timestampMs))}] [${e.category.name}] ${e.title}: ${e.message}")
                                         e.technicalDetails?.let { appendLine("  Details: ${it.take(300)}") }
@@ -370,12 +454,14 @@ private fun ErrorItemCard(err: AppError) {
     val tokens = LocalPulseTokens.current
     val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(err.timestampMs))
     val categoryColor = when (err.category) {
+        ErrorCategory.CRASH -> tokens.error
         ErrorCategory.PLAYBACK -> tokens.error
         ErrorCategory.SCAN -> tokens.warning
         ErrorCategory.BACKUP -> MaterialTheme.colorScheme.primary
         ErrorCategory.AUDIO_FX -> MaterialTheme.colorScheme.secondary
         ErrorCategory.STORAGE -> tokens.warning
         ErrorCategory.NETWORK -> MaterialTheme.colorScheme.tertiary
+        ErrorCategory.GENERAL -> MaterialTheme.colorScheme.secondary
     }
 
     Card(
@@ -435,6 +521,128 @@ private fun ErrorItemCard(err: AppError) {
                         style = MaterialTheme.typography.labelSmall.merge(TabularMono),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrashRecordCard(
+    crash: CrashRecord,
+    onCopy: () -> Unit
+) {
+    val tokens = LocalPulseTokens.current
+    var expanded by remember(crash.signature) { mutableStateOf(false) }
+    val timeStr = remember(crash.lastSeenMs) {
+        SimpleDateFormat("MMM d, HH:mm:ss", Locale.getDefault()).format(Date(crash.lastSeenMs))
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(tokens.error.copy(alpha = 0.16f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            "CRASH",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = tokens.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (crash.count > 1) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "Occurred ${crash.count}x",
+                                style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                Text(
+                    timeStr,
+                    style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Text(
+                crash.exceptionClass,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                crash.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Text(
+                "v${crash.versionName} (${crash.versionCode}) · Thread: ${crash.threadName}",
+                style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (expanded) "Hide Stack Trace" else "View Stack Trace")
+                }
+                TextButton(onClick = onCopy) {
+                    Icon(Icons.Rounded.ContentCopy, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Copy")
+                }
+            }
+
+            if (expanded) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = crash.stackTrace,
+                        style = MaterialTheme.typography.labelSmall.merge(TabularMono),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(8.dp)
                     )
                 }
             }

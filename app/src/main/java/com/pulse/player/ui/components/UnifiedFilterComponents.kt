@@ -59,8 +59,8 @@ import com.pulse.player.ui.viewmodel.SortField
 @Composable
 fun UnifiedFilterBar(
     vm: MainViewModel,
-    isTrackTab: Boolean = true,
     modifier: Modifier = Modifier,
+    isTrackTab: Boolean = true,
     leadingContent: @Composable RowScope.() -> Unit = {},
     trailingContent: @Composable RowScope.() -> Unit = {}
 ) {

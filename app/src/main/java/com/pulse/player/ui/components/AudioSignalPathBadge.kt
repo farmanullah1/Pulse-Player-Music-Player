@@ -44,8 +44,8 @@ import com.pulse.player.ui.theme.TabularMono
 @Composable
 fun AudioSignalPathBadge(
     track: Track?,
-    eqActive: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    eqActive: Boolean = false
 ) {
     if (track == null) return
     var showDetails by remember { mutableStateOf(false) }

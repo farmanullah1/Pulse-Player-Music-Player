@@ -14,8 +14,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +45,7 @@ fun HomeTabsScreen(
 ) {
     val activeTabs by vm.homeTabsList.collectAsStateWithLifecycle()
     val activeHomeTab by vm.activeHomeTab.collectAsStateWithLifecycle()
+    val scanning by vm.scanning.collectAsStateWithLifecycle(initialValue = false)
     val tabs = if (activeTabs.isNotEmpty()) activeTabs else defaultHomeTabs
     val pager = rememberPagerState(
         initialPage = tabs.indexOfFirst { it.equals(activeHomeTab, ignoreCase = true) }.coerceAtLeast(0)
@@ -96,6 +100,31 @@ fun HomeTabsScreen(
                     .padding(horizontal = 8.dp)
             )
 
+            IconButton(
+                onClick = {
+                    if (!scanning) {
+                        vm.scan()
+                        vm.snackbarMessage.value = "Scanning library…"
+                    }
+                },
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("home_rescan_button")
+            ) {
+                if (scanning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Refresh,
+                        contentDescription = "Rescan library",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
             IconButton(onClick = { vm.go(Screen.Search) }, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.Rounded.Search,

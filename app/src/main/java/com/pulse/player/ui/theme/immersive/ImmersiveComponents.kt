@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Equalizer
@@ -31,8 +33,6 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.PlaylistAdd
-import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Replay10
@@ -90,8 +90,8 @@ internal object PulseIcons {
     val HeartFilled: ImageVector = Icons.Rounded.Favorite
     val Heart: ImageVector = Icons.Rounded.FavoriteBorder
     val Alarm: ImageVector = Icons.Rounded.Bedtime
-    val PlaylistAdd: ImageVector = Icons.Rounded.PlaylistAdd
-    val Queue: ImageVector = Icons.Rounded.QueueMusic
+    val PlaylistAdd: ImageVector = Icons.AutoMirrored.Rounded.PlaylistAdd
+    val Queue: ImageVector = Icons.AutoMirrored.Rounded.QueueMusic
     val Speed: ImageVector = Icons.Rounded.Speed
     val Tune: ImageVector = Icons.Rounded.Tune
     val Close: ImageVector = Icons.Rounded.Close
@@ -320,14 +320,14 @@ fun PrimaryPlaybackControls(
 fun SecondaryPlayerActions(
     isFav: Boolean,
     sleepActive: Boolean,
-    audioEffectsActive: Boolean = false,
     onFav: () -> Unit,
     onSleep: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onQueue: () -> Unit,
-    onAudioControls: () -> Unit = {},
     onTune: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    audioEffectsActive: Boolean = false,
+    onAudioControls: () -> Unit = {}
 ) {
     Row(
         modifier = modifier

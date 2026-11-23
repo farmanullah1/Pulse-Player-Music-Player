@@ -47,7 +47,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -198,6 +198,7 @@ fun AtmosphericQueuePlayerLayout(
     onCycleRepeat: () -> Unit,
     onOpenTheme: () -> Unit,
     onCollapse: () -> Unit,
+    modifier: Modifier = Modifier,
     onOpenMenu: () -> Unit = {},
     onTrackOptions: (Track) -> Unit = {},
     onOpenSleep: () -> Unit = {},
@@ -213,7 +214,13 @@ fun AtmosphericQueuePlayerLayout(
     showLyrics: Boolean = false,
     onSelectTab: (Boolean) -> Unit = {},
     lyricsContent: @Composable () -> Unit = {},
-    modifier: Modifier = Modifier
+    coverShape: String = "ROUNDED",
+    backdropBlur: Float = 0.60f,
+    backdropDim: Float = 0.55f,
+    artworkGlow: Boolean = true,
+    swipeSkip: Boolean = true,
+    seekbarHeight: String = "MEDIUM",
+    cornerRadiusDp: Int = 16
 ) {
     val reducedMotion = LocalReducedMotion.current
     val haptic = LocalHapticFeedback.current
@@ -249,6 +256,8 @@ fun AtmosphericQueuePlayerLayout(
             // Extend dimmed album-art backdrop cleanly behind the 24dp rounded top corners at any split ratio.
             SplitPlayerBackdrop(
                 artworkUri = uiState.artworkUri,
+                backdropBlur = backdropBlur,
+                backdropDim = backdropDim,
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight((clampedUpperRatio + 0.08f).coerceIn(0.46f, 1f))
@@ -277,6 +286,11 @@ fun AtmosphericQueuePlayerLayout(
                     onOpenAudioControls = onOpenAudioControls,
                     onRetry = onRetry,
                     onSkip = onSkip,
+                    coverShape = coverShape,
+                    artworkGlow = artworkGlow,
+                    swipeSkip = swipeSkip,
+                    seekbarHeight = seekbarHeight,
+                    cornerRadiusDp = cornerRadiusDp,
                     modifier = Modifier
                         .weight(clampedUpperRatio)
                         .fillMaxWidth()
@@ -324,7 +338,9 @@ fun AtmosphericQueuePlayerLayout(
 @Composable
 private fun SplitPlayerBackdrop(
     artworkUri: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backdropBlur: Float = 0.60f,
+    backdropDim: Float = 0.55f
 ) {
     val ctx = LocalContext.current
     val loadSize = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 256 else 96
@@ -339,6 +355,9 @@ private fun SplitPlayerBackdrop(
             null
         }
     }
+    val clampedBlur = backdropBlur.coerceIn(0f, 1f)
+    val blurRadiusDp = (clampedBlur * 44f).dp
+    val clampedDim = backdropDim.coerceIn(0.15f, 0.85f)
 
     Box(modifier = modifier) {
         AtmosphericBackground(modifier = Modifier.fillMaxSize()) {}
@@ -353,11 +372,12 @@ private fun SplitPlayerBackdrop(
                     bitmap = bmp.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    alpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) 1f else (1f - clampedBlur * 0.28f),
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                Modifier.blur(28.dp, BlurredEdgeTreatment.Rectangle)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadiusDp > 0.5.dp) {
+                                Modifier.blur(blurRadiusDp, BlurredEdgeTreatment.Rectangle)
                             } else {
                                 Modifier
                             }
@@ -372,9 +392,9 @@ private fun SplitPlayerBackdrop(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.54f),
-                        0.45f to Color(0xFF0A0B0F).copy(alpha = 0.62f),
-                        1f to Color(0xFF07080B).copy(alpha = 0.88f)
+                        0f to Color.Black.copy(alpha = (clampedDim * 0.92f).coerceIn(0.22f, 0.78f)),
+                        0.45f to Color(0xFF0A0B0F).copy(alpha = (clampedDim + 0.08f).coerceIn(0.30f, 0.86f)),
+                        1f to Color(0xFF07080B).copy(alpha = (clampedDim + 0.32f).coerceIn(0.68f, 0.96f))
                     )
                 )
         )
@@ -404,7 +424,12 @@ private fun UpperPlayerSection(
     onOpenAudioControls: () -> Unit,
     onRetry: () -> Unit,
     onSkip: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    coverShape: String = "ROUNDED",
+    artworkGlow: Boolean = true,
+    swipeSkip: Boolean = true,
+    seekbarHeight: String = "MEDIUM",
+    cornerRadiusDp: Int = 16
 ) {
     val reducedMotion = LocalReducedMotion.current
     val haptic = LocalHapticFeedback.current
@@ -516,36 +541,41 @@ private fun UpperPlayerSection(
 
             // Dynamic middle stage: expands hero artwork + pills when split is dragged down,
             // and compacts smoothly at the default 40% top height so controls never crowd.
+            val stageGestureMod = if (swipeSkip) {
+                Modifier.pointerInput(uiState.title, uiState.artist, swipeSkip) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            swipeAccumulated = 0f
+                            swipeHandled = false
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            if (!swipeHandled) {
+                                swipeAccumulated += dragAmount
+                                if (swipeAccumulated <= -84f) {
+                                    swipeHandled = true
+                                    change.consume()
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onNextClick()
+                                } else if (swipeAccumulated >= 84f) {
+                                    swipeHandled = true
+                                    change.consume()
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onPreviousClick()
+                                }
+                            }
+                        },
+                        onDragEnd = { swipeAccumulated = 0f },
+                        onDragCancel = { swipeAccumulated = 0f }
+                    )
+                }
+            } else {
+                Modifier
+            }
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .pointerInput(uiState.title, uiState.artist) {
-                        detectHorizontalDragGestures(
-                            onDragStart = {
-                                swipeAccumulated = 0f
-                                swipeHandled = false
-                            },
-                            onHorizontalDrag = { change, dragAmount ->
-                                if (!swipeHandled) {
-                                    swipeAccumulated += dragAmount
-                                    if (swipeAccumulated <= -84f) {
-                                        swipeHandled = true
-                                        change.consume()
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onNextClick()
-                                    } else if (swipeAccumulated >= 84f) {
-                                        swipeHandled = true
-                                        change.consume()
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        onPreviousClick()
-                                    }
-                                }
-                            },
-                            onDragEnd = { swipeAccumulated = 0f },
-                            onDragCancel = { swipeAccumulated = 0f }
-                        )
-                    },
+                    .then(stageGestureMod),
                 contentAlignment = Alignment.Center
             ) {
                 val availableHeight = maxHeight
@@ -556,6 +586,12 @@ private fun UpperPlayerSection(
                     availableHeight >= 175.dp -> 118.dp
                     availableHeight >= 135.dp -> 88.dp
                     else -> 68.dp
+                }
+                val stageRadius = when (coverShape) {
+                    "CIRCLE", "VINYL_DISC" -> artSize / 2
+                    "SQUARE" -> 4.dp
+                    "POSTER" -> 6.dp
+                    else -> cornerRadiusDp.coerceIn(8, 24).dp
                 }
 
                 Column(
@@ -573,16 +609,16 @@ private fun UpperPlayerSection(
                             modifier = Modifier
                                 .size(artSize)
                                 .shadow(
-                                    elevation = 16.dp,
-                                    shape = RoundedCornerShape(16.dp),
-                                    ambientColor = Color.Black,
-                                    spotColor = Color.Black
+                                    elevation = if (artworkGlow) 20.dp else 12.dp,
+                                    shape = RoundedCornerShape(stageRadius),
+                                    ambientColor = if (artworkGlow) ActiveAmber else Color.Black,
+                                    spotColor = if (artworkGlow) ActiveAmber else Color.Black
                                 )
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(stageRadius))
                                 .border(
-                                    width = 1.dp,
-                                    color = Color.White.copy(alpha = 0.16f),
-                                    shape = RoundedCornerShape(16.dp)
+                                    width = if (artworkGlow) 1.5.dp else 1.dp,
+                                    color = if (artworkGlow) ActiveAmber.copy(alpha = 0.48f) else Color.White.copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(stageRadius)
                                 )
                                 .pointerInput(uiState.isFavorite) {
                                     detectTapGestures(
@@ -597,7 +633,7 @@ private fun UpperPlayerSection(
                             Artwork(
                                 uri = uiState.artworkUri,
                                 size = artSize,
-                                radius = 16.dp,
+                                radius = stageRadius,
                                 px = 320
                             )
                         }
@@ -635,11 +671,21 @@ private fun UpperPlayerSection(
                 }
 
                 if (showInlineThumb) {
+                    val inlineThumbRadius = when (coverShape) {
+                        "CIRCLE", "VINYL_DISC" -> 20.dp
+                        "SQUARE" -> 3.dp
+                        "POSTER" -> 5.dp
+                        else -> (cornerRadiusDp / 2).coerceIn(6, 14).dp
+                    }
                     Box(
                         modifier = Modifier
                             .size(40.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(inlineThumbRadius))
+                            .border(
+                                width = if (artworkGlow) 1.2.dp else 1.dp,
+                                color = if (artworkGlow) ActiveAmber.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.18f),
+                                shape = RoundedCornerShape(inlineThumbRadius)
+                            )
                             .pointerInput(uiState.isFavorite) {
                                 detectTapGestures(
                                     onDoubleTap = {
@@ -653,7 +699,7 @@ private fun UpperPlayerSection(
                         Artwork(
                             uri = uiState.artworkUri,
                             size = 40.dp,
-                            radius = 10.dp,
+                            radius = inlineThumbRadius,
                             px = 128
                         )
                     }
@@ -748,11 +794,12 @@ private fun UpperPlayerSection(
                 totalDuration = uiState.totalDuration,
                 abStartFraction = uiState.abStartFraction,
                 abEndFraction = uiState.abEndFraction,
-                compact = isCompactUpper,
                 onSeek = onSeek,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
+                    .padding(horizontal = 8.dp),
+                compact = isCompactUpper,
+                seekbarHeight = seekbarHeight
             )
 
             if (!isCompactUpper) {
@@ -968,6 +1015,15 @@ private fun xToTrackFraction(x: Float, widthPx: Int, thumbRadiusPx: Float): Floa
     return ((x - start) / (end - start)).coerceIn(0f, 1f)
 }
 
+private fun parseDurationStringMs(text: String): Long {
+    val parts = text.trim().split(':').mapNotNull { it.toLongOrNull() }
+    return when (parts.size) {
+        2 -> (parts[0] * 60L + parts[1]) * 1000L
+        3 -> (parts[0] * 3600L + parts[1] * 60L + parts[2]) * 1000L
+        else -> 0L
+    }
+}
+
 @Composable
 private fun ThinWhiteScrubber(
     progress: Float,
@@ -975,23 +1031,60 @@ private fun ThinWhiteScrubber(
     totalDuration: String,
     abStartFraction: Float?,
     abEndFraction: Float?,
-    compact: Boolean = false,
     onSeek: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    seekbarHeight: String = "MEDIUM"
 ) {
     var dragFraction by remember { mutableStateOf<Float?>(null) }
+    var lastDetent by remember { mutableStateOf<String?>(null) }
+    val haptics = LocalHapticFeedback.current
     val displayProgress = (dragFraction ?: progress).coerceIn(0f, 1f)
-    val thumbRadiusDp = 6.5.dp
+    val totalMs = remember(totalDuration) { parseDurationStringMs(totalDuration) }
+    val currentMs = remember(elapsedTime) { parseDurationStringMs(elapsedTime) }
+
+    fun updateDrag(frac: Float) {
+        val clamped = frac.coerceIn(0f, 1f)
+        dragFraction = clamped
+        val detent = when {
+            clamped <= 0.008f -> "start"
+            clamped >= 0.992f -> "end"
+            abStartFraction != null && abs(clamped - abStartFraction) < 0.015f -> "ab_a"
+            abEndFraction != null && abs(clamped - abEndFraction) < 0.015f -> "ab_b"
+            else -> null
+        }
+        if (detent != null && detent != lastDetent) {
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        lastDetent = detent
+    }
+
+    val thumbRadiusDp = when (seekbarHeight) {
+        "COMPACT" -> 5.5.dp
+        "BOLD" -> 8.dp
+        else -> 6.5.dp
+    }
+    val strokeDp = when (seekbarHeight) {
+        "COMPACT" -> 2.dp
+        "BOLD" -> 4.dp
+        else -> 2.75.dp
+    }
+    val scrubberHeightDp = when (seekbarHeight) {
+        "COMPACT" -> if (compact) 22.dp else 28.dp
+        "BOLD" -> if (compact) 28.dp else 38.dp
+        else -> if (compact) 24.dp else 32.dp
+    }
     val thumbRadiusPx = with(LocalDensity.current) { thumbRadiusDp.toPx() }
 
     Column(modifier = modifier) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (compact) 24.dp else 32.dp)
+                .height(scrubberHeightDp)
                 .pointerInput(thumbRadiusPx) {
                     detectTapGestures { offset ->
                         if (size.width > 0) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSeek(xToTrackFraction(offset.x, size.width, thumbRadiusPx))
                         }
                     }
@@ -1000,21 +1093,23 @@ private fun ThinWhiteScrubber(
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
                             if (size.width > 0) {
-                                dragFraction = xToTrackFraction(offset.x, size.width, thumbRadiusPx)
+                                updateDrag(xToTrackFraction(offset.x, size.width, thumbRadiusPx))
                             }
                         },
                         onHorizontalDrag = { change, _ ->
                             change.consume()
                             if (size.width > 0) {
-                                dragFraction = xToTrackFraction(change.position.x, size.width, thumbRadiusPx)
+                                updateDrag(xToTrackFraction(change.position.x, size.width, thumbRadiusPx))
                             }
                         },
                         onDragEnd = {
                             dragFraction?.let(onSeek)
                             dragFraction = null
+                            lastDetent = null
                         },
                         onDragCancel = {
                             dragFraction = null
+                            lastDetent = null
                         }
                     )
                 },
@@ -1022,7 +1117,7 @@ private fun ThinWhiteScrubber(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val trackY = size.height / 2f
-                val strokePx = 2.5.dp.toPx()
+                val strokePx = strokeDp.toPx()
                 val thumbRadius = thumbRadiusDp.toPx()
                 val trackStart = thumbRadius
                 val trackEnd = (size.width - thumbRadius).coerceAtLeast(trackStart)
@@ -1082,8 +1177,8 @@ private fun ThinWhiteScrubber(
 
                 // Solid white circular thumb handle centered cleanly within canvas edges
                 drawCircle(
-                    color = Color.White,
-                    radius = thumbRadius,
+                    color = if (dragFraction != null) ActiveAmber else Color.White,
+                    radius = if (dragFraction != null) thumbRadius * 1.25f else thumbRadius,
                     center = Offset(activeX, trackY)
                 )
             }
@@ -1094,10 +1189,20 @@ private fun ThinWhiteScrubber(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val activeDrag = dragFraction
+            val previewText = if (activeDrag != null && totalMs > 0L) {
+                val targetMs = (activeDrag * totalMs).toLong()
+                val deltaMs = targetMs - currentMs
+                val sign = if (deltaMs >= 0L) "+" else "-"
+                "${formatTime(targetMs)} ($sign${formatTime(abs(deltaMs))})"
+            } else {
+                elapsedTime
+            }
             Text(
-                text = elapsedTime,
-                color = Color.White.copy(alpha = 0.68f),
+                text = previewText,
+                color = if (activeDrag != null) Color(0xFFFFD18A) else Color.White.copy(alpha = 0.68f),
                 fontSize = 12.sp,
+                fontWeight = if (activeDrag != null) FontWeight.Bold else FontWeight.Normal,
                 style = MaterialTheme.typography.labelSmall.merge(TabularMono)
             )
             Text(
@@ -1460,7 +1565,7 @@ private fun QueueSection(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp)
                 ) {
-                    items(tracks, key = { it.id }) { track ->
+                    itemsIndexed(tracks, key = { index, track -> "${track.id}_$index" }) { _, track ->
                         QueueTrackRow(
                             track = track,
                             titleColor = titleColor,
@@ -1669,7 +1774,7 @@ private fun EqualizerIndicator(color: Color) {
         val staticFractions = listOf(0.45f, 0.90f, 0.65f)
         listOf(420, 600, 500).forEachIndexed { index, duration ->
             val heightFraction by if (reducedMotion) {
-                remember { mutableStateOf(staticFractions[index]) }
+                remember { mutableFloatStateOf(staticFractions[index]) }
             } else {
                 transition.animateFloat(
                     initialValue = 0.28f,

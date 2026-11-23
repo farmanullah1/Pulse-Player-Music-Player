@@ -1,4 +1,4 @@
-﻿package com.pulse.player.ui.themes
+package com.pulse.player.ui.themes
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,7 +47,12 @@ enum class PlayerLayout {
     IMMERSIVE,
     PIXEL,
     NAMIDA,
-    ATMOSPHERIC_QUEUE
+    ATMOSPHERIC_QUEUE,
+    VINYL_TURNTABLE,
+    MINIMAL_TYPOGRAPHY,
+    SPLIT_ARTWORK_LEFT,
+    COMPACT_CARD,
+    WAVEFORM_STUDIO
 }
 
 data class PlayerTheme(
@@ -75,6 +80,38 @@ val PlayerThemes = listOf(
         "Atmospheric Queue",
         PlayerLayout.ATMOSPHERIC_QUEUE,
         listOf(Color(0xFF102D2B), Color(0xFF020706)),
+        special = true
+    ),
+    PlayerTheme(
+        "vinyl_turntable",
+        "Vinyl Turntable",
+        PlayerLayout.VINYL_TURNTABLE,
+        listOf(Color(0xFF382210), Color(0xFF140D08)),
+        special = true
+    ),
+    PlayerTheme(
+        "minimal_typography",
+        "Minimal Typography",
+        PlayerLayout.MINIMAL_TYPOGRAPHY,
+        listOf(Color(0xFF1C1D24), Color(0xFF0A0A0E))
+    ),
+    PlayerTheme(
+        "split_artwork_left",
+        "Split Artwork-Left",
+        PlayerLayout.SPLIT_ARTWORK_LEFT,
+        listOf(Color(0xFF1D2939), Color(0xFF0B111A))
+    ),
+    PlayerTheme(
+        "compact_card",
+        "Compact Card",
+        PlayerLayout.COMPACT_CARD,
+        listOf(Color(0xFF231F20), Color(0xFF0E0D0E))
+    ),
+    PlayerTheme(
+        "waveform_studio",
+        "Waveform Studio",
+        PlayerLayout.WAVEFORM_STUDIO,
+        listOf(Color(0xFF14212B), Color(0xFF080D12)),
         special = true
     )
 )

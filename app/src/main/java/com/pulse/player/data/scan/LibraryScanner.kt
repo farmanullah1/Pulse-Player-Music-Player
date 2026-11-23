@@ -204,10 +204,12 @@ class LibraryScanner(
                         }
 
                         val volumeName = if (iVol >= 0) c.getString(iVol).orEmpty().ifBlank { "external_primary" } else "external_primary"
+                        val trackContentUri = ContentUris.withAppendedId(uri, id)
+                        val rgTags = ReplayGainTagReader.readFromUriOrPath(ctx, trackContentUri, dataPath)
 
                         rows += TrackEntity(
                             id = trackId,
-                            uri = ContentUris.withAppendedId(uri, id).toString(),
+                            uri = trackContentUri.toString(),
                             displayName = displayName,
                             title = title,
                             artist = artist,
@@ -231,16 +233,15 @@ class LibraryScanner(
                             stableId = id.toString(),
                             volumeId = volumeName,
                             folderUri = null,
-                            // Schema v4 fields populated from MediaStore where available
-                            genre = "",              // MediaStore genre requires separate query; populated post-scan
+                            genre = "",
                             genresRaw = "",
-                            albumArtistNorm = "",    // albumArtist not directly in Audio.Media projection; populated post-scan
-                            bitrate = 0,             // Not available from MediaStore without opening the file
+                            albumArtistNorm = "",
+                            bitrate = 0,
                             sampleRate = 0,
                             bitDepth = 0,
                             codec = c.getString(iM)?.let { guessCodecFromMime(it) } ?: "",
-                            replayGainTrackDb = 0f,
-                            replayGainAlbumDb = 0f,
+                            replayGainTrackDb = rgTags.trackGainDb,
+                            replayGainAlbumDb = rgTags.albumGainDb,
                             bpm = 0f,
                             language = "",
                             hasEmbeddedLyrics = false
@@ -343,6 +344,7 @@ class LibraryScanner(
                     val title = name.substringBeforeLast('.')
                     val cleanPath = path.ifBlank { "Music" }.trim('/')
                     val dataPath = "/storage/emulated/0/$cleanPath/$name"
+                    val rgTags = ReplayGainTagReader.readFromUriOrPath(ctx, file.uri, null)
 
                     batch += TrackEntity(
                         id = id,
@@ -370,11 +372,10 @@ class LibraryScanner(
                         stableId = docId,
                         volumeId = "external_primary",
                         folderUri = treeUri.toString(),
-                        // Schema v4 defaults for SAF tracks (no metadata reader yet)
                         genre = "", genresRaw = "", albumArtistNorm = "",
                         bitrate = 0, sampleRate = 0, bitDepth = 0,
                         codec = file.type?.let { guessCodecFromMime(it) } ?: "",
-                        replayGainTrackDb = 0f, replayGainAlbumDb = 0f,
+                        replayGainTrackDb = rgTags.trackGainDb, replayGainAlbumDb = rgTags.albumGainDb,
                         bpm = 0f, language = "", hasEmbeddedLyrics = false
                     )
                     if (batch.size >= 500) {

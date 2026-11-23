@@ -45,7 +45,7 @@ class ClassicBackupTest {
         val json = FavoritesCodec.encode(tracks, addedMap)
         assertTrue(json.contains("\"schema\": \"pulseplayer.favorites\""))
         assertTrue(json.contains("\"schemaVersion\": 1"))
-        assertTrue(json.contains("\"app\": \"Pulse Player\""))
+        assertTrue(json.contains("\"app\": \"Pulse Music Player\""))
 
         val decoded = FavoritesCodec.decode(json)
         assertTrue(decoded is FavoritesCodec.Decoded.Ok)
@@ -160,8 +160,9 @@ class ClassicBackupTest {
     }
 
     @Test
-    fun portableFolderConstantsTargetPulsePlayerAndJson() {
-        assertEquals("Pulse Player", FavoritesRepository.PORTABLE_FOLDER_NAME)
+    fun portableFolderConstantsTargetPulseAndJson() {
+        assertEquals("Pulse", FavoritesRepository.PORTABLE_FOLDER_NAME)
+        assertEquals("Pulse Player", FavoritesRepository.LEGACY_PORTABLE_FOLDER_NAME)
         assertEquals("pulseplayer.favorites.json", FavoritesRepository.PORTABLE_JSON_NAME)
     }
 }

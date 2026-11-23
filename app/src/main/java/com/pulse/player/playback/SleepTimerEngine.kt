@@ -1,6 +1,8 @@
 package com.pulse.player.playback
 
+import androidx.annotation.OptIn
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -69,6 +71,7 @@ class SleepTimerEngine(
         _state.value = State()
     }
 
+    @OptIn(UnstableApi::class)
     private fun setPauseAtEndOfMediaItems(value: Boolean) {
         (raw as? ExoPlayer)?.pauseAtEndOfMediaItems = value
     }

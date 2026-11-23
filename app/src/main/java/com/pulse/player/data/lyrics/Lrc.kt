@@ -1,5 +1,8 @@
 package com.pulse.player.data.lyrics
 
+import java.io.File
+import java.util.Locale
+
 data class LrcLine(val timeMs: Long, val text: String)
 
 object Lrc {
@@ -34,6 +37,51 @@ object Lrc {
             }
         }
         return ans
+    }
+
+    fun formatTimestamp(timeMs: Long): String {
+        val safe = timeMs.coerceAtLeast(0L)
+        val totalSeconds = safe / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        val centis = (safe % 1000L) / 10L
+        return String.format(Locale.US, "[%02d:%02d.%02d]", minutes, seconds, centis)
+    }
+
+    fun shiftTimestamps(lines: List<LrcLine>, deltaMs: Long): List<LrcLine> {
+        if (deltaMs == 0L) return lines
+        return lines.map { line ->
+            if (line.timeMs < 0L) line
+            else line.copy(timeMs = (line.timeMs + deltaMs).coerceAtLeast(0L))
+        }.sortedBy { if (it.timeMs < 0L) Long.MAX_VALUE else it.timeMs }
+    }
+
+    fun applyPlaybackLeadOffset(lines: List<LrcLine>, playbackLeadOffsetMs: Long): List<LrcLine> =
+        shiftTimestamps(lines, -playbackLeadOffsetMs)
+
+    fun serialize(lines: List<LrcLine>): String {
+        val sorted = lines.sortedWith(
+            compareBy<LrcLine> { if (it.timeMs < 0L) Long.MAX_VALUE else it.timeMs }
+        )
+        return sorted.joinToString("\n") { line ->
+            if (line.timeMs >= 0L) "${formatTimestamp(line.timeMs)}${line.text}" else line.text
+        }
+    }
+
+    fun discoverSidecarLrc(trackDataPath: String?): File? {
+        if (trackDataPath.isNullOrBlank()) return null
+        return runCatching {
+            val audioFile = File(trackDataPath)
+            val parent = audioFile.parentFile ?: return@runCatching null
+            if (!parent.exists() || !parent.isDirectory) return@runCatching null
+            val stem = audioFile.nameWithoutExtension
+            if (stem.isBlank()) return@runCatching null
+            listOf(
+                File(parent, "$stem.lrc"),
+                File(parent, "$stem.LRC"),
+                File(parent, "${audioFile.name}.lrc")
+            ).firstOrNull { it.exists() && it.isFile && it.length() in 1L..(512 * 1024L) }
+        }.getOrNull()
     }
 }
 
